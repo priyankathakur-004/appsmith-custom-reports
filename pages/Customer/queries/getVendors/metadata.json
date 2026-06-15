@@ -54,7 +54,7 @@
     ],
     "name": "getVendors",
     "pageId": "Customer",
-    "runBehaviour": "AUTOMATIC",
-    "userSetOnLoad": false
+    "runBehaviour": "MANUAL",
+    "userSetOnLoad": true
   }
 }

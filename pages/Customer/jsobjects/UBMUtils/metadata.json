@@ -9,7 +9,11 @@
     "variables": [
       {
         "name": "customerOptions",
-        "value": "[{\n  label: \"PPG Industries\",\n  value: \"ppg\"\n}, {\n  label: \"Simon Property Group\",\n  value: \"simon\"\n}]"
+        "value": "[{\n  label: \"PPG Industries, Inc.\",\n  value: \"ppg_p\"\n}, {\n  label: \"Simon Properties\",\n  value: \"simonproperties_p\"\n}]"
+      },
+      {
+        "name": "credentials",
+        "value": "{\n  ppg_p: {\n    clientId: \"w2S6GCYIMrZsN5xqB2PjABSg2VAerClxJCaiDqGdNuZfL0el\",\n    clientSecret: \"EfegzY4GvbtYva5vSvmwF9dQB799aybszKY0mGdzUonS0HA4AyGR1eBkuUhNilB3\"\n  },\n  simonproperties_p: {\n    clientId: \"lgF8ieHbjCfmSNVsmVGayuFbS0MjLgEUCKuJuZveLCCpo26r\",\n    clientSecret: \"iPXcycXVprcSlAmYQ7yrDOSU3XE4GwdPAPlO3KKWUiUJbnWmrnOKRXIEM1yM5rw2\"\n  }\n}"
       },
       {
         "name": "endpoints",
@@ -18,6 +22,10 @@
       {
         "name": "joinGraph",
         "value": "{\n  bills: {\n    vendors: {\n      from: \"providerId\",\n      to: \"providerId\"\n    },\n    accounts: {\n      from: \"virtualAccountId\",\n      to: \"virtualAccountId\"\n    },\n    billErrors: {\n      from: \"billId\",\n      to: \"pearId\"\n    }\n  },\n  monthlyFeed: {\n    accounts: {\n      from: \"virtualAccountId\",\n      to: \"virtualAccountId\"\n    }\n  },\n  accounts: {\n    vendors: {\n      from: \"vendorId\",\n      to: \"providerId\"\n    },\n    billErrors: {\n      from: \"billingId\",\n      to: \"billingId\"\n    }\n  }\n}"
+      },
+      {
+        "name": "UNAVAILABLE_MSG",
+        "value": "\"This report isn't available for the selected customer. Please contact your administrator.\""
       }
     ]
   }

@@ -1,0 +1,4 @@
+{
+  "clientId": "{{this.params.clientId}}",
+  "clientSecret": "{{this.params.clientSecret}}"
+}

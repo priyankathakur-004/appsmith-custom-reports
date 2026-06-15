@@ -1,11 +1,31 @@
 export default {
 	// ----- Static config -----
-	// Known customers and their display labels. To add a new customer, also add
-	// a login query (loginXxx) with their credentials and extend loginFor() below.
+	// Known customers and their display labels. Each customer is its own UBM tenant
+	// with its own API credentials. To onboard a new customer:
+	//   1) add a { label, value } entry here, and
+	//   2) add a matching `credentials` entry below keyed by the same `value`.
+	// The `value` MUST equal the ?customer= code the embedding app passes in the URL.
 	customerOptions: [
-		{ label: "PPG Industries", value: "ppg" },
-		{ label: "Simon Property Group", value: "simon" }
+		{ label: "PPG Industries, Inc.", value: "ppg_p" },
+		{ label: "Simon Properties", value: "simonproperties_p" }
 	],
+
+	// Per-tenant API credentials, keyed by the customer's fdg_code (the same value the
+	// embedding app passes as ?customer=). A customer is only usable if it has an entry
+	// here. Unknown customers fail closed (no data) instead of silently falling back to
+	// another tenant's data.
+	credentials: {
+		ppg_p: {
+			clientId: "w2S6GCYIMrZsN5xqB2PjABSg2VAerClxJCaiDqGdNuZfL0el",
+			clientSecret: "EfegzY4GvbtYva5vSvmwF9dQB799aybszKY0mGdzUonS0HA4AyGR1eBkuUhNilB3"
+		},
+		simonproperties_p: {
+			clientId: "lgF8ieHbjCfmSNVsmVGayuFbS0MjLgEUCKuJuZveLCCpo26r",
+			clientSecret: "iPXcycXVprcSlAmYQ7yrDOSU3XE4GwdPAPlO3KKWUiUJbnWmrnOKRXIEM1yM5rw2"
+		}
+		// To onboard a new tenant, add an entry keyed by its fdg_code, e.g.:
+		//   basfcorporation: { clientId: "...", clientSecret: "..." }
+	},
 
 	endpoints: {
 		accounts: {
@@ -102,36 +122,56 @@ export default {
 	},
 
 	// ----- Page-load entrypoint -----
-	// Mark this function "Run on page load" in the JSObject settings (gear icon in the
-	// JS editor → toggle ON for `init`). It re-authenticates for the URL's customer
-	// and fires the default query so the grid populates immediately after an iframe reload.
+	// Runs on page load (runBehaviour AUTOMATIC). The data queries are MANUAL, so they
+	// only ever execute through run() below — never on their own with a stale token.
+	// Embedded: re-authenticates for the URL's customer and loads the default endpoint.
+	// Standalone with nothing selected: clears any leftover token and loads nothing.
 	init: async () => {
 		try {
-			await UBMUtils.ensureToken();
+			if (!UBMUtils.activeCustomer()) {
+				// No valid customer — wipe any persisted token so a previous session's
+				// data can't leak, and leave the grid empty until one is chosen.
+				await UBMUtils.clearSession();
+				if (UBMUtils.activeCustomerRaw()) {
+					// Embedder passed a ?customer= we don't recognize / have no access for.
+					showAlert(UBMUtils.UNAVAILABLE_MSG, "warning");
+				}
+				return;
+			}
+			// run() authenticates, fetches, and shows the friendly message on any failure.
 			await UBMUtils.run();
 		} catch (e) {
-			showAlert("Init failed: " + (e && e.message ? e.message : e), "error");
+			console.error("Custom Reports init failed:", e);
+			showAlert(UBMUtils.UNAVAILABLE_MSG, "error");
 		}
 	},
 
+	clearSession: async () => {
+		await removeValue("ubm_customer");
+		await removeValue("ubm_token");
+		await removeValue("ubm_token_expires_at");
+	},
+
 	// ----- Customer resolution -----
-	// Priority: CustomerSelect (only when visible — standalone use) → ?customer= URL param (embedded use) → "ppg".
+	// Priority: ?customer= URL param (embedded use) → CustomerSelect dropdown (standalone use).
+	// A customer is recognized only if it has a `credentials` entry. Anything else returns
+	// null (fail closed) — we never silently serve another tenant's data.
 	activeCustomer: () => {
-		const known = UBMUtils.customerOptions.map(o => o.value);
-		// 1) URL param wins (embed mode — ?customer=ppg or ?customer=simon)
+		// 1) URL param wins (embed mode — ?customer=ppg, ?customer=simon, …)
 		const raw = (appsmith.URL && appsmith.URL.queryParams && appsmith.URL.queryParams.customer) || "";
 		const fromUrl = String(raw).toLowerCase().trim();
-		if (fromUrl && known.includes(fromUrl)) return fromUrl;
-		// 2) Dropdown fallback (only when standalone — no URL param)
+		if (fromUrl && UBMUtils.credentials[fromUrl]) return fromUrl;
+		// 2) Dropdown fallback (only when standalone — no/unknown URL param)
 		if (typeof CustomerSelect !== "undefined" && CustomerSelect.selectedOptionValue) {
 			const fromDropdown = String(CustomerSelect.selectedOptionValue).toLowerCase().trim();
-			if (known.includes(fromDropdown)) return fromDropdown;
+			if (UBMUtils.credentials[fromDropdown]) return fromDropdown;
 		}
-		return "ppg";
+		return null;
 	},
 
 	activeCustomerLabel: () => {
 		const code = UBMUtils.activeCustomer();
+		if (!code) return "Unknown";
 		const opt = UBMUtils.customerOptions.find(o => o.value === code);
 		return opt ? opt.label : code;
 	},
@@ -143,12 +183,13 @@ export default {
 
 	bannerText: () => {
 		const code = UBMUtils.activeCustomer();
-		const label = UBMUtils.activeCustomerLabel();
 		const raw = UBMUtils.activeCustomerRaw();
-		if (raw && raw.toLowerCase().trim() !== code) {
-			return `Unknown customer "${raw}" — defaulting to ${label}`;
+		if (!code) {
+			return raw
+				? `Unknown customer "${raw}" — no data available. This tenant is not configured.`
+				: "No customer selected — no data available.";
 		}
-		return `Viewing as ${label}`;
+		return `Viewing as ${UBMUtils.activeCustomerLabel()}`;
 	},
 
 	// ----- Endpoints / fields -----
@@ -298,8 +339,13 @@ export default {
 	},
 
 	loginFor: async (customer) => {
-		const action = customer === "simon" ? loginSimon : loginPPG;
-		const res = await action.run();
+		const creds = UBMUtils.credentials[customer];
+		if (!creds) {
+			throw new Error(`No credentials configured for customer "${customer}"`);
+		}
+		// Pass this customer's credentials to the single `login` query as run params
+		// ({{this.params.clientId}} / {{this.params.clientSecret}} in its body).
+		const res = await login.run({ clientId: creds.clientId, clientSecret: creds.clientSecret });
 		if (!res || !res.accessToken) {
 			throw new Error("Login failed: no accessToken in response");
 		}
@@ -312,6 +358,9 @@ export default {
 
 	ensureToken: async () => {
 		const customer = UBMUtils.activeCustomer();
+		if (!customer) {
+			throw new Error("Unknown or unconfigured customer — cannot load data");
+		}
 		const cached = appsmith.store.ubm_customer;
 		if (customer !== cached || !UBMUtils.tokenIsFresh()) {
 			await UBMUtils.loginFor(customer);
@@ -320,8 +369,16 @@ export default {
 	},
 
 	// ----- Run / export -----
+	// Shown to the embedding app's end-user whenever we can't authenticate or fetch
+	// for the chosen customer (bad/missing credentials, API down, etc.). The technical
+	// cause is logged to the console for support.
+	UNAVAILABLE_MSG: "This report isn't available for the selected customer. Please contact your administrator.",
+
 	run: async () => {
-		await UBMUtils.ensureToken();
+		if (!UBMUtils.activeCustomer()) {
+			showAlert("Please select a customer to run a report.", "warning");
+			return;
+		}
 		const specs = UBMUtils.selectedSpecs();
 		if (specs.length === 0) {
 			showAlert("Pick at least one endpoint", "warning");
@@ -343,15 +400,27 @@ export default {
 				return;
 			}
 		}
-		const queries = { getAccounts, getVendors, getBills, getMonthlyFeed, getBillErrors };
-		const broken = UBMUtils.selectedKeys().slice(1).filter(k => !UBMUtils.findJoin(UBMUtils.selectedKeys()[0], k));
-		if (broken.length > 0) {
-			showAlert("No join path from " + UBMUtils.selectedKeys()[0] + " to: " + broken.join(", ") + " — those columns will be empty", "warning");
+		try {
+			// Authenticate then fetch. A failure here (login rejected, API error) means
+			// the report can't be shown for this customer — surface the friendly message.
+			await UBMUtils.ensureToken();
+			const queries = { getAccounts, getVendors, getBills, getMonthlyFeed, getBillErrors };
+			const broken = UBMUtils.selectedKeys().slice(1).filter(k => !UBMUtils.findJoin(UBMUtils.selectedKeys()[0], k));
+			if (broken.length > 0) {
+				showAlert("No join path from " + UBMUtils.selectedKeys()[0] + " to: " + broken.join(", ") + " — those columns will be empty", "warning");
+			}
+			await Promise.all(specs.map(spec => queries[spec.query].run()));
+		} catch (e) {
+			console.error("Custom Reports run failed:", e);
+			showAlert(UBMUtils.UNAVAILABLE_MSG, "error");
 		}
-		await Promise.all(specs.map(spec => queries[spec.query].run()));
 	},
 
 	exportCsv: () => {
+		if (!UBMUtils.activeCustomer()) {
+			showAlert("Select a customer before exporting", "warning");
+			return;
+		}
 		const rows = UBMUtils.rows();
 		const fields = (FieldsSelect.selectedOptionValues && FieldsSelect.selectedOptionValues.length > 0)
 			? FieldsSelect.selectedOptionValues
@@ -380,6 +449,10 @@ export default {
 	},
 
 	exportXlsx: () => {
+		if (!UBMUtils.activeCustomer()) {
+			showAlert("Select a customer before exporting", "warning");
+			return;
+		}
 		const rows = UBMUtils.rows();
 		const fields = (FieldsSelect.selectedOptionValues && FieldsSelect.selectedOptionValues.length > 0)
 			? FieldsSelect.selectedOptionValues
