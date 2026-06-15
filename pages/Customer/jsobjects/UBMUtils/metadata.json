@@ -22,6 +22,10 @@
       {
         "name": "joinGraph",
         "value": "{\n  bills: {\n    vendors: {\n      from: \"providerId\",\n      to: \"providerId\"\n    },\n    accounts: {\n      from: \"virtualAccountId\",\n      to: \"virtualAccountId\"\n    },\n    billErrors: {\n      from: \"billId\",\n      to: \"pearId\"\n    }\n  },\n  monthlyFeed: {\n    accounts: {\n      from: \"virtualAccountId\",\n      to: \"virtualAccountId\"\n    }\n  },\n  accounts: {\n    vendors: {\n      from: \"vendorId\",\n      to: \"providerId\"\n    },\n    billErrors: {\n      from: \"billingId\",\n      to: \"billingId\"\n    }\n  }\n}"
+      },
+      {
+        "name": "UNAVAILABLE_MSG",
+        "value": "\"This report isn't available for the selected customer. Please contact your administrator.\""
       }
     ]
   }

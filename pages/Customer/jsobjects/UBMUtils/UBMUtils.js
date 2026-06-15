@@ -134,17 +134,15 @@ export default {
 				await UBMUtils.clearSession();
 				if (UBMUtils.activeCustomerRaw()) {
 					// Embedder passed a ?customer= we don't recognize / have no access for.
-					showAlert("This report isn't available for the selected account. Please contact your administrator if you believe this is an error.", "warning");
+					showAlert(UBMUtils.UNAVAILABLE_MSG, "warning");
 				}
 				return;
 			}
-			await UBMUtils.ensureToken();
+			// run() authenticates, fetches, and shows the friendly message on any failure.
 			await UBMUtils.run();
 		} catch (e) {
-			// Keep the technical detail in the console for support/debugging, but show
-			// the embedding app's end-user a plain, actionable message.
 			console.error("Custom Reports init failed:", e);
-			showAlert("We couldn't load this report right now. Please refresh the page and try again — if the problem continues, contact your administrator.", "error");
+			showAlert(UBMUtils.UNAVAILABLE_MSG, "error");
 		}
 	},
 
@@ -371,8 +369,16 @@ export default {
 	},
 
 	// ----- Run / export -----
+	// Shown to the embedding app's end-user whenever we can't authenticate or fetch
+	// for the chosen customer (bad/missing credentials, API down, etc.). The technical
+	// cause is logged to the console for support.
+	UNAVAILABLE_MSG: "This report isn't available for the selected customer. Please contact your administrator.",
+
 	run: async () => {
-		await UBMUtils.ensureToken();
+		if (!UBMUtils.activeCustomer()) {
+			showAlert("Please select a customer to run a report.", "warning");
+			return;
+		}
 		const specs = UBMUtils.selectedSpecs();
 		if (specs.length === 0) {
 			showAlert("Pick at least one endpoint", "warning");
@@ -394,12 +400,20 @@ export default {
 				return;
 			}
 		}
-		const queries = { getAccounts, getVendors, getBills, getMonthlyFeed, getBillErrors };
-		const broken = UBMUtils.selectedKeys().slice(1).filter(k => !UBMUtils.findJoin(UBMUtils.selectedKeys()[0], k));
-		if (broken.length > 0) {
-			showAlert("No join path from " + UBMUtils.selectedKeys()[0] + " to: " + broken.join(", ") + " — those columns will be empty", "warning");
+		try {
+			// Authenticate then fetch. A failure here (login rejected, API error) means
+			// the report can't be shown for this customer — surface the friendly message.
+			await UBMUtils.ensureToken();
+			const queries = { getAccounts, getVendors, getBills, getMonthlyFeed, getBillErrors };
+			const broken = UBMUtils.selectedKeys().slice(1).filter(k => !UBMUtils.findJoin(UBMUtils.selectedKeys()[0], k));
+			if (broken.length > 0) {
+				showAlert("No join path from " + UBMUtils.selectedKeys()[0] + " to: " + broken.join(", ") + " — those columns will be empty", "warning");
+			}
+			await Promise.all(specs.map(spec => queries[spec.query].run()));
+		} catch (e) {
+			console.error("Custom Reports run failed:", e);
+			showAlert(UBMUtils.UNAVAILABLE_MSG, "error");
 		}
-		await Promise.all(specs.map(spec => queries[spec.query].run()));
 	},
 
 	exportCsv: () => {
