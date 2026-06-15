@@ -122,16 +122,29 @@ export default {
 	},
 
 	// ----- Page-load entrypoint -----
-	// Mark this function "Run on page load" in the JSObject settings (gear icon in the
-	// JS editor → toggle ON for `init`). It re-authenticates for the URL's customer
-	// and fires the default query so the grid populates immediately after an iframe reload.
+	// Runs on page load (runBehaviour AUTOMATIC). The data queries are MANUAL, so they
+	// only ever execute through run() below — never on their own with a stale token.
+	// Embedded: re-authenticates for the URL's customer and loads the default endpoint.
+	// Standalone with nothing selected: clears any leftover token and loads nothing.
 	init: async () => {
 		try {
+			if (!UBMUtils.activeCustomer()) {
+				// No valid customer — wipe any persisted token so a previous session's
+				// data can't leak, and leave the grid empty until one is chosen.
+				await UBMUtils.clearSession();
+				return;
+			}
 			await UBMUtils.ensureToken();
 			await UBMUtils.run();
 		} catch (e) {
 			showAlert("Init failed: " + (e && e.message ? e.message : e), "error");
 		}
+	},
+
+	clearSession: async () => {
+		await removeValue("ubm_customer");
+		await removeValue("ubm_token");
+		await removeValue("ubm_token_expires_at");
 	},
 
 	// ----- Customer resolution -----
@@ -388,6 +401,10 @@ export default {
 	},
 
 	exportCsv: () => {
+		if (!UBMUtils.activeCustomer()) {
+			showAlert("Select a customer before exporting", "warning");
+			return;
+		}
 		const rows = UBMUtils.rows();
 		const fields = (FieldsSelect.selectedOptionValues && FieldsSelect.selectedOptionValues.length > 0)
 			? FieldsSelect.selectedOptionValues
@@ -416,6 +433,10 @@ export default {
 	},
 
 	exportXlsx: () => {
+		if (!UBMUtils.activeCustomer()) {
+			showAlert("Select a customer before exporting", "warning");
+			return;
+		}
 		const rows = UBMUtils.rows();
 		const fields = (FieldsSelect.selectedOptionValues && FieldsSelect.selectedOptionValues.length > 0)
 			? FieldsSelect.selectedOptionValues

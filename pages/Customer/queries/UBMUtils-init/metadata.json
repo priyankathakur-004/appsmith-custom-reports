@@ -25,7 +25,7 @@
     "fullyQualifiedName": "UBMUtils.init",
     "name": "init",
     "pageId": "Customer",
-    "runBehaviour": "MANUAL",
-    "userSetOnLoad": false
+    "runBehaviour": "AUTOMATIC",
+    "userSetOnLoad": true
   }
 }
