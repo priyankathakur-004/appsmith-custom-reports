@@ -132,12 +132,19 @@ export default {
 				// No valid customer — wipe any persisted token so a previous session's
 				// data can't leak, and leave the grid empty until one is chosen.
 				await UBMUtils.clearSession();
+				if (UBMUtils.activeCustomerRaw()) {
+					// Embedder passed a ?customer= we don't recognize / have no access for.
+					showAlert("This report isn't available for the selected account. Please contact your administrator if you believe this is an error.", "warning");
+				}
 				return;
 			}
 			await UBMUtils.ensureToken();
 			await UBMUtils.run();
 		} catch (e) {
-			showAlert("Init failed: " + (e && e.message ? e.message : e), "error");
+			// Keep the technical detail in the console for support/debugging, but show
+			// the embedding app's end-user a plain, actionable message.
+			console.error("Custom Reports init failed:", e);
+			showAlert("We couldn't load this report right now. Please refresh the page and try again — if the problem continues, contact your administrator.", "error");
 		}
 	},
 
@@ -169,11 +176,6 @@ export default {
 		if (!code) return "Unknown";
 		const opt = UBMUtils.customerOptions.find(o => o.value === code);
 		return opt ? opt.label : code;
-	},
-
-	activeCreds: () => {
-		const code = UBMUtils.activeCustomer();
-		return code ? UBMUtils.credentials[code] : null;
 	},
 
 	activeCustomerRaw: () => {
@@ -343,9 +345,9 @@ export default {
 		if (!creds) {
 			throw new Error(`No credentials configured for customer "${customer}"`);
 		}
-		// The single `login` query reads its clientId/clientSecret from UBMUtils.activeCreds(),
-		// which resolves to this customer's entry in the credentials map above.
-		const res = await login.run();
+		// Pass this customer's credentials to the single `login` query as run params
+		// ({{this.params.clientId}} / {{this.params.clientSecret}} in its body).
+		const res = await login.run({ clientId: creds.clientId, clientSecret: creds.clientSecret });
 		if (!res || !res.accessToken) {
 			throw new Error("Login failed: no accessToken in response");
 		}
