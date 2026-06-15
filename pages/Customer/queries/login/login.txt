@@ -1,0 +1,4 @@
+{
+  "clientId": "{{UBMUtils.activeCreds().clientId}}",
+  "clientSecret": "{{UBMUtils.activeCreds().clientSecret}}"
+}

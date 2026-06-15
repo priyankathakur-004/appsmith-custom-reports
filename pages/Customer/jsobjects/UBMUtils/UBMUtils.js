@@ -1,11 +1,30 @@
 export default {
 	// ----- Static config -----
-	// Known customers and their display labels. To add a new customer, also add
-	// a login query (loginXxx) with their credentials and extend loginFor() below.
+	// Known customers and their display labels. Each customer is its own UBM tenant
+	// with its own API credentials. To onboard a new customer:
+	//   1) add a { label, value } entry here, and
+	//   2) add a matching `credentials` entry below keyed by the same `value`.
+	// The `value` MUST equal the ?customer= code the embedding app passes in the URL.
 	customerOptions: [
 		{ label: "PPG Industries", value: "ppg" },
 		{ label: "Simon Property Group", value: "simon" }
 	],
+
+	// Per-tenant API credentials, keyed by customer code. A customer is only usable
+	// if it has an entry here. Unknown customers fail closed (no data) instead of
+	// silently falling back to another tenant's data.
+	credentials: {
+		ppg: {
+			clientId: "w2S6GCYIMrZsN5xqB2PjABSg2VAerClxJCaiDqGdNuZfL0el",
+			clientSecret: "EfegzY4GvbtYva5vSvmwF9dQB799aybszKY0mGdzUonS0HA4AyGR1eBkuUhNilB3"
+		},
+		simon: {
+			clientId: "lgF8ieHbjCfmSNVsmVGayuFbS0MjLgEUCKuJuZveLCCpo26r",
+			clientSecret: "iPXcycXVprcSlAmYQ7yrDOSU3XE4GwdPAPlO3KKWUiUJbnWmrnOKRXIEM1yM5rw2"
+		}
+		// To onboard a new tenant, add e.g.:
+		//   acme: { clientId: "...", clientSecret: "..." }
+	},
 
 	endpoints: {
 		accounts: {
@@ -115,25 +134,32 @@ export default {
 	},
 
 	// ----- Customer resolution -----
-	// Priority: CustomerSelect (only when visible — standalone use) → ?customer= URL param (embedded use) → "ppg".
+	// Priority: ?customer= URL param (embedded use) → CustomerSelect dropdown (standalone use).
+	// A customer is recognized only if it has a `credentials` entry. Anything else returns
+	// null (fail closed) — we never silently serve another tenant's data.
 	activeCustomer: () => {
-		const known = UBMUtils.customerOptions.map(o => o.value);
-		// 1) URL param wins (embed mode — ?customer=ppg or ?customer=simon)
+		// 1) URL param wins (embed mode — ?customer=ppg, ?customer=simon, …)
 		const raw = (appsmith.URL && appsmith.URL.queryParams && appsmith.URL.queryParams.customer) || "";
 		const fromUrl = String(raw).toLowerCase().trim();
-		if (fromUrl && known.includes(fromUrl)) return fromUrl;
-		// 2) Dropdown fallback (only when standalone — no URL param)
+		if (fromUrl && UBMUtils.credentials[fromUrl]) return fromUrl;
+		// 2) Dropdown fallback (only when standalone — no/unknown URL param)
 		if (typeof CustomerSelect !== "undefined" && CustomerSelect.selectedOptionValue) {
 			const fromDropdown = String(CustomerSelect.selectedOptionValue).toLowerCase().trim();
-			if (known.includes(fromDropdown)) return fromDropdown;
+			if (UBMUtils.credentials[fromDropdown]) return fromDropdown;
 		}
-		return "ppg";
+		return null;
 	},
 
 	activeCustomerLabel: () => {
 		const code = UBMUtils.activeCustomer();
+		if (!code) return "Unknown";
 		const opt = UBMUtils.customerOptions.find(o => o.value === code);
 		return opt ? opt.label : code;
+	},
+
+	activeCreds: () => {
+		const code = UBMUtils.activeCustomer();
+		return code ? UBMUtils.credentials[code] : null;
 	},
 
 	activeCustomerRaw: () => {
@@ -143,12 +169,13 @@ export default {
 
 	bannerText: () => {
 		const code = UBMUtils.activeCustomer();
-		const label = UBMUtils.activeCustomerLabel();
 		const raw = UBMUtils.activeCustomerRaw();
-		if (raw && raw.toLowerCase().trim() !== code) {
-			return `Unknown customer "${raw}" — defaulting to ${label}`;
+		if (!code) {
+			return raw
+				? `Unknown customer "${raw}" — no data available. This tenant is not configured.`
+				: "No customer selected — no data available.";
 		}
-		return `Viewing as ${label}`;
+		return `Viewing as ${UBMUtils.activeCustomerLabel()}`;
 	},
 
 	// ----- Endpoints / fields -----
@@ -298,8 +325,13 @@ export default {
 	},
 
 	loginFor: async (customer) => {
-		const action = customer === "simon" ? loginSimon : loginPPG;
-		const res = await action.run();
+		const creds = UBMUtils.credentials[customer];
+		if (!creds) {
+			throw new Error(`No credentials configured for customer "${customer}"`);
+		}
+		// The single `login` query reads its clientId/clientSecret from UBMUtils.activeCreds(),
+		// which resolves to this customer's entry in the credentials map above.
+		const res = await login.run();
 		if (!res || !res.accessToken) {
 			throw new Error("Login failed: no accessToken in response");
 		}
@@ -312,6 +344,9 @@ export default {
 
 	ensureToken: async () => {
 		const customer = UBMUtils.activeCustomer();
+		if (!customer) {
+			throw new Error("Unknown or unconfigured customer — cannot load data");
+		}
 		const cached = appsmith.store.ubm_customer;
 		if (customer !== cached || !UBMUtils.tokenIsFresh()) {
 			await UBMUtils.loginFor(customer);
