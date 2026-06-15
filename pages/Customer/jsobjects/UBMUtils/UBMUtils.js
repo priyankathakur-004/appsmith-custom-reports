@@ -6,24 +6,25 @@ export default {
 	//   2) add a matching `credentials` entry below keyed by the same `value`.
 	// The `value` MUST equal the ?customer= code the embedding app passes in the URL.
 	customerOptions: [
-		{ label: "PPG Industries", value: "ppg" },
-		{ label: "Simon Property Group", value: "simon" }
+		{ label: "PPG Industries, Inc.", value: "ppg_p" },
+		{ label: "Simon Properties", value: "simonproperties_p" }
 	],
 
-	// Per-tenant API credentials, keyed by customer code. A customer is only usable
-	// if it has an entry here. Unknown customers fail closed (no data) instead of
-	// silently falling back to another tenant's data.
+	// Per-tenant API credentials, keyed by the customer's fdg_code (the same value the
+	// embedding app passes as ?customer=). A customer is only usable if it has an entry
+	// here. Unknown customers fail closed (no data) instead of silently falling back to
+	// another tenant's data.
 	credentials: {
-		ppg: {
+		ppg_p: {
 			clientId: "w2S6GCYIMrZsN5xqB2PjABSg2VAerClxJCaiDqGdNuZfL0el",
 			clientSecret: "EfegzY4GvbtYva5vSvmwF9dQB799aybszKY0mGdzUonS0HA4AyGR1eBkuUhNilB3"
 		},
-		simon: {
+		simonproperties_p: {
 			clientId: "lgF8ieHbjCfmSNVsmVGayuFbS0MjLgEUCKuJuZveLCCpo26r",
 			clientSecret: "iPXcycXVprcSlAmYQ7yrDOSU3XE4GwdPAPlO3KKWUiUJbnWmrnOKRXIEM1yM5rw2"
 		}
-		// To onboard a new tenant, add e.g.:
-		//   acme: { clientId: "...", clientSecret: "..." }
+		// To onboard a new tenant, add an entry keyed by its fdg_code, e.g.:
+		//   basfcorporation: { clientId: "...", clientSecret: "..." }
 	},
 
 	endpoints: {
