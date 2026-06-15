@@ -1,0 +1,59 @@
+{
+  "animateLoading": true,
+  "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
+  "bottomRow": 41,
+  "boxShadow": "none",
+  "buttonColor": "#1E5FCC",
+  "buttonVariant": "TERTIARY",
+  "disabledWhenInvalid": false,
+  "dynamicBindingPathList": [
+    {
+      "key": "borderRadius"
+    },
+    {
+      "key": "isVisible"
+    }
+  ],
+  "dynamicPropertyPathList": [
+    {
+      "key": "isVisible"
+    }
+  ],
+  "dynamicTriggerPathList": [
+    {
+      "key": "onClick"
+    }
+  ],
+  "iconAlign": "left",
+  "iconName": "download",
+  "isDefaultClickDisabled": true,
+  "isDisabled": false,
+  "isLoading": false,
+  "isVisible": "{{ (UBMUtils.rows() || []).length > 0 }}",
+  "key": "cr_expbtn",
+  "leftColumn": 55,
+  "minWidth": 120,
+  "mobileBottomRow": 26,
+  "mobileLeftColumn": 15,
+  "mobileRightColumn": 30,
+  "mobileTopRow": 23,
+  "needsErrorInfo": false,
+  "onClick": "{{ UBMUtils.exportCsv() }}",
+  "originalBottomRow": 41,
+  "originalTopRow": 37,
+  "parentColumnSpace": 16,
+  "parentId": "xtj7hyg0fw",
+  "parentRowSpace": 10,
+  "placement": "CENTER",
+  "recaptchaType": "V3",
+  "renderMode": "CANVAS",
+  "resetFormOnClick": false,
+  "responsiveBehavior": "hug",
+  "rightColumn": 64,
+  "text": "Export to CSV",
+  "topRow": 37,
+  "type": "BUTTON_WIDGET",
+  "version": 1,
+  "widgetId": "stwdmvpw0f",
+  "widgetName": "ExportButton"
+}
