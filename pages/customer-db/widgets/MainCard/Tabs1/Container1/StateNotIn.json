@@ -1,5 +1,5 @@
 {
-  "accentColor": "{{appsmith.theme.colors.primaryColor}}",
+  "accentColor": "#0F2A47",
   "alignWidget": "LEFT",
   "animateLoading": true,
   "bottomRow": 22,
@@ -18,7 +18,7 @@
   "key": "cr_statenotin",
   "label": "State Not In",
   "labelPosition": "Left",
-  "labelTextColor": "#FFFFFF",
+  "labelTextColor": "#0F2A47",
   "leftColumn": 41,
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 4,

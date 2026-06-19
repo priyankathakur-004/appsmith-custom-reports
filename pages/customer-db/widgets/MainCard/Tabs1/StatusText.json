@@ -39,7 +39,7 @@
   "shouldTruncate": false,
   "text": "{{ ReportSpecs.status() }}",
   "textAlign": "LEFT",
-  "textColor": "#ffffff",
+  "textColor": "#6B7280",
   "topRow": 46,
   "type": "TEXT_WIDGET",
   "version": 1,

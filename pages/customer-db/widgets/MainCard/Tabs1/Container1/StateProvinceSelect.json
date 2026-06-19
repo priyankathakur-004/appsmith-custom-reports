@@ -1,5 +1,5 @@
 {
-  "accentColor": "{{appsmith.theme.colors.primaryColor}}",
+  "accentColor": "#0F2A47",
   "allowSelectAll": true,
   "animateLoading": true,
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
@@ -35,7 +35,7 @@
   "labelPosition": "Top",
   "labelStyle": "",
   "labelText": "",
-  "labelTextColor": "#FFFFFF",
+  "labelTextColor": "#0F2A47",
   "labelTextSize": "0.875rem",
   "labelWidth": 5,
   "leftColumn": 33,
