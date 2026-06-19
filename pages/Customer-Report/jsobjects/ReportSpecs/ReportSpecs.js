@@ -288,6 +288,11 @@ export default {
 		await storeValue("reportsPageStart", start);
 		await storeValue("reportsPageEnd", end);
 		await Promise.all([runReport.run(), runReportCount.run()]);
+		// Signal "fresh data ready" AFTER the queries resolve. The grid delivers rows
+		// only when this changes, so the premature model update from updateModel()
+		// (which still holds the previous page's data) is ignored — fixes the grid
+		// lagging one fetch behind (stale until a second Run / empty on first load).
+		await storeValue("reportsResponseTs", Date.now());
 	},
 
 	totalRows: () => {
