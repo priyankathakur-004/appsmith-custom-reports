@@ -20,6 +20,10 @@
     {
       "id": "Customer",
       "isDefault": true
+    },
+    {
+      "id": "customer-db",
+      "isDefault": false
     }
   ],
   "unpublishedApplicationDetail": {
