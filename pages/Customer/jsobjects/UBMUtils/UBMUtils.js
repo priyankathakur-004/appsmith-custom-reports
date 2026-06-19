@@ -7,7 +7,10 @@ export default {
 	// The `value` MUST equal the ?customer= code the embedding app passes in the URL.
 	customerOptions: [
 		{ label: "PPG Industries, Inc.", value: "ppg_p" },
-		{ label: "Simon Properties", value: "simonproperties_p" }
+		{ label: "Simon Properties", value: "simonproperties_p" },
+		{ label: "Altafiber", value: "altafiber_p" },
+		{ label: "Hexpol", value: "hexpol_p" },
+		{ label: "Ascension", value: "ascension_p" }
 	],
 
 	// Per-tenant API credentials, keyed by the customer's fdg_code (the same value the
@@ -22,6 +25,18 @@ export default {
 		simonproperties_p: {
 			clientId: "lgF8ieHbjCfmSNVsmVGayuFbS0MjLgEUCKuJuZveLCCpo26r",
 			clientSecret: "iPXcycXVprcSlAmYQ7yrDOSU3XE4GwdPAPlO3KKWUiUJbnWmrnOKRXIEM1yM5rw2"
+		},
+		altafiber_p: {
+			clientId: "47W7Zv2CSw3e5e7Ys8HxBWGmrGHAD6H5tYj11zLaC9lAb3IP",
+			clientSecret: "VynZ1UFl1Db6DJGwQNpGZOA8ejlomQTt3aYlfFQwKroGD0dvAJFS49DZ1Wqqtguz"
+		},
+		hexpol_p: {
+			clientId: "QkcYJ1BFQQWuQz7iKpzMl2JepDAAnajiYznquYrWGoXGObKE",
+			clientSecret: "TmUAmHpBzQtnzBmXjvpkFwDt1FNshGzvJwFGsoP5oKGht50xxCnJRdVNGM5M6GQR"
+		},
+		ascension_p: {
+			clientId: "jIYL00Ty9AHllHL1iIrrHwPkCkbbdD0SuwHAINNafm0HNzGu",
+			clientSecret: "dmGuTdGw1sUevyUjjH2Bve79lNkGm6t2HGwCAozrpGhqJHxEpwWOyYda6d0muPuy"
 		}
 		// To onboard a new tenant, add an entry keyed by its fdg_code, e.g.:
 		//   basfcorporation: { clientId: "...", clientSecret: "..." }
