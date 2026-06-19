@@ -180,7 +180,10 @@ export default {
 	filterClauses: () => {
 		const parts = ["WHERE 1=1"];
 		const cid = ReportSpecs.customerId();
-		if (cid != null) parts.push(`AND amf.customer_id = ${cid}`);
+		// Fail closed: with no customer resolved (missing/unknown ?customer= fdg_code),
+		// match no rows instead of returning every tenant's data.
+		if (cid == null) return "WHERE 1=0";
+		parts.push(`AND amf.customer_id = ${cid}`);
 
 		// Date range (always applied if provided). amf.time_period is the canonical
 		// month bucket — start of month for monthly feed.

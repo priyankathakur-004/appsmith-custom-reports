@@ -5,7 +5,7 @@
   "pluginType": "DB",
   "unpublishedAction": {
     "actionConfiguration": {
-      "body": "SELECT id, name\nFROM bill_management_v2.customers_search\nWHERE active IS NOT FALSE\nORDER BY name;",
+      "body": "SELECT id, name, fdg_code\nFROM bill_management_v2.customers_search\nWHERE active IS NOT FALSE\nORDER BY name;",
       "encodeParamsToggle": true,
       "paginationType": "NONE",
       "pluginSpecifiedTemplates": [

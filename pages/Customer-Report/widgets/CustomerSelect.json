@@ -4,7 +4,7 @@
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
   "bottomRow": 4,
   "boxShadow": "none",
-  "defaultOptionValue": "{{ 94512 }}",
+  "defaultOptionValue": "{{ (() => { const raw = (appsmith.URL && appsmith.URL.queryParams && appsmith.URL.queryParams.customer) || ''; const code = String(raw).toLowerCase().trim(); const rows = (getCustomers && getCustomers.data) || []; if (code) { const m = rows.find(r => String(r.fdg_code || '').toLowerCase().trim() === code); return m ? m.id : ''; } return ''; })() }}",
   "dynamicBindingPathList": [
     {
       "key": "sourceData"

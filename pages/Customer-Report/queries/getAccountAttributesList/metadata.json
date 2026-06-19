@@ -5,7 +5,7 @@
   "pluginType": "DB",
   "unpublishedAction": {
     "actionConfiguration": {
-      "body": "SELECT DISTINCT attribute_name AS value, attribute_name AS label\nFROM bill_management_v2.virtual_accounts_attributes_metadata\nWHERE customer_id = {{ Number(CustomerSelect.selectedOptionValue) || 94512 }}\n  AND deleted_at IS NULL\n  AND attribute_name IS NOT NULL AND attribute_name <> ''\nORDER BY attribute_name;\n",
+      "body": "SELECT DISTINCT attribute_name AS value, attribute_name AS label\nFROM bill_management_v2.virtual_accounts_attributes_metadata\nWHERE customer_id = {{ Number(CustomerSelect.selectedOptionValue) || 0 }}\n  AND deleted_at IS NULL\n  AND attribute_name IS NOT NULL AND attribute_name <> ''\nORDER BY attribute_name;\n",
       "encodeParamsToggle": true,
       "paginationType": "NONE",
       "pluginSpecifiedTemplates": [
