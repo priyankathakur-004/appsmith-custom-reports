@@ -1,70 +1,71 @@
 {
   "accentColor": "#0F2A47",
-  "allowSelectAll": true,
+  "allowSelectAll": false,
   "animateLoading": true,
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
-  "bottomRow": 9,
+  "bottomRow": 40,
   "boxShadow": "none",
-  "defaultOptionValue": "{{ ReportSpecs.defaultVisibleFields }}",
+  "defaultOptionValue": [],
   "dynamicBindingPathList": [
     {
       "key": "sourceData"
     },
     {
-      "key": "borderRadius"
+      "key": "isDisabled"
     },
     {
-      "key": "defaultOptionValue"
+      "key": "borderRadius"
     }
   ],
   "dynamicHeight": "FIXED",
   "dynamicPropertyPathList": [
     {
       "key": "sourceData"
-    },
-    {
-      "key": "optionValue"
     }
   ],
-  "dynamicTriggerPathList": [],
-  "isDisabled": false,
+  "dynamicTriggerPathList": [
+    {
+      "key": "onOptionChange"
+    }
+  ],
+  "isDisabled": "{{ !(AccountAttributesSelect.selectedOptionValues && AccountAttributesSelect.selectedOptionValues.length) }}",
   "isFilterable": true,
   "isLoading": false,
   "isRequired": false,
   "isVisible": true,
-  "key": "cr_fields",
+  "key": "cr_acctattrval",
   "labelAlignment": "left",
   "labelPosition": "Top",
-  "labelStyle": "",
-  "labelText": "Visible Fields",
+  "labelText": "",
   "labelTextColor": "#0F2A47",
   "labelTextSize": "0.875rem",
   "labelWidth": 5,
   "leftColumn": 17,
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 4,
-  "minWidth": 450,
-  "mobileBottomRow": 46,
-  "mobileLeftColumn": 0,
-  "mobileRightColumn": 30,
-  "mobileTopRow": 39,
+  "minWidth": 240,
+  "mobileBottomRow": 77,
+  "mobileLeftColumn": 12,
+  "mobileRightColumn": 32,
+  "mobileTopRow": 70,
   "needsErrorInfo": false,
+  "onOptionChange": "{{ ReportSpecs.refreshGrid() }}",
   "optionLabel": "label",
   "optionValue": "value",
-  "originalBottomRow": 34,
-  "originalTopRow": 26,
+  "originalBottomRow": 40,
+  "originalTopRow": 33,
   "parentColumnSpace": 16,
   "parentId": "ukh00f6t26",
   "parentRowSpace": 10,
-  "placeholderText": "Select",
+  "placeholderText": "Pick attribute(s) first, then values",
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 48,
+  "rightColumn": 33,
   "serverSideFiltering": false,
-  "sourceData": "{{ ReportSpecs.fieldOptions() }}",
-  "topRow": 0,
+  "sourceData": "{{ getAccountAttributeValues.data }}",
+  "topRow": 33,
   "type": "MULTI_SELECT_WIDGET_V2",
-  "version": 1,
-  "widgetId": "24htoakt1e",
-  "widgetName": "FieldsSelect"
+  "version": 2,
+  "widgetId": "lgtk7fq9pt",
+  "widgetName": "AccountAttributeValuesSelect"
 }

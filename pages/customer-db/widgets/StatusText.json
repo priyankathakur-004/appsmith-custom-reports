@@ -1,16 +1,13 @@
 {
   "animateLoading": true,
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
-  "bottomRow": 33,
+  "bottomRow": 54,
   "dynamicBindingPathList": [
     {
-      "key": "truncateButtonColor"
+      "key": "text"
     },
     {
       "key": "fontFamily"
-    },
-    {
-      "key": "borderRadius"
     }
   ],
   "dynamicHeight": "AUTO_HEIGHT",
@@ -20,33 +17,32 @@
   "fontStyle": "",
   "isLoading": false,
   "isVisible": true,
-  "key": "acctattrlbl1",
+  "key": "cr_status",
   "leftColumn": 0,
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 4,
-  "minWidth": 450,
-  "mobileBottomRow": 4,
+  "minWidth": 200,
+  "mobileBottomRow": 49,
   "mobileLeftColumn": 0,
-  "mobileRightColumn": 3,
-  "mobileTopRow": 0,
+  "mobileRightColumn": 30,
+  "mobileTopRow": 46,
   "needsErrorInfo": false,
-  "originalBottomRow": 33,
-  "originalTopRow": 29,
+  "originalBottomRow": 54,
+  "originalTopRow": 50,
   "overflow": "NONE",
-  "parentColumnSpace": 19.09375,
-  "parentId": "ukh00f6t26",
+  "parentColumnSpace": 16,
+  "parentId": "0",
   "parentRowSpace": 10,
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 16,
+  "rightColumn": 37,
   "shouldTruncate": false,
-  "text": "Account Attributes (limit 10)",
+  "text": "{{ ReportSpecs.status() }}",
   "textAlign": "LEFT",
-  "textColor": "#0F2A47",
-  "topRow": 29,
-  "truncateButtonColor": "#1E5FCC",
+  "textColor": "#6B7280",
+  "topRow": 50,
   "type": "TEXT_WIDGET",
   "version": 1,
-  "widgetId": "n26hwyi072",
-  "widgetName": "Text1CopyCopy2"
+  "widgetId": "g434or27xz",
+  "widgetName": "StatusText"
 }

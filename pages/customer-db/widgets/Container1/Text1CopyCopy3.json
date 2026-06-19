@@ -4,13 +4,7 @@
   "bottomRow": 22,
   "dynamicBindingPathList": [
     {
-      "key": "truncateButtonColor"
-    },
-    {
       "key": "fontFamily"
-    },
-    {
-      "key": "borderRadius"
     }
   ],
   "dynamicHeight": "AUTO_HEIGHT",
@@ -21,7 +15,7 @@
   "isLoading": false,
   "isVisible": true,
   "key": "hliyxcspbi",
-  "leftColumn": 17,
+  "leftColumn": 49,
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 4,
   "minWidth": 450,
@@ -30,23 +24,23 @@
   "mobileRightColumn": 3,
   "mobileTopRow": 0,
   "needsErrorInfo": false,
-  "originalBottomRow": 7,
-  "originalTopRow": 0,
+  "originalBottomRow": 23,
+  "originalTopRow": 18,
   "overflow": "NONE",
   "parentColumnSpace": 19.09375,
   "parentId": "ukh00f6t26",
   "parentRowSpace": 10,
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 24,
+  "rightColumn": 54,
   "shouldTruncate": false,
-  "text": "Country",
+  "text": "Service Types",
   "textAlign": "LEFT",
   "textColor": "#0F2A47",
   "topRow": 18,
   "truncateButtonColor": "#1E5FCC",
   "type": "TEXT_WIDGET",
   "version": 1,
-  "widgetId": "oebhchv0t1",
-  "widgetName": "Text1"
+  "widgetId": "2jt7xk72pr",
+  "widgetName": "Text1CopyCopy3"
 }

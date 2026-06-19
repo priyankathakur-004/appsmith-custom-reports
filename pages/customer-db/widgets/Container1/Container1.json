@@ -1,58 +1,59 @@
 {
   "animateLoading": true,
-  "backgroundColor": "#ffffff",
-  "borderColor": "",
+  "backgroundColor": "#F5F6F8",
+  "borderColor": "#6b7280",
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
   "borderWidth": "0",
-  "bottomRow": 157,
+  "bottomRow": 50,
   "boxShadow": "none",
   "children": [
     {
       "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
-      "bottomRow": 1560,
+      "bottomRow": 460,
+      "boxShadow": "{{appsmith.theme.boxShadow.appBoxShadow}}",
       "canExtend": false,
       "containerStyle": "none",
       "detachFromLayout": true,
       "dynamicBindingPathList": [
         {
           "key": "borderRadius"
+        },
+        {
+          "key": "boxShadow"
         }
       ],
       "dynamicHeight": "AUTO_HEIGHT",
       "flexLayers": [],
       "isLoading": false,
       "isVisible": true,
-      "key": "cr_maincanvas",
+      "key": "g5bava7wf7",
       "leftColumn": 0,
       "maxDynamicHeight": 9000,
       "minDynamicHeight": 4,
       "minHeight": 100,
       "minWidth": 450,
-      "mobileBottomRow": 1320,
+      "mobileBottomRow": 100,
       "mobileLeftColumn": 0,
-      "mobileRightColumn": 1024,
+      "mobileRightColumn": 387.375,
       "mobileTopRow": 0,
       "needsErrorInfo": false,
       "parentColumnSpace": 1,
-      "parentId": "vfkz3mr4do",
+      "parentId": "3t3dcby5l3",
       "parentRowSpace": 1,
       "renderMode": "CANVAS",
       "responsiveBehavior": "fill",
-      "rightColumn": 1024,
+      "rightColumn": 387.375,
       "topRow": 0,
       "type": "CANVAS_WIDGET",
       "version": 1,
-      "widgetId": "0g76rk2vri",
-      "widgetName": "Canvas1"
+      "widgetId": "ukh00f6t26",
+      "widgetName": "Canvas2"
     }
   ],
   "containerStyle": "card",
   "dynamicBindingPathList": [
     {
       "key": "borderRadius"
-    },
-    {
-      "key": "backgroundColor"
     }
   ],
   "dynamicHeight": "AUTO_HEIGHT",
@@ -61,28 +62,28 @@
   "isCanvas": true,
   "isLoading": false,
   "isVisible": true,
-  "key": "cr_maincard",
+  "key": "o5c8tchk0r",
   "leftColumn": 0,
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 10,
   "minWidth": 450,
-  "mobileBottomRow": 132,
+  "mobileBottomRow": 15,
   "mobileLeftColumn": 0,
-  "mobileRightColumn": 64,
-  "mobileTopRow": 0,
+  "mobileRightColumn": 24,
+  "mobileTopRow": 5,
   "needsErrorInfo": false,
-  "originalBottomRow": 157,
-  "originalTopRow": 1,
-  "parentColumnSpace": 16,
+  "originalBottomRow": 50,
+  "originalTopRow": 4,
+  "parentColumnSpace": 16.140625,
   "parentId": "0",
   "parentRowSpace": 10,
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
   "rightColumn": 64,
   "shouldScrollContents": true,
-  "topRow": 1,
+  "topRow": 4,
   "type": "CONTAINER_WIDGET",
   "version": 1,
-  "widgetId": "vfkz3mr4do",
-  "widgetName": "MainCard"
+  "widgetId": "3t3dcby5l3",
+  "widgetName": "Container1"
 }

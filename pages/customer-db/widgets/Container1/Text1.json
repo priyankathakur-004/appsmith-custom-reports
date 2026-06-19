@@ -4,13 +4,7 @@
   "bottomRow": 22,
   "dynamicBindingPathList": [
     {
-      "key": "truncateButtonColor"
-    },
-    {
       "key": "fontFamily"
-    },
-    {
-      "key": "borderRadius"
     }
   ],
   "dynamicHeight": "AUTO_HEIGHT",
@@ -21,7 +15,7 @@
   "isLoading": false,
   "isVisible": true,
   "key": "hliyxcspbi",
-  "leftColumn": 0,
+  "leftColumn": 17,
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 4,
   "minWidth": 450,
@@ -38,15 +32,15 @@
   "parentRowSpace": 10,
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 16,
+  "rightColumn": 24,
   "shouldTruncate": false,
-  "text": "Location Attributes (limit 10)",
+  "text": "Country",
   "textAlign": "LEFT",
   "textColor": "#0F2A47",
   "topRow": 18,
   "truncateButtonColor": "#1E5FCC",
   "type": "TEXT_WIDGET",
   "version": 1,
-  "widgetId": "ix4z9uct6u",
-  "widgetName": "Text1CopyCopy1"
+  "widgetId": "oebhchv0t1",
+  "widgetName": "Text1"
 }

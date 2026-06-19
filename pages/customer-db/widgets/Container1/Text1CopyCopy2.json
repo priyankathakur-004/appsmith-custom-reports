@@ -1,11 +1,8 @@
 {
   "animateLoading": true,
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
-  "bottomRow": 50,
+  "bottomRow": 33,
   "dynamicBindingPathList": [
-    {
-      "key": "text"
-    },
     {
       "key": "fontFamily"
     }
@@ -17,32 +14,33 @@
   "fontStyle": "",
   "isLoading": false,
   "isVisible": true,
-  "key": "cr_status",
+  "key": "acctattrlbl1",
   "leftColumn": 0,
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 4,
-  "minWidth": 200,
-  "mobileBottomRow": 49,
+  "minWidth": 450,
+  "mobileBottomRow": 4,
   "mobileLeftColumn": 0,
-  "mobileRightColumn": 30,
-  "mobileTopRow": 46,
+  "mobileRightColumn": 3,
+  "mobileTopRow": 0,
   "needsErrorInfo": false,
-  "originalBottomRow": 50,
-  "originalTopRow": 46,
+  "originalBottomRow": 33,
+  "originalTopRow": 29,
   "overflow": "NONE",
-  "parentColumnSpace": 16,
-  "parentId": "nsaw1ij03u",
+  "parentColumnSpace": 19.09375,
+  "parentId": "ukh00f6t26",
   "parentRowSpace": 10,
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 44,
+  "rightColumn": 16,
   "shouldTruncate": false,
-  "text": "{{ ReportSpecs.status() }}",
+  "text": "Account Attributes (limit 10)",
   "textAlign": "LEFT",
-  "textColor": "#6B7280",
-  "topRow": 46,
+  "textColor": "#0F2A47",
+  "topRow": 29,
+  "truncateButtonColor": "#1E5FCC",
   "type": "TEXT_WIDGET",
   "version": 1,
-  "widgetId": "g434or27xz",
-  "widgetName": "StatusText"
+  "widgetId": "n26hwyi072",
+  "widgetName": "Text1CopyCopy2"
 }

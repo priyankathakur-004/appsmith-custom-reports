@@ -11,9 +11,6 @@
   "defaultDate": "",
   "dynamicBindingPathList": [
     {
-      "key": "isVisible"
-    },
-    {
       "key": "borderRadius"
     }
   ],
