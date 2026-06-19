@@ -1,0 +1,85 @@
+{
+  "accentColor": "#0F2A47",
+  "animateLoading": true,
+  "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
+  "bottomRow": 18,
+  "boxShadow": "none",
+  "closeOnSelection": true,
+  "convertToISO": false,
+  "dateFormat": "MM/DD/YYYY",
+  "datePickerType": "DATE_PICKER",
+  "defaultDate": "",
+  "dynamicBindingPathList": [
+    {
+      "key": "minDate"
+    },
+    {
+      "key": "maxDate"
+    },
+    {
+      "key": "isVisible"
+    },
+    {
+      "key": "borderRadius"
+    }
+  ],
+  "dynamicHeight": "FIXED",
+  "dynamicPropertyPathList": [
+    {
+      "key": "isVisible"
+    },
+    {
+      "key": "minDate"
+    },
+    {
+      "key": "maxDate"
+    }
+  ],
+  "dynamicTriggerPathList": [
+    {
+      "key": "onDateSelected"
+    }
+  ],
+  "firstDayOfWeek": "0",
+  "inputFormat": "MM/DD/YYYY",
+  "isDisabled": false,
+  "isLoading": false,
+  "isRequired": false,
+  "isVisible": true,
+  "key": "cr_enddate",
+  "label": "To Month/Period",
+  "labelAlignment": "left",
+  "labelPosition": "Top",
+  "labelStyle": "",
+  "labelText": "To Month/Period",
+  "labelTextColor": "#ffffff",
+  "labelTextSize": "0.875rem",
+  "labelWidth": 5,
+  "leftColumn": 17,
+  "maxDate": "{{ StartDate.selectedDate ? moment(StartDate.selectedDate).add(31, 'days').toISOString() : '2121-12-31T18:29:00.000Z' }}",
+  "maxDynamicHeight": 9000,
+  "minDate": "{{ StartDate.selectedDate ? moment(StartDate.selectedDate).toISOString() : '1920-12-31T18:30:00.000Z' }}",
+  "minDynamicHeight": 4,
+  "minWidth": 240,
+  "mobileBottomRow": 30,
+  "mobileLeftColumn": 15,
+  "mobileRightColumn": 30,
+  "mobileTopRow": 23,
+  "needsErrorInfo": false,
+  "onDateSelected": "{{ ReportSpecs.refreshGrid() }}",
+  "originalBottomRow": 39,
+  "originalTopRow": 31,
+  "parentColumnSpace": 16,
+  "parentId": "ukh00f6t26",
+  "parentRowSpace": 10,
+  "renderMode": "CANVAS",
+  "responsiveBehavior": "fill",
+  "rightColumn": 32,
+  "shortcuts": false,
+  "timePrecision": "minute",
+  "topRow": 9,
+  "type": "DATE_PICKER_WIDGET2",
+  "version": 2,
+  "widgetId": "7wpk0t1xhy",
+  "widgetName": "EndDate"
+}
