@@ -79,8 +79,100 @@ export default {
 		LEFT JOIN bill_management_v2.customers_providers_pretty_name cvn
 			ON cvn.code = amf.vendor_code AND cvn.customer_id = amf.customer_id`,
 
-	// ORDER BY for both runReport and runReportCount alignment.
-	orderByClause: "l.id, amf.time_period",
+	// Stable default ORDER BY (used when the grid has no explicit sort).
+	defaultOrderBy: "l.id, amf.time_period",
+
+	// ----- Raw column expression lookup -----
+	// The SELECT builds "<expr> AS \"alias\"". WHERE/ORDER BY on the grid's
+	// column id must use the underlying <expr> (Postgres can't see the alias in
+	// WHERE, and sorting by an alias only works if it's in the SELECT). Strip the
+	// trailing  AS "alias"  to recover the expression. Returns null for unknown ids.
+	_fieldExpr: key => {
+		const o = ReportSpecs.visibleFieldOptions.find(f => f.value === key);
+		if (!o) return null;
+		return o.sql.replace(/\s+AS\s+"[^"]*"\s*$/i, "").trim();
+	},
+
+	// ----- Grid sort/filter state (server-side, driven by the AG Grid header) -----
+	// The grid stashes its sortModel/filterModel into the store on each fetch (see
+	// fetchPage + the grid's getRows). We read them back here so runReport AND
+	// runReportCount build identical WHERE/ORDER BY — keeping totals in sync.
+	_sortModel: () => {
+		const raw = appsmith.store.reportsSortModel;
+		try { return raw ? JSON.parse(raw) : []; } catch (e) { return []; }
+	},
+	_filterModel: () => {
+		const raw = appsmith.store.reportsFilterModel;
+		try { return raw ? JSON.parse(raw) : {}; } catch (e) { return {}; }
+	},
+
+	// ORDER BY built from the grid's sortModel; falls back to the stable default.
+	orderBy: () => {
+		const model = ReportSpecs._sortModel();
+		const parts = (Array.isArray(model) ? model : [])
+			.map(s => {
+				const expr = ReportSpecs._fieldExpr(s && s.colId);
+				if (!expr) return null;
+				return `${expr} ${s.sort === "desc" ? "DESC" : "ASC"}`;
+			})
+			.filter(Boolean);
+		return parts.length ? parts.join(", ") : ReportSpecs.defaultOrderBy;
+	},
+
+	// Translate a single AG Grid filter condition to a SQL predicate against the
+	// column's raw expression. String values go through _quote (injection-safe).
+	_oneColumnCond: (expr, c) => {
+		if (!c || !c.filterType) return null;
+		if (c.filterType === "number") {
+			const a = Number(c.filter), b = Number(c.filterTo);
+			switch (c.type) {
+				case "equals": return isNaN(a) ? null : `${expr} = ${a}`;
+				case "notEqual": return isNaN(a) ? null : `${expr} <> ${a}`;
+				case "greaterThan": return isNaN(a) ? null : `${expr} > ${a}`;
+				case "greaterThanOrEqual": return isNaN(a) ? null : `${expr} >= ${a}`;
+				case "lessThan": return isNaN(a) ? null : `${expr} < ${a}`;
+				case "lessThanOrEqual": return isNaN(a) ? null : `${expr} <= ${a}`;
+				case "inRange": return (isNaN(a) || isNaN(b)) ? null : `${expr} BETWEEN ${a} AND ${b}`;
+				case "blank": return `${expr} IS NULL`;
+				case "notBlank": return `${expr} IS NOT NULL`;
+				default: return null;
+			}
+		}
+		// Text filter (the default). Cast to text so it also works over numeric/date exprs.
+		const v = (c.filter == null ? "" : String(c.filter));
+		const eq = ReportSpecs._quote(v);
+		const like = ReportSpecs._quote(`%${v}%`);
+		const pre = ReportSpecs._quote(`${v}%`);
+		const suf = ReportSpecs._quote(`%${v}`);
+		switch (c.type) {
+			case "equals": return `${expr}::text = ${eq}`;
+			case "notEqual": return `${expr}::text <> ${eq}`;
+			case "contains": return `${expr}::text ILIKE ${like}`;
+			case "notContains": return `${expr}::text NOT ILIKE ${like}`;
+			case "startsWith": return `${expr}::text ILIKE ${pre}`;
+			case "endsWith": return `${expr}::text ILIKE ${suf}`;
+			case "blank": return `${expr} IS NULL`;
+			case "notBlank": return `${expr} IS NOT NULL`;
+			default: return null;
+		}
+	},
+
+	// Per-column header filters (AG Grid filterModel) -> array of "AND (...)" parts.
+	// Supports AG Grid's combined filter (two conditions + AND/OR operator).
+	columnFilterClauses: () => {
+		const model = ReportSpecs._filterModel();
+		const out = [];
+		Object.keys(model || {}).forEach(colId => {
+			const expr = ReportSpecs._fieldExpr(colId);
+			const f = model[colId];
+			if (!expr || !f) return;
+			const conds = (Array.isArray(f.conditions) && f.conditions.length) ? f.conditions : [f];
+			const op = (f.operator === "OR") ? "OR" : "AND";
+			const sql = conds.map(c => ReportSpecs._oneColumnCond(expr, c)).filter(Boolean);
+			if (sql.length) out.push(`AND (${sql.join(` ${op} `)})`);
+		});
+		return out;
+	},
 
 	// ----- ISO state/country code → pretty name maps -----
 	// DB stores ISO codes like "US-CA", "CA-ON". Filter SELECT/IN still uses
@@ -147,6 +239,15 @@ export default {
 
 	// Visible-fields options for the FieldsSelect dropdown.
 	fieldOptions: () => ReportSpecs.visibleFieldOptions.map(f => ({ label: f.label, value: f.value })),
+
+	// value -> label map, so the grid can render curated headers ("Total Charges")
+	// instead of a mechanically prettified column key ("Total Charges Consumption"
+	// vs. our "Consumption Charges"). Passed into the grid via its model.
+	fieldLabelMap: () => {
+		const m = {};
+		ReportSpecs.visibleFieldOptions.forEach(f => { m[f.value] = f.label; });
+		return m;
+	},
 
 	// ----- SELECT builder -----
 	selectClause: () => {
@@ -277,6 +378,9 @@ export default {
 			});
 		}
 
+		// Per-column header filters (grid filterModel) — SQL-side like everything else.
+		ReportSpecs.columnFilterClauses().forEach(c => parts.push(c));
+
 		return parts.join(" ");
 	},
 
@@ -287,6 +391,10 @@ export default {
 		const end = Math.max(start + 1, (m && Number(m.pendingEnd)) || (start + 100));
 		await storeValue("reportsPageStart", start);
 		await storeValue("reportsPageEnd", end);
+		// Persist the grid's current header sort/filter so runReport AND
+		// runReportCount build matching SQL (see orderBy / columnFilterClauses).
+		await storeValue("reportsSortModel", (m && m.pendingSort) || "[]");
+		await storeValue("reportsFilterModel", (m && m.pendingFilter) || "{}");
 		await Promise.all([runReport.run(), runReportCount.run()]);
 		// Signal "fresh data ready" AFTER the queries resolve. The grid delivers rows
 		// only when this changes, so the premature model update from updateModel()
@@ -317,6 +425,11 @@ export default {
 	refreshGrid: async () => {
 		await storeValue("reportsPageStart", 0);
 		await storeValue("reportsPageEnd", 100);
+		// A sidebar-filter change bumps refreshKey, which rebuilds the grid and
+		// clears its header sort/filter UI. Clear the stored copies too so the
+		// rebuilt grid's first fetch doesn't re-apply stale header filters.
+		await storeValue("reportsSortModel", "[]");
+		await storeValue("reportsFilterModel", "{}");
 		await storeValue("reportsRefreshKey", (Number(appsmith.store.reportsRefreshKey) || 0) + 1);
 	},
 
@@ -327,14 +440,32 @@ export default {
 		return Object.keys(rows[0]).map(k => ({ label: k, value: k }));
 	},
 
+	// Self-diagnosing status line. Distinguishes the ways the report can legitimately
+	// show 0 rows so an embed problem (missing ?customer=, session/cookies blocked in
+	// the iframe, unknown tenant code) is visible instead of a silent empty grid.
 	status: () => {
 		if (runReport.isLoading) return "Loading...";
+		const cid = ReportSpecs.customerId();
+		if (cid == null) {
+			const raw = (appsmith.URL && appsmith.URL.queryParams && appsmith.URL.queryParams.customer) || "";
+			if (!String(raw).trim()) return "No customer specified — the embed URL is missing ?customer=<code>";
+			const loaded = Array.isArray(getCustomers.data) && getCustomers.data.length > 0;
+			if (!loaded) return "Resolving customer… (if this never clears, the iframe can't load data — check session/cookies)";
+			return `Unknown customer code "${raw}" — no matching tenant`;
+		}
 		const total = ReportSpecs.totalRows();
-		if (total == null) return "Pick a customer and click Run";
+		if (total == null) return "Running…";
 		return `${total.toLocaleString()} total rows · Cost Analysis – Trendline`;
 	},
 
 	// ----- Export -----
+	// Hard cap on rows a single export may pull. runReport (the grid) is paginated
+	// 100 rows at a time; export must ignore that window and pull the whole result
+	// set via runReportExport, which is this LIMIT instead of the page window.
+	// Bump if a tenant legitimately needs more; kept finite so a mis-scoped filter
+	// can't try to stream millions of rows into the browser.
+	exportRowCap: 100000,
+
 	filenameStem: () => {
 		const customer = (CustomerSelect && CustomerSelect.selectedOptionLabel || "customer")
 			.toString().replace(/\s+/g, "_");
@@ -342,11 +473,17 @@ export default {
 		return `${customer}-cost-analysis-trendline-${stamp}`;
 	},
 
-	exportCsv: () => {
-		const rows = runReport.data || [];
+	exportCsv: async () => {
+		// Pull the FULL result set (all pages), not just the 100 rows the grid is
+		// currently showing. runReportExport is runReport without the page window.
+		await runReportExport.run();
+		const rows = runReportExport.data || [];
 		if (!rows.length) {
 			showAlert("Nothing to export — run a query first", "warning");
 			return;
+		}
+		if (rows.length >= ReportSpecs.exportRowCap) {
+			showAlert(`Export capped at ${ReportSpecs.exportRowCap.toLocaleString()} rows — narrow the filters for the rest`, "warning");
 		}
 		const fields = Object.keys(rows[0]);
 		const escape = v => {
@@ -361,11 +498,16 @@ export default {
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
-	exportXlsx: () => {
-		const rows = runReport.data || [];
+	exportXlsx: async () => {
+		// Pull the FULL result set (all pages), not just the grid's current page.
+		await runReportExport.run();
+		const rows = runReportExport.data || [];
 		if (!rows.length) {
 			showAlert("Nothing to export — run a query first", "warning");
 			return;
+		}
+		if (rows.length >= ReportSpecs.exportRowCap) {
+			showAlert(`Export capped at ${ReportSpecs.exportRowCap.toLocaleString()} rows — narrow the filters for the rest`, "warning");
 		}
 		const fields = Object.keys(rows[0]);
 		const flat = rows.map(r => {

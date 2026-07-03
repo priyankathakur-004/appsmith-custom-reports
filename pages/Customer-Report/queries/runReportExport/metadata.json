@@ -1,11 +1,11 @@
 {
-  "gitSyncId": "6a0ae213387c6535a0660595_52dc3f2f-a0d1-4645-a37b-56b32bfe6e29",
-  "id": "Customer-Report_runReport",
+  "gitSyncId": "6a0ae213387c6535a0660595_66efd2e8-2ea1-4479-820b-3ece9a66b349",
+  "id": "Customer-Report_runReportExport",
   "pluginId": "postgres-plugin",
   "pluginType": "DB",
   "unpublishedAction": {
     "actionConfiguration": {
-      "body": "SELECT {{ ReportSpecs.selectClause() }}\nFROM {{ ReportSpecs.fromClause }}\n{{ ReportSpecs.filterClauses() }}\nORDER BY {{ ReportSpecs.orderBy() }}\nLIMIT {{ Math.max(1, (appsmith.store.reportsPageEnd || 100) - (appsmith.store.reportsPageStart || 0)) }}\nOFFSET {{ Math.max(0, appsmith.store.reportsPageStart || 0) }};\n",
+      "body": "SELECT {{ ReportSpecs.selectClause() }}\nFROM {{ ReportSpecs.fromClause }}\n{{ ReportSpecs.filterClauses() }}\nORDER BY {{ ReportSpecs.orderBy() }}\nLIMIT {{ ReportSpecs.exportRowCap }};\n",
       "encodeParamsToggle": true,
       "paginationType": "NONE",
       "pluginSpecifiedTemplates": [
@@ -13,7 +13,7 @@
           "value": false
         }
       ],
-      "timeoutInMillisecond": 60000
+      "timeoutInMillisecond": 120000
     },
     "confirmBeforeExecute": false,
     "datasource": {
@@ -27,9 +27,9 @@
         "key": "body"
       }
     ],
-    "name": "runReport",
+    "name": "runReportExport",
     "pageId": "Customer-Report",
-    "runBehaviour": "AUTOMATIC",
+    "runBehaviour": "MANUAL",
     "userSetOnLoad": false
   }
 }

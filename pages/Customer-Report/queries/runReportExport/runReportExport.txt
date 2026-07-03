@@ -1,0 +1,5 @@
+SELECT {{ ReportSpecs.selectClause() }}
+FROM {{ ReportSpecs.fromClause }}
+{{ ReportSpecs.filterClauses() }}
+ORDER BY {{ ReportSpecs.orderBy() }}
+LIMIT {{ ReportSpecs.exportRowCap }};

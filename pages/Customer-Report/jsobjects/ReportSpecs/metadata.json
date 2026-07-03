@@ -20,8 +20,12 @@
         "value": "`bill_management_v2.analytics_monthly_feed amf\n\t\tLEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id\n\t\tLEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id\n\t\tLEFT JOIN bill_management_v2.customers_providers_pretty_name cvn\n\t\t\tON cvn.code = amf.vendor_code AND cvn.customer_id = amf.customer_id`"
       },
       {
-        "name": "orderByClause",
+        "name": "defaultOrderBy",
         "value": "\"l.id, amf.time_period\""
+      },
+      {
+        "name": "exportRowCap",
+        "value": "100000"
       },
       {
         "name": "stateNames",
