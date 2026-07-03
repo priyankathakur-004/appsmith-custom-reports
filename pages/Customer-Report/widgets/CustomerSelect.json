@@ -4,7 +4,7 @@
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
   "bottomRow": 5,
   "boxShadow": "none",
-  "defaultOptionValue": "{{ ((options, serverSideFiltering) => (  (() => { const raw = (appsmith.URL && appsmith.URL.queryParams && appsmith.URL.queryParams.customer) || ''; const code = String(raw).toLowerCase().trim(); const rows = (getCustomers && getCustomers.data) || []; if (code) { const m = rows.find(r => String(r.fdg_code || '').toLowerCase().trim() === code); return m ? m.id : ''; } return ''; })() ))(CustomerSelect.options, CustomerSelect.serverSideFiltering) }}",
+  "defaultOptionValue": "{{ (() => { const raw = (appsmith.URL && appsmith.URL.queryParams && appsmith.URL.queryParams.customer) || ''; const code = String(raw).toLowerCase().trim(); const rows = (getCustomers && getCustomers.data) || []; if (code) { const m = rows.find(r => String(r.fdg_code || '').toLowerCase().trim() === code); return m ? m.fdg_code : ''; } return ''; })() }}",
   "dynamicBindingPathList": [
     {
       "key": "sourceData"
@@ -51,7 +51,7 @@
   "needsErrorInfo": false,
   "onOptionChange": "{{ ReportSpecs.refreshGrid() }}",
   "optionLabel": "name",
-  "optionValue": "id",
+  "optionValue": "fdg_code",
   "originalBottomRow": 6,
   "originalTopRow": 0,
   "parentColumnSpace": 16,

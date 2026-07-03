@@ -1,11 +1,11 @@
 {
-  "gitSyncId": "6a0ae213387c6535a0660595_ab6f1372-9490-4336-8a97-fb9ddafd23cc",
-  "id": "Customer-Report_getLocationStatuses",
+  "gitSyncId": "6a0ae213387c6535a0660595_03b5c890-a251-4813-9e6b-ebaefc853cf6",
+  "id": "Customer-Report_getDistinctValues",
   "pluginId": "postgres-plugin",
   "pluginType": "DB",
   "unpublishedAction": {
     "actionConfiguration": {
-      "body": "SELECT DISTINCT lt.location_status AS value, lt.location_status AS label\nFROM bill_management_v2.location_detail lt\nJOIN bill_management_v2.locations l ON l.id = lt.location_id\nWHERE l.customer_id = {{ ReportSpecs.customerIdSql() }}\n  AND lt.location_status IS NOT NULL AND lt.location_status <> ''\nORDER BY lt.location_status;\n",
+      "body": "SELECT DISTINCT {{ ReportSpecs.distinctExpr() }} AS value\nFROM {{ ReportSpecs.fromClause }}\n{{ ReportSpecs.filterClauses(false) }}\n  AND {{ ReportSpecs.distinctExpr() }} IS NOT NULL\nORDER BY 1\nLIMIT 5000;\n",
       "encodeParamsToggle": true,
       "paginationType": "NONE",
       "pluginSpecifiedTemplates": [
@@ -13,7 +13,7 @@
           "value": false
         }
       ],
-      "timeoutInMillisecond": 10000
+      "timeoutInMillisecond": 15000
     },
     "confirmBeforeExecute": false,
     "datasource": {
@@ -27,9 +27,9 @@
         "key": "body"
       }
     ],
-    "name": "getLocationStatuses",
+    "name": "getDistinctValues",
     "pageId": "Customer-Report",
-    "runBehaviour": "AUTOMATIC",
+    "runBehaviour": "MANUAL",
     "userSetOnLoad": false
   }
 }

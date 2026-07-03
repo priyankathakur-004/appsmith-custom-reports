@@ -79,8 +79,25 @@ export default {
 		LEFT JOIN bill_management_v2.customers_providers_pretty_name cvn
 			ON cvn.code = amf.vendor_code AND cvn.customer_id = amf.customer_id`,
 
-	// ORDER BY for both runReport and runReportCount alignment.
+	// Default ORDER BY (stable paging key) — also the tiebreaker for orderBy().
 	orderByClause: "l.id, amf.time_period",
+
+	// Dynamic ORDER BY driven by the AG Grid column sort menu (Sort Ascending /
+	// Descending in the header). The grid persists its sortModel to the store on
+	// every page fetch; we map each sorted column to its SELECT alias. Postgres
+	// allows ORDER BY on output aliases, so sorting by alias is safe. The stable
+	// default is always appended as a tiebreaker so paging stays deterministic.
+	orderBy: () => {
+		const known = ReportSpecs.visibleFieldOptions.map(o => o.value);
+		let model = [];
+		try { model = JSON.parse(appsmith.store.reportsSortModel || "[]"); } catch (e) { model = []; }
+		const terms = (Array.isArray(model) ? model : [])
+			.filter(s => s && known.indexOf(s.colId) >= 0)
+			.map(s => `"${s.colId}" ${s.sort === "desc" ? "DESC" : "ASC"}`);
+		return terms.length > 0
+			? `${terms.join(", ")}, ${ReportSpecs.orderByClause}`
+			: ReportSpecs.orderByClause;
+	},
 
 	// ----- ISO state/country code → pretty name maps -----
 	// DB stores ISO codes like "US-CA", "CA-ON". Filter SELECT/IN still uses
@@ -138,11 +155,18 @@ export default {
 	},
 
 	// ----- Helpers -----
-	customerId: () => {
+	// The customer dropdown's value is the fdg_code (matches the Customer page).
+	// The SQL layer filters on the numeric customer_id, so we resolve code -> id
+	// with an in-database scalar subquery. Doing it in SQL (rather than a JS lookup
+	// against the customer list query) keeps query bodies free of a query.data
+	// dependency, which Appsmith rejects as reactive-dependency misuse. Reads only
+	// the CustomerSelect widget; returns "0" (fail closed => no rows) when nothing
+	// is selected. Single source of truth for "which customer are we".
+	customerIdSql: () => {
 		const v = CustomerSelect && CustomerSelect.selectedOptionValue;
-		if (v == null || v === "") return null;
-		const n = parseInt(v, 10);
-		return isNaN(n) ? null : n;
+		if (v == null || String(v).trim() === "") return "0";
+		const code = String(v).trim().toLowerCase().replace(/'/g, "''");
+		return `(SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '${code}' AND active IS NOT FALSE LIMIT 1)`;
 	},
 
 	// Visible-fields options for the FieldsSelect dropdown.
@@ -177,13 +201,16 @@ export default {
 		return names.map(n => ReportSpecs._quote(n)).join(",");
 	},
 
-	filterClauses: () => {
+	// includeGrid: when false, only the customer + date + panel-widget filters are
+	// emitted (used by getDistinctValues so a set filter's checkbox list reflects
+	// the customer/panel scope, not the grid's own column selections).
+	filterClauses: (includeGrid = true) => {
 		const parts = ["WHERE 1=1"];
-		const cid = ReportSpecs.customerId();
+		const cidSql = ReportSpecs.customerIdSql();
 		// Fail closed: with no customer resolved (missing/unknown ?customer= fdg_code),
 		// match no rows instead of returning every tenant's data.
-		if (cid == null) return "WHERE 1=0";
-		parts.push(`AND amf.customer_id = ${cid}`);
+		if (cidSql === "0") return "WHERE 1=0";
+		parts.push(`AND amf.customer_id = ${cidSql}`);
 
 		// Date range (always applied if provided). amf.time_period is the canonical
 		// month bucket — start of month for monthly feed.
@@ -277,6 +304,84 @@ export default {
 			});
 		}
 
+		// ----- AG Grid column filters (header filter menus) -----
+		// Applied on top of the Container1 filter panel and ANDed with everything
+		// above. The grid persists its filterModel to the store on every page
+		// fetch. WHERE can't reference SELECT aliases, so we resolve each field to
+		// its raw column expression (the part of the SELECT sql before " AS ").
+		if (!includeGrid) return parts.join(" ");
+		let gridModel = {};
+		try { gridModel = JSON.parse(appsmith.store.reportsFilterModel || "{}"); } catch (e) { gridModel = {}; }
+		const rawExpr = (fieldValue) => {
+			const o = ReportSpecs.visibleFieldOptions.find(x => x.value === fieldValue);
+			if (!o) return null;
+			const i = o.sql.lastIndexOf(" AS ");
+			return (i >= 0 ? o.sql.slice(0, i) : o.sql).trim();
+		};
+		const q = ReportSpecs._quote;
+		const textCond = (expr, c) => {
+			const v = (c && c.filter != null) ? String(c.filter) : "";
+			switch (c && c.type) {
+				case "contains": return `${expr} ILIKE ${q("%" + v + "%")}`;
+				case "notContains": return `${expr} NOT ILIKE ${q("%" + v + "%")}`;
+				case "equals": return `${expr} = ${q(v)}`;
+				case "notEqual": return `${expr} <> ${q(v)}`;
+				case "startsWith": return `${expr} ILIKE ${q(v + "%")}`;
+				case "endsWith": return `${expr} ILIKE ${q("%" + v)}`;
+				case "blank": return `(${expr} IS NULL OR ${expr} = '')`;
+				case "notBlank": return `(${expr} IS NOT NULL AND ${expr} <> '')`;
+				default: return null;
+			}
+		};
+		const numCond = (expr, c) => {
+			const n = Number(c && c.filter), n2 = Number(c && c.filterTo);
+			switch (c && c.type) {
+				case "equals": return isNaN(n) ? null : `${expr} = ${n}`;
+				case "notEqual": return isNaN(n) ? null : `${expr} <> ${n}`;
+				case "lessThan": return isNaN(n) ? null : `${expr} < ${n}`;
+				case "lessThanOrEqual": return isNaN(n) ? null : `${expr} <= ${n}`;
+				case "greaterThan": return isNaN(n) ? null : `${expr} > ${n}`;
+				case "greaterThanOrEqual": return isNaN(n) ? null : `${expr} >= ${n}`;
+				case "inRange": return (isNaN(n) || isNaN(n2)) ? null : `${expr} BETWEEN ${n} AND ${n2}`;
+				case "blank": return `${expr} IS NULL`;
+				case "notBlank": return `${expr} IS NOT NULL`;
+				default: return null;
+			}
+		};
+		const oneCond = (expr, c) => {
+			if (!c) return null;
+			if (c.filterType === "number") return numCond(expr, c);
+			if (c.filterType === "set") {
+				const vals = Array.isArray(c.values) ? c.values : [];
+				const nonNull = vals.filter(v => v !== null && v !== undefined);
+				const inList = nonNull.map(v => q(String(v))).join(",");
+				const hasNull = vals.length !== nonNull.length;
+				if (inList && hasNull) return `(${expr} IN (${inList}) OR ${expr} IS NULL)`;
+				if (inList) return `${expr} IN (${inList})`;
+				return "1=0"; // nothing selected => match nothing
+			}
+			return textCond(expr, c); // default: text filter
+		};
+		const buildCond = (expr, f) => {
+			let conds = null, op = "AND";
+			if (Array.isArray(f.conditions) && f.conditions.length) {
+				conds = f.conditions; op = f.operator === "OR" ? "OR" : "AND";
+			} else if (f.condition1 || f.condition2) {
+				conds = [f.condition1, f.condition2].filter(Boolean); op = f.operator === "OR" ? "OR" : "AND";
+			}
+			if (conds) {
+				const built = conds.map(c => oneCond(expr, c)).filter(Boolean);
+				return built.length ? "(" + built.join(") " + op + " (") + ")" : null;
+			}
+			return oneCond(expr, f);
+		};
+		Object.keys(gridModel || {}).forEach(field => {
+			const expr = rawExpr(field);
+			if (!expr) return;
+			const clause = buildCond(expr, gridModel[field]);
+			if (clause) parts.push("AND " + clause);
+		});
+
 		return parts.join(" ");
 	},
 
@@ -287,12 +392,38 @@ export default {
 		const end = Math.max(start + 1, (m && Number(m.pendingEnd)) || (start + 100));
 		await storeValue("reportsPageStart", start);
 		await storeValue("reportsPageEnd", end);
+		// Persist the grid's column sort/filter state so orderBy() and
+		// filterClauses() pick it up when the queries below re-evaluate.
+		await storeValue("reportsSortModel", (m && m.pendingSort) || "[]");
+		await storeValue("reportsFilterModel", (m && m.pendingFilter) || "{}");
 		await Promise.all([runReport.run(), runReportCount.run()]);
 		// Signal "fresh data ready" AFTER the queries resolve. The grid delivers rows
 		// only when this changes, so the premature model update from updateModel()
 		// (which still holds the previous page's data) is ignored — fixes the grid
 		// lagging one fetch behind (stale until a second Run / empty on first load).
 		await storeValue("reportsResponseTs", Date.now());
+	},
+
+	// ----- Set-filter distinct values (checkbox lists) -----
+	// Raw SQL expression for the column the grid is currently asking distinct
+	// values for. Whitelisted via visibleFieldOptions, so it's injection-safe.
+	distinctExpr: () => {
+		const field = appsmith.store.reportsDistinctField;
+		const o = ReportSpecs.visibleFieldOptions.find(x => x.value === field);
+		if (!o) return "NULL";
+		const i = o.sql.lastIndexOf(" AS ");
+		return (i >= 0 ? o.sql.slice(0, i) : o.sql).trim();
+	},
+
+	// onFetchDistinct handler: the grid asks for a column's checkbox values.
+	// Persist the requested field, run the distinct query, then bump the ts the
+	// grid watches so it can hand the values to the pending set filter.
+	fetchDistinct: async () => {
+		const m = (typeof GridWidget !== "undefined") ? GridWidget.model : null;
+		const field = (m && m.reqDistinctField) || "";
+		await storeValue("reportsDistinctField", field);
+		await getDistinctValues.run();
+		await storeValue("reportsDistinctTs", Date.now());
 	},
 
 	totalRows: () => {
@@ -317,6 +448,10 @@ export default {
 	refreshGrid: async () => {
 		await storeValue("reportsPageStart", 0);
 		await storeValue("reportsPageEnd", 100);
+		// Clear any grid column sort/filter so a fresh Run starts clean; the
+		// rebuilt grid re-sends its (empty) state on the next page fetch anyway.
+		await storeValue("reportsSortModel", "[]");
+		await storeValue("reportsFilterModel", "{}");
 		await storeValue("reportsRefreshKey", (Number(appsmith.store.reportsRefreshKey) || 0) + 1);
 	},
 
@@ -327,7 +462,28 @@ export default {
 		return Object.keys(rows[0]).map(k => ({ label: k, value: k }));
 	},
 
+	// Embed mode passes the customer as ?customer=<fdg_code>. Return a clear message
+	// when that link is wrong — a numeric ID, or an unknown code — instead of
+	// silently showing an empty report. Returns "" when the param is valid or
+	// absent. Reads getCustomers.data, which is fine here: this is only consumed by
+	// widget bindings (StatusText), not a query body, so no reactive-dependency
+	// concern.
+	customerError: () => {
+		const raw = (appsmith.URL && appsmith.URL.queryParams && appsmith.URL.queryParams.customer);
+		const code = (raw == null ? "" : String(raw)).trim();
+		if (code === "") return ""; // no ?customer= → standalone / dropdown mode
+		const rows = (typeof getCustomers !== "undefined" && getCustomers.data) || [];
+		if (!Array.isArray(rows) || rows.length === 0) return ""; // list still loading — don't flash an error
+		const lc = code.toLowerCase();
+		if (rows.find(r => String(r.fdg_code || "").toLowerCase().trim() === lc)) return ""; // valid code
+		const byId = rows.find(r => String(r.id) === code);
+		if (byId) return `This link uses a customer ID (${code}). Use the customer code instead — ?customer=${byId.fdg_code}`;
+		return `Unknown customer code "${code}" — no data for this link. Check the ?customer= value in the URL.`;
+	},
+
 	status: () => {
+		const err = ReportSpecs.customerError();
+		if (err) return "⚠️ " + err;
 		if (runReport.isLoading) return "Loading...";
 		const total = ReportSpecs.totalRows();
 		if (total == null) return "Pick a customer and click Run";
@@ -342,46 +498,77 @@ export default {
 		return `${customer}-cost-analysis-trendline-${stamp}`;
 	},
 
-	exportCsv: () => {
-		const rows = runReport.data || [];
+	// Export fields honor the user's FieldsSelect picks (column order + which
+	// columns), falling back to whatever the export query returned.
+	exportFields: (rows) => {
+		const picked = (FieldsSelect && FieldsSelect.selectedOptionValues) || [];
+		if (Array.isArray(picked) && picked.length > 0) return picked;
+		return (rows && rows[0]) ? Object.keys(rows[0]) : [];
+	},
+
+	exportLabel: (field) => {
+		const o = ReportSpecs.visibleFieldOptions.find(x => x.value === field);
+		return o ? o.label : field;
+	},
+
+	exportCsv: async () => {
+		if (ReportSpecs.customerIdSql() === "0") {
+			showAlert("Select a customer before exporting", "warning");
+			return;
+		}
+		// exportRows has no LIMIT/OFFSET, so this pulls the full filtered/sorted
+		// result set — not just the page currently visible in the grid.
+		await exportRows.run();
+		const rows = exportRows.data || [];
 		if (!rows.length) {
 			showAlert("Nothing to export — run a query first", "warning");
 			return;
 		}
-		const fields = Object.keys(rows[0]);
+		const fields = ReportSpecs.exportFields(rows);
 		const escape = v => {
 			if (v === null || v === undefined) return "";
 			if (typeof v === "object") v = JSON.stringify(v);
 			const s = String(v);
 			return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 		};
-		const csv = [fields.join(","), ...rows.map(r => fields.map(f => escape(r[f])).join(","))].join("\n");
+		const csv = [
+			fields.map(f => escape(ReportSpecs.exportLabel(f))).join(","),
+			...rows.map(r => fields.map(f => escape(r[f])).join(","))
+		].join("\n");
 		const filename = `${ReportSpecs.filenameStem()}.csv`;
 		download(csv, filename, "text/csv");
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
-	exportXlsx: () => {
-		const rows = runReport.data || [];
+	exportXlsx: async () => {
+		if (ReportSpecs.customerIdSql() === "0") {
+			showAlert("Select a customer before exporting", "warning");
+			return;
+		}
+		await exportRows.run();
+		const rows = exportRows.data || [];
 		if (!rows.length) {
 			showAlert("Nothing to export — run a query first", "warning");
 			return;
 		}
-		const fields = Object.keys(rows[0]);
-		const flat = rows.map(r => {
-			const o = {};
-			for (const f of fields) {
-				const v = r[f];
-				o[f] = (v && typeof v === "object") ? JSON.stringify(v) : v;
-			}
-			return o;
-		});
-		const ws = XLSX.utils.json_to_sheet(flat, { header: fields });
-		const wb = XLSX.utils.book_new();
-		XLSX.utils.book_append_sheet(wb, ws, "Trendline");
-		const filename = `${ReportSpecs.filenameStem()}.xlsx`;
-		const b64 = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
-		download({ data: b64, name: filename, type: "xlsx" }, filename);
+		const fields = ReportSpecs.exportFields(rows);
+		// A true binary .xlsx needs a working library, and the installed SheetJS's
+		// XLSX.utils is blocked by Appsmith's JS sandbox. The library-free .xls
+		// tricks (HTML table / SpreadsheetML) open as raw markup in Numbers/Sheets.
+		// A UTF-8-BOM CSV opens natively as a spreadsheet in Excel, Numbers and
+		// Sheets — the BOM + CRLF is exactly what Excel expects for clean columns.
+		const escape = v => {
+			if (v === null || v === undefined) return "";
+			if (typeof v === "object") v = JSON.stringify(v);
+			const s = String(v);
+			return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+		};
+		const csv = [
+			fields.map(f => escape(ReportSpecs.exportLabel(f))).join(","),
+			...rows.map(r => fields.map(f => escape(r[f])).join(","))
+		].join("\r\n");
+		const filename = `${ReportSpecs.filenameStem()}.csv`;
+		download("\ufeff" + csv, filename, "text/csv;charset=utf-8");
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
