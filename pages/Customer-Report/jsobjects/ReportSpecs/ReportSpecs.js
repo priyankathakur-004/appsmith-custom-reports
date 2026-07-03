@@ -156,22 +156,17 @@ export default {
 
 	// ----- Helpers -----
 	// The customer dropdown's value is the fdg_code (matches the Customer page).
-	// The SQL layer filters on the numeric customer_id, so resolve code -> id via
-	// getCustomers.data. Every customer-scoped query routes through this, so it's
-	// the single source of truth for "which customer are we".
-	customerId: () => {
+	// The SQL layer filters on the numeric customer_id, so we resolve code -> id
+	// with an in-database scalar subquery. Doing it in SQL (rather than a JS lookup
+	// against the customer list query) keeps query bodies free of a query.data
+	// dependency, which Appsmith rejects as reactive-dependency misuse. Reads only
+	// the CustomerSelect widget; returns "0" (fail closed => no rows) when nothing
+	// is selected. Single source of truth for "which customer are we".
+	customerIdSql: () => {
 		const v = CustomerSelect && CustomerSelect.selectedOptionValue;
-		if (v == null || v === "") return null;
-		const rows = (typeof getCustomers !== "undefined" && getCustomers.data) || [];
-		const code = String(v).toLowerCase().trim();
-		const m = rows.find(r => String(r.fdg_code || "").toLowerCase().trim() === code);
-		if (m && m.id != null) {
-			const n = parseInt(m.id, 10);
-			return isNaN(n) ? null : n;
-		}
-		// Backward-compat: accept a raw numeric id if one is still passed through.
-		const n = parseInt(v, 10);
-		return isNaN(n) ? null : n;
+		if (v == null || String(v).trim() === "") return "0";
+		const code = String(v).trim().toLowerCase().replace(/'/g, "''");
+		return `(SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '${code}' AND active IS NOT FALSE LIMIT 1)`;
 	},
 
 	// Visible-fields options for the FieldsSelect dropdown.
@@ -206,13 +201,16 @@ export default {
 		return names.map(n => ReportSpecs._quote(n)).join(",");
 	},
 
-	filterClauses: () => {
+	// includeGrid: when false, only the customer + date + panel-widget filters are
+	// emitted (used by getDistinctValues so a set filter's checkbox list reflects
+	// the customer/panel scope, not the grid's own column selections).
+	filterClauses: (includeGrid = true) => {
 		const parts = ["WHERE 1=1"];
-		const cid = ReportSpecs.customerId();
+		const cidSql = ReportSpecs.customerIdSql();
 		// Fail closed: with no customer resolved (missing/unknown ?customer= fdg_code),
 		// match no rows instead of returning every tenant's data.
-		if (cid == null) return "WHERE 1=0";
-		parts.push(`AND amf.customer_id = ${cid}`);
+		if (cidSql === "0") return "WHERE 1=0";
+		parts.push(`AND amf.customer_id = ${cidSql}`);
 
 		// Date range (always applied if provided). amf.time_period is the canonical
 		// month bucket — start of month for monthly feed.
@@ -311,6 +309,7 @@ export default {
 		// above. The grid persists its filterModel to the store on every page
 		// fetch. WHERE can't reference SELECT aliases, so we resolve each field to
 		// its raw column expression (the part of the SELECT sql before " AS ").
+		if (!includeGrid) return parts.join(" ");
 		let gridModel = {};
 		try { gridModel = JSON.parse(appsmith.store.reportsFilterModel || "{}"); } catch (e) { gridModel = {}; }
 		const rawExpr = (fieldValue) => {
@@ -403,6 +402,28 @@ export default {
 		// (which still holds the previous page's data) is ignored — fixes the grid
 		// lagging one fetch behind (stale until a second Run / empty on first load).
 		await storeValue("reportsResponseTs", Date.now());
+	},
+
+	// ----- Set-filter distinct values (checkbox lists) -----
+	// Raw SQL expression for the column the grid is currently asking distinct
+	// values for. Whitelisted via visibleFieldOptions, so it's injection-safe.
+	distinctExpr: () => {
+		const field = appsmith.store.reportsDistinctField;
+		const o = ReportSpecs.visibleFieldOptions.find(x => x.value === field);
+		if (!o) return "NULL";
+		const i = o.sql.lastIndexOf(" AS ");
+		return (i >= 0 ? o.sql.slice(0, i) : o.sql).trim();
+	},
+
+	// onFetchDistinct handler: the grid asks for a column's checkbox values.
+	// Persist the requested field, run the distinct query, then bump the ts the
+	// grid watches so it can hand the values to the pending set filter.
+	fetchDistinct: async () => {
+		const m = (typeof GridWidget !== "undefined") ? GridWidget.model : null;
+		const field = (m && m.reqDistinctField) || "";
+		await storeValue("reportsDistinctField", field);
+		await getDistinctValues.run();
+		await storeValue("reportsDistinctTs", Date.now());
 	},
 
 	totalRows: () => {

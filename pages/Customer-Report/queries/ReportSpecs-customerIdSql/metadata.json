@@ -1,6 +1,6 @@
 {
   "gitSyncId": "6a0ae213387c6535a0660595_99e72347-9e54-439d-ade2-b51dde60936a",
-  "id": "Customer-Report_ReportSpecs.customerId",
+  "id": "Customer-Report_ReportSpecs.customerIdSql",
   "pluginId": "js-plugin",
   "pluginType": "JS",
   "unpublishedAction": {
@@ -22,8 +22,8 @@
         "key": "body"
       }
     ],
-    "fullyQualifiedName": "ReportSpecs.customerId",
-    "name": "customerId",
+    "fullyQualifiedName": "ReportSpecs.customerIdSql",
+    "name": "customerIdSql",
     "pageId": "Customer-Report",
     "runBehaviour": "MANUAL",
     "userSetOnLoad": false

@@ -1,6 +1,6 @@
 SELECT DISTINCT state AS value, state AS label
 FROM bill_management_v2.locations
-WHERE customer_id = {{ ReportSpecs.customerId() || 0 }}
+WHERE customer_id = {{ ReportSpecs.customerIdSql() }}
   AND state IS NOT NULL AND state <> ''
   {{ CountrySelect.selectedOptionValues && CountrySelect.selectedOptionValues.length > 0 ? "AND country IN ('" + CountrySelect.selectedOptionValues.join("','") + "')" : "" }}
 ORDER BY state;
