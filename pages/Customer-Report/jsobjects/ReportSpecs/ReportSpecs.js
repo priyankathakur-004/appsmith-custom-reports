@@ -30,6 +30,7 @@ export default {
 		{ value: "locationStatus", label: "Location Status", sql: "lt.location_status AS \"locationStatus\"" },
 		{ value: "buildingType", label: "Building Type", sql: "l.building_type AS \"buildingType\"" },
 		{ value: "squareFeet", label: "Square Feet", sql: "l.square_feet AS \"squareFeet\"" },
+		{ value: "locationNumber", label: "Location Number", sql: "lt.location_number AS \"locationNumber\"" },
 
 		// --- Hierarchy: removed. UBM has no hierarchy/grouping attributes
 		// (location_division / top / second / third group) — confirmed by
@@ -46,6 +47,15 @@ export default {
 		{ value: "totalConsumption", label: "Total Consumption", sql: "amf.total_consumption AS \"totalConsumption\"" },
 		{ value: "totalGenConsumption", label: "Generation Consumption", sql: "amf.total_gen_consumption AS \"totalGenConsumption\"" },
 		{ value: "demand", label: "Max Demand", sql: "amf.max_demand AS \"demand\"" },
+		{ value: "cogenConsumption", label: "Cogeneration Consumption", sql: "amf.total_cogen_consumption AS \"cogenConsumption\"" },
+
+		// --- Consumption by time-of-use tier ---
+		{ value: "consumptionOnpeak", label: "Consumption (On-Peak)", sql: "amf.total_consumption_onpeak AS \"consumptionOnpeak\"" },
+		{ value: "consumptionMidpeak", label: "Consumption (Mid-Peak)", sql: "amf.total_consumption_midpeak AS \"consumptionMidpeak\"" },
+		{ value: "consumptionOffpeak", label: "Consumption (Off-Peak)", sql: "amf.total_consumption_offpeak AS \"consumptionOffpeak\"" },
+		{ value: "consumptionShoulderpeak", label: "Consumption (Shoulder-Peak)", sql: "amf.total_consumption_shoulderpeak AS \"consumptionShoulderpeak\"" },
+		{ value: "consumptionSuperpeak", label: "Consumption (Super-Peak)", sql: "amf.total_consumption_superpeak AS \"consumptionSuperpeak\"" },
+		{ value: "consumptionSuperoffpeak", label: "Consumption (Super-Off-Peak)", sql: "amf.total_consumption_superoffpeak AS \"consumptionSuperoffpeak\"" },
 
 		// --- Charges (granular) ---
 		{ value: "totalCharges", label: "Total Charges", sql: "amf.total_charges AS \"totalCharges\"" },
@@ -55,12 +65,25 @@ export default {
 		{ value: "totalChargesTaxes", label: "Tax Charges", sql: "amf.total_charges_taxes AS \"totalChargesTaxes\"" },
 		{ value: "totalChargesCustomer", label: "Customer Charges", sql: "amf.total_charges_customer AS \"totalChargesCustomer\"" },
 		{ value: "totalChargesOther", label: "Other Charges", sql: "amf.total_charges_other AS \"totalChargesOther\"" },
+		{ value: "totalChargesGeneration", label: "Generation Charges", sql: "amf.total_charges_generation AS \"totalChargesGeneration\"" },
+		{ value: "totalChargesCommodity", label: "Commodity Charges", sql: "amf.total_charges_commodity AS \"totalChargesCommodity\"" },
+		{ value: "totalChargesBilledUse", label: "Billed Use Charges", sql: "amf.total_charges_billeduse AS \"totalChargesBilledUse\"" },
+
+		// --- Consumption charges by time-of-use tier ---
+		{ value: "chargesConsumptionOnpeak", label: "Consumption Charges (On-Peak)", sql: "amf.total_charges_consumption_onpeak AS \"chargesConsumptionOnpeak\"" },
+		{ value: "chargesConsumptionMidpeak", label: "Consumption Charges (Mid-Peak)", sql: "amf.total_charges_consumption_midpeak AS \"chargesConsumptionMidpeak\"" },
+		{ value: "chargesConsumptionOffpeak", label: "Consumption Charges (Off-Peak)", sql: "amf.total_charges_consumption_offpeak AS \"chargesConsumptionOffpeak\"" },
+		{ value: "chargesConsumptionShoulderpeak", label: "Consumption Charges (Shoulder-Peak)", sql: "amf.total_charges_consumption_shoulderpeak AS \"chargesConsumptionShoulderpeak\"" },
+		{ value: "chargesConsumptionSuperpeak", label: "Consumption Charges (Super-Peak)", sql: "amf.total_charges_consumption_superpeak AS \"chargesConsumptionSuperpeak\"" },
 
 		// --- Weather (raw degree-days only) ---
 		// UBM has no "normalization type" attribute; we expose raw HDD/CDD and
 		// any normalization is done client-side. (UBM team 2026-06-17.)
 		{ value: "totalHdd", label: "Heating Degree Days", sql: "amf.total_hdd_billblock AS \"totalHdd\"" },
-		{ value: "totalCdd", label: "Cooling Degree Days", sql: "amf.total_cdd_billblock AS \"totalCdd\"" }
+		{ value: "totalCdd", label: "Cooling Degree Days", sql: "amf.total_cdd_billblock AS \"totalCdd\"" },
+		{ value: "degreeDaysTotal", label: "Degree Days (Total)", sql: "amf.total_dd_billblock AS \"degreeDaysTotal\"" },
+		{ value: "kwhPerDd", label: "kWh per Degree Day", sql: "amf.kwh_per_dd_billblock AS \"kwhPerDd\"" },
+		{ value: "genKwhPerDd", label: "Gen kWh per Degree Day", sql: "amf.gen_kwh_per_dd_billblock AS \"genKwhPerDd\"" }
 	],
 
 	defaultVisibleFields: [
@@ -507,8 +530,33 @@ export default {
 	},
 
 	exportLabel: (field) => {
+		// Honor the user's browser-local column renames, then the catalog label.
+		const ov = (appsmith.store.reportsFieldLabels || {})[field];
+		if (ov) return ov;
 		const o = ReportSpecs.visibleFieldOptions.find(x => x.value === field);
 		return o ? o.label : field;
+	},
+
+	// ----- Column header renames (browser-local; no DB write) -----
+	// Catalog (default) header labels, keyed by field — passed to the grid so it
+	// shows friendly names and knows the baseline to reset a rename back to.
+	fieldCatalog: () => {
+		const m = {};
+		ReportSpecs.visibleFieldOptions.forEach(o => { m[o.value] = o.label; });
+		return m;
+	},
+
+	// onRenameField handler: the grid sends the field + new label. Persist to the
+	// browser (localStorage via storeValue) so renames survive reloads. An empty
+	// label removes the override (reset to the catalog name). No DB access needed.
+	saveFieldLabel: async () => {
+		const g = (typeof GridWidget !== "undefined") ? GridWidget.model : null;
+		const field = g && g.renameField;
+		if (!field) return;
+		const label = (g.renameLabel == null) ? "" : String(g.renameLabel).trim();
+		const map = Object.assign({}, appsmith.store.reportsFieldLabels || {});
+		if (label) map[field] = label; else delete map[field];
+		await storeValue("reportsFieldLabels", map, true);
 	},
 
 	exportCsv: async () => {
