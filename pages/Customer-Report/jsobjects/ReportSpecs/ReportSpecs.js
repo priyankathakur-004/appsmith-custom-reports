@@ -79,8 +79,25 @@ export default {
 		LEFT JOIN bill_management_v2.customers_providers_pretty_name cvn
 			ON cvn.code = amf.vendor_code AND cvn.customer_id = amf.customer_id`,
 
-	// ORDER BY for both runReport and runReportCount alignment.
+	// Default ORDER BY (stable paging key) — also the tiebreaker for orderBy().
 	orderByClause: "l.id, amf.time_period",
+
+	// Dynamic ORDER BY driven by the AG Grid column sort menu (Sort Ascending /
+	// Descending in the header). The grid persists its sortModel to the store on
+	// every page fetch; we map each sorted column to its SELECT alias. Postgres
+	// allows ORDER BY on output aliases, so sorting by alias is safe. The stable
+	// default is always appended as a tiebreaker so paging stays deterministic.
+	orderBy: () => {
+		const known = ReportSpecs.visibleFieldOptions.map(o => o.value);
+		let model = [];
+		try { model = JSON.parse(appsmith.store.reportsSortModel || "[]"); } catch (e) { model = []; }
+		const terms = (Array.isArray(model) ? model : [])
+			.filter(s => s && known.indexOf(s.colId) >= 0)
+			.map(s => `"${s.colId}" ${s.sort === "desc" ? "DESC" : "ASC"}`);
+		return terms.length > 0
+			? `${terms.join(", ")}, ${ReportSpecs.orderByClause}`
+			: ReportSpecs.orderByClause;
+	},
 
 	// ----- ISO state/country code → pretty name maps -----
 	// DB stores ISO codes like "US-CA", "CA-ON". Filter SELECT/IN still uses
@@ -277,6 +294,83 @@ export default {
 			});
 		}
 
+		// ----- AG Grid column filters (header filter menus) -----
+		// Applied on top of the Container1 filter panel and ANDed with everything
+		// above. The grid persists its filterModel to the store on every page
+		// fetch. WHERE can't reference SELECT aliases, so we resolve each field to
+		// its raw column expression (the part of the SELECT sql before " AS ").
+		let gridModel = {};
+		try { gridModel = JSON.parse(appsmith.store.reportsFilterModel || "{}"); } catch (e) { gridModel = {}; }
+		const rawExpr = (fieldValue) => {
+			const o = ReportSpecs.visibleFieldOptions.find(x => x.value === fieldValue);
+			if (!o) return null;
+			const i = o.sql.lastIndexOf(" AS ");
+			return (i >= 0 ? o.sql.slice(0, i) : o.sql).trim();
+		};
+		const q = ReportSpecs._quote;
+		const textCond = (expr, c) => {
+			const v = (c && c.filter != null) ? String(c.filter) : "";
+			switch (c && c.type) {
+				case "contains": return `${expr} ILIKE ${q("%" + v + "%")}`;
+				case "notContains": return `${expr} NOT ILIKE ${q("%" + v + "%")}`;
+				case "equals": return `${expr} = ${q(v)}`;
+				case "notEqual": return `${expr} <> ${q(v)}`;
+				case "startsWith": return `${expr} ILIKE ${q(v + "%")}`;
+				case "endsWith": return `${expr} ILIKE ${q("%" + v)}`;
+				case "blank": return `(${expr} IS NULL OR ${expr} = '')`;
+				case "notBlank": return `(${expr} IS NOT NULL AND ${expr} <> '')`;
+				default: return null;
+			}
+		};
+		const numCond = (expr, c) => {
+			const n = Number(c && c.filter), n2 = Number(c && c.filterTo);
+			switch (c && c.type) {
+				case "equals": return isNaN(n) ? null : `${expr} = ${n}`;
+				case "notEqual": return isNaN(n) ? null : `${expr} <> ${n}`;
+				case "lessThan": return isNaN(n) ? null : `${expr} < ${n}`;
+				case "lessThanOrEqual": return isNaN(n) ? null : `${expr} <= ${n}`;
+				case "greaterThan": return isNaN(n) ? null : `${expr} > ${n}`;
+				case "greaterThanOrEqual": return isNaN(n) ? null : `${expr} >= ${n}`;
+				case "inRange": return (isNaN(n) || isNaN(n2)) ? null : `${expr} BETWEEN ${n} AND ${n2}`;
+				case "blank": return `${expr} IS NULL`;
+				case "notBlank": return `${expr} IS NOT NULL`;
+				default: return null;
+			}
+		};
+		const oneCond = (expr, c) => {
+			if (!c) return null;
+			if (c.filterType === "number") return numCond(expr, c);
+			if (c.filterType === "set") {
+				const vals = Array.isArray(c.values) ? c.values : [];
+				const nonNull = vals.filter(v => v !== null && v !== undefined);
+				const inList = nonNull.map(v => q(String(v))).join(",");
+				const hasNull = vals.length !== nonNull.length;
+				if (inList && hasNull) return `(${expr} IN (${inList}) OR ${expr} IS NULL)`;
+				if (inList) return `${expr} IN (${inList})`;
+				return "1=0"; // nothing selected => match nothing
+			}
+			return textCond(expr, c); // default: text filter
+		};
+		const buildCond = (expr, f) => {
+			let conds = null, op = "AND";
+			if (Array.isArray(f.conditions) && f.conditions.length) {
+				conds = f.conditions; op = f.operator === "OR" ? "OR" : "AND";
+			} else if (f.condition1 || f.condition2) {
+				conds = [f.condition1, f.condition2].filter(Boolean); op = f.operator === "OR" ? "OR" : "AND";
+			}
+			if (conds) {
+				const built = conds.map(c => oneCond(expr, c)).filter(Boolean);
+				return built.length ? "(" + built.join(") " + op + " (") + ")" : null;
+			}
+			return oneCond(expr, f);
+		};
+		Object.keys(gridModel || {}).forEach(field => {
+			const expr = rawExpr(field);
+			if (!expr) return;
+			const clause = buildCond(expr, gridModel[field]);
+			if (clause) parts.push("AND " + clause);
+		});
+
 		return parts.join(" ");
 	},
 
@@ -287,6 +381,10 @@ export default {
 		const end = Math.max(start + 1, (m && Number(m.pendingEnd)) || (start + 100));
 		await storeValue("reportsPageStart", start);
 		await storeValue("reportsPageEnd", end);
+		// Persist the grid's column sort/filter state so orderBy() and
+		// filterClauses() pick it up when the queries below re-evaluate.
+		await storeValue("reportsSortModel", (m && m.pendingSort) || "[]");
+		await storeValue("reportsFilterModel", (m && m.pendingFilter) || "{}");
 		await Promise.all([runReport.run(), runReportCount.run()]);
 		// Signal "fresh data ready" AFTER the queries resolve. The grid delivers rows
 		// only when this changes, so the premature model update from updateModel()
@@ -317,6 +415,10 @@ export default {
 	refreshGrid: async () => {
 		await storeValue("reportsPageStart", 0);
 		await storeValue("reportsPageEnd", 100);
+		// Clear any grid column sort/filter so a fresh Run starts clean; the
+		// rebuilt grid re-sends its (empty) state on the next page fetch anyway.
+		await storeValue("reportsSortModel", "[]");
+		await storeValue("reportsFilterModel", "{}");
 		await storeValue("reportsRefreshKey", (Number(appsmith.store.reportsRefreshKey) || 0) + 1);
 	},
 
