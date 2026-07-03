@@ -543,8 +543,10 @@ export default {
 		const body = rows.map(r => "<tr>" + fields.map(f => `<td>${esc(r[f])}</td>`).join("") + "</tr>").join("");
 		const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body><table>${header}${body}</table></body></html>`;
 		const filename = `${ReportSpecs.filenameStem()}.xls`;
-		const mime = "application/vnd.ms-excel";
-		download(`data:${mime};charset=utf-8,${encodeURIComponent(html)}`, filename, mime);
+		// Hand download() the raw string + MIME so it builds a Blob (as the CSV path
+		// does). A data: URI can't carry a multi-MB export — the browser renders it
+		// as a page instead of downloading, which shows the raw HTML.
+		download(html, filename, "application/vnd.ms-excel");
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
