@@ -29,7 +29,7 @@
     ],
     "name": "getDistinctValues",
     "pageId": "Customer-Report",
-    "runBehaviour": "MANUAL",
+    "runBehaviour": "AUTOMATIC",
     "userSetOnLoad": false
   }
 }
