@@ -438,6 +438,17 @@ export default {
 		return (i >= 0 ? o.sql.slice(0, i) : o.sql).trim();
 	},
 
+	// WHERE for the distinct-values query. Deliberately scoped to the CUSTOMER
+	// ONLY — not the panel or grid filters — so a set filter always lists every
+	// value that exists for the column (native AG Grid behavior). Scoping it to
+	// the active filters would collapse the checkbox list (e.g. to a single
+	// utility type) and stop users picking anything outside the current view.
+	distinctWhere: () => {
+		const cidSql = ReportSpecs.customerIdSql();
+		if (cidSql === "0") return "WHERE 1=0"; // no customer => no values
+		return `WHERE amf.customer_id = ${cidSql}`;
+	},
+
 	// onFetchDistinct handler: the grid asks for a column's checkbox values.
 	// Persist the requested field, run the distinct query, then bump the ts the
 	// grid watches so it can hand the values to the pending set filter.

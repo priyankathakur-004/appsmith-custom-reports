@@ -5,7 +5,7 @@
   "pluginType": "DB",
   "unpublishedAction": {
     "actionConfiguration": {
-      "body": "SELECT DISTINCT {{ ReportSpecs.distinctExpr() }} AS value\nFROM {{ ReportSpecs.fromClause }}\n{{ ReportSpecs.filterClauses(false) }}\n  AND {{ ReportSpecs.distinctExpr() }} IS NOT NULL\nORDER BY 1\nLIMIT 50000;\n",
+      "body": "SELECT DISTINCT {{ ReportSpecs.distinctExpr() }} AS value\nFROM {{ ReportSpecs.fromClause }}\n{{ ReportSpecs.distinctWhere() }}\n  AND {{ ReportSpecs.distinctExpr() }} IS NOT NULL\nORDER BY 1\nLIMIT 50000;\n",
       "encodeParamsToggle": true,
       "paginationType": "NONE",
       "pluginSpecifiedTemplates": [
