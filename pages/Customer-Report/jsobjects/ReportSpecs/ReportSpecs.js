@@ -155,9 +155,21 @@ export default {
 	},
 
 	// ----- Helpers -----
+	// The customer dropdown's value is the fdg_code (matches the Customer page).
+	// The SQL layer filters on the numeric customer_id, so resolve code -> id via
+	// getCustomers.data. Every customer-scoped query routes through this, so it's
+	// the single source of truth for "which customer are we".
 	customerId: () => {
 		const v = CustomerSelect && CustomerSelect.selectedOptionValue;
 		if (v == null || v === "") return null;
+		const rows = (typeof getCustomers !== "undefined" && getCustomers.data) || [];
+		const code = String(v).toLowerCase().trim();
+		const m = rows.find(r => String(r.fdg_code || "").toLowerCase().trim() === code);
+		if (m && m.id != null) {
+			const n = parseInt(m.id, 10);
+			return isNaN(n) ? null : n;
+		}
+		// Backward-compat: accept a raw numeric id if one is still passed through.
 		const n = parseInt(v, 10);
 		return isNaN(n) ? null : n;
 	},
