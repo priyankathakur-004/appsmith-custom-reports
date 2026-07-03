@@ -507,8 +507,33 @@ export default {
 	},
 
 	exportLabel: (field) => {
+		// Honor the user's browser-local column renames, then the catalog label.
+		const ov = (appsmith.store.reportsFieldLabels || {})[field];
+		if (ov) return ov;
 		const o = ReportSpecs.visibleFieldOptions.find(x => x.value === field);
 		return o ? o.label : field;
+	},
+
+	// ----- Column header renames (browser-local; no DB write) -----
+	// Catalog (default) header labels, keyed by field — passed to the grid so it
+	// shows friendly names and knows the baseline to reset a rename back to.
+	fieldCatalog: () => {
+		const m = {};
+		ReportSpecs.visibleFieldOptions.forEach(o => { m[o.value] = o.label; });
+		return m;
+	},
+
+	// onRenameField handler: the grid sends the field + new label. Persist to the
+	// browser (localStorage via storeValue) so renames survive reloads. An empty
+	// label removes the override (reset to the catalog name). No DB access needed.
+	saveFieldLabel: async () => {
+		const g = (typeof GridWidget !== "undefined") ? GridWidget.model : null;
+		const field = g && g.renameField;
+		if (!field) return;
+		const label = (g.renameLabel == null) ? "" : String(g.renameLabel).trim();
+		const map = Object.assign({}, appsmith.store.reportsFieldLabels || {});
+		if (label) map[field] = label; else delete map[field];
+		await storeValue("reportsFieldLabels", map, true);
 	},
 
 	exportCsv: async () => {
