@@ -3,4 +3,4 @@ FROM {{ ReportSpecs.fromClause }}
 {{ ReportSpecs.filterClauses(false) }}
   AND {{ ReportSpecs.distinctExpr() }} IS NOT NULL
 ORDER BY 1
-LIMIT 5000;
+LIMIT 50000;
