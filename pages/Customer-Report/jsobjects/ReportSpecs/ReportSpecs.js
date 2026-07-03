@@ -477,46 +477,74 @@ export default {
 		return `${customer}-cost-analysis-trendline-${stamp}`;
 	},
 
-	exportCsv: () => {
-		const rows = runReport.data || [];
+	// Export fields honor the user's FieldsSelect picks (column order + which
+	// columns), falling back to whatever the export query returned.
+	exportFields: (rows) => {
+		const picked = (FieldsSelect && FieldsSelect.selectedOptionValues) || [];
+		if (Array.isArray(picked) && picked.length > 0) return picked;
+		return (rows && rows[0]) ? Object.keys(rows[0]) : [];
+	},
+
+	exportLabel: (field) => {
+		const o = ReportSpecs.visibleFieldOptions.find(x => x.value === field);
+		return o ? o.label : field;
+	},
+
+	exportCsv: async () => {
+		if (ReportSpecs.customerIdSql() === "0") {
+			showAlert("Select a customer before exporting", "warning");
+			return;
+		}
+		// exportRows has no LIMIT/OFFSET, so this pulls the full filtered/sorted
+		// result set — not just the page currently visible in the grid.
+		await exportRows.run();
+		const rows = exportRows.data || [];
 		if (!rows.length) {
 			showAlert("Nothing to export — run a query first", "warning");
 			return;
 		}
-		const fields = Object.keys(rows[0]);
+		const fields = ReportSpecs.exportFields(rows);
 		const escape = v => {
 			if (v === null || v === undefined) return "";
 			if (typeof v === "object") v = JSON.stringify(v);
 			const s = String(v);
 			return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 		};
-		const csv = [fields.join(","), ...rows.map(r => fields.map(f => escape(r[f])).join(","))].join("\n");
+		const csv = [
+			fields.map(f => escape(ReportSpecs.exportLabel(f))).join(","),
+			...rows.map(r => fields.map(f => escape(r[f])).join(","))
+		].join("\n");
 		const filename = `${ReportSpecs.filenameStem()}.csv`;
 		download(csv, filename, "text/csv");
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
-	exportXlsx: () => {
-		const rows = runReport.data || [];
+	exportXlsx: async () => {
+		if (ReportSpecs.customerIdSql() === "0") {
+			showAlert("Select a customer before exporting", "warning");
+			return;
+		}
+		await exportRows.run();
+		const rows = exportRows.data || [];
 		if (!rows.length) {
 			showAlert("Nothing to export — run a query first", "warning");
 			return;
 		}
-		const fields = Object.keys(rows[0]);
-		const flat = rows.map(r => {
-			const o = {};
-			for (const f of fields) {
-				const v = r[f];
-				o[f] = (v && typeof v === "object") ? JSON.stringify(v) : v;
-			}
-			return o;
-		});
-		const ws = XLSX.utils.json_to_sheet(flat, { header: fields });
-		const wb = XLSX.utils.book_new();
-		XLSX.utils.book_append_sheet(wb, ws, "Trendline");
-		const filename = `${ReportSpecs.filenameStem()}.xlsx`;
-		const b64 = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
-		download({ data: b64, name: filename, type: "xlsx" }, filename);
+		const fields = ReportSpecs.exportFields(rows);
+		// Library-free Excel export: build an HTML table that Excel opens natively
+		// as .xls. XLSX.utils is unreachable through Appsmith's JS sandbox, so we
+		// avoid it (same approach as the Customer page).
+		const esc = v => {
+			if (v === null || v === undefined) return "";
+			if (typeof v === "object") v = JSON.stringify(v);
+			return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		};
+		const header = "<tr>" + fields.map(f => `<th>${esc(ReportSpecs.exportLabel(f))}</th>`).join("") + "</tr>";
+		const body = rows.map(r => "<tr>" + fields.map(f => `<td>${esc(r[f])}</td>`).join("") + "</tr>").join("");
+		const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body><table>${header}${body}</table></body></html>`;
+		const filename = `${ReportSpecs.filenameStem()}.xls`;
+		const mime = "application/vnd.ms-excel";
+		download(`data:${mime};charset=utf-8,${encodeURIComponent(html)}`, filename, mime);
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
