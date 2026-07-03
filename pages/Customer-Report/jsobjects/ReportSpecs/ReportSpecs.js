@@ -531,22 +531,34 @@ export default {
 			return;
 		}
 		const fields = ReportSpecs.exportFields(rows);
-		// Library-free Excel export: build an HTML table that Excel opens natively
-		// as .xls. XLSX.utils is unreachable through Appsmith's JS sandbox, so we
-		// avoid it (same approach as the Customer page).
-		const esc = v => {
-			if (v === null || v === undefined) return "";
+		// Library-free Excel export as SpreadsheetML 2003 (XLSX.utils is unreachable
+		// in Appsmith's JS sandbox). The <?mso-application?> instruction makes Excel
+		// open it as a real spreadsheet — more reliably recognized than an HTML
+		// table, which some openers (Numbers/preview) show as raw markup. Numbers
+		// vs text are typed explicitly.
+		const esc = v => String(v)
+			.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+		const cell = v => {
+			if (v === null || v === undefined || v === "") return '<Cell><Data ss:Type="String"></Data></Cell>';
+			if (typeof v === "number" && isFinite(v)) return `<Cell><Data ss:Type="Number">${v}</Data></Cell>`;
 			if (typeof v === "object") v = JSON.stringify(v);
-			return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+			return `<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`;
 		};
-		const header = "<tr>" + fields.map(f => `<th>${esc(ReportSpecs.exportLabel(f))}</th>`).join("") + "</tr>";
-		const body = rows.map(r => "<tr>" + fields.map(f => `<td>${esc(r[f])}</td>`).join("") + "</tr>").join("");
-		const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body><table>${header}${body}</table></body></html>`;
+		const headRow = "<Row>" + fields.map(f => `<Cell><Data ss:Type="String">${esc(ReportSpecs.exportLabel(f))}</Data></Cell>`).join("") + "</Row>";
+		const bodyRows = rows.map(r => "<Row>" + fields.map(f => cell(r[f])).join("") + "</Row>").join("");
+		const xml =
+			'<?xml version="1.0" encoding="UTF-8"?>\n' +
+			'<?mso-application progid="Excel.Sheet"?>\n' +
+			'<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"' +
+			' xmlns:o="urn:schemas-microsoft-com:office:office"' +
+			' xmlns:x="urn:schemas-microsoft-com:office:excel"' +
+			' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"' +
+			' xmlns:html="http://www.w3.org/TR/REC-html40">' +
+			'<Worksheet ss:Name="Trendline"><Table>' + headRow + bodyRows + '</Table></Worksheet></Workbook>';
 		const filename = `${ReportSpecs.filenameStem()}.xls`;
-		// Hand download() the raw string + MIME so it builds a Blob (as the CSV path
-		// does). A data: URI can't carry a multi-MB export — the browser renders it
-		// as a page instead of downloading, which shows the raw HTML.
-		download(html, filename, "application/vnd.ms-excel");
+		// Pass the raw string + MIME so download() builds a Blob (like the CSV path);
+		// a data: URI can't carry a multi-MB export.
+		download(xml, filename, "application/vnd.ms-excel");
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
