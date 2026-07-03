@@ -531,34 +531,23 @@ export default {
 			return;
 		}
 		const fields = ReportSpecs.exportFields(rows);
-		// Library-free Excel export as SpreadsheetML 2003 (XLSX.utils is unreachable
-		// in Appsmith's JS sandbox). The <?mso-application?> instruction makes Excel
-		// open it as a real spreadsheet — more reliably recognized than an HTML
-		// table, which some openers (Numbers/preview) show as raw markup. Numbers
-		// vs text are typed explicitly.
-		const esc = v => String(v)
-			.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-		const cell = v => {
-			if (v === null || v === undefined || v === "") return '<Cell><Data ss:Type="String"></Data></Cell>';
-			if (typeof v === "number" && isFinite(v)) return `<Cell><Data ss:Type="Number">${v}</Data></Cell>`;
+		// A true binary .xlsx needs a working library, and the installed SheetJS's
+		// XLSX.utils is blocked by Appsmith's JS sandbox. The library-free .xls
+		// tricks (HTML table / SpreadsheetML) open as raw markup in Numbers/Sheets.
+		// A UTF-8-BOM CSV opens natively as a spreadsheet in Excel, Numbers and
+		// Sheets — the BOM + CRLF is exactly what Excel expects for clean columns.
+		const escape = v => {
+			if (v === null || v === undefined) return "";
 			if (typeof v === "object") v = JSON.stringify(v);
-			return `<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`;
+			const s = String(v);
+			return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 		};
-		const headRow = "<Row>" + fields.map(f => `<Cell><Data ss:Type="String">${esc(ReportSpecs.exportLabel(f))}</Data></Cell>`).join("") + "</Row>";
-		const bodyRows = rows.map(r => "<Row>" + fields.map(f => cell(r[f])).join("") + "</Row>").join("");
-		const xml =
-			'<?xml version="1.0" encoding="UTF-8"?>\n' +
-			'<?mso-application progid="Excel.Sheet"?>\n' +
-			'<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"' +
-			' xmlns:o="urn:schemas-microsoft-com:office:office"' +
-			' xmlns:x="urn:schemas-microsoft-com:office:excel"' +
-			' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"' +
-			' xmlns:html="http://www.w3.org/TR/REC-html40">' +
-			'<Worksheet ss:Name="Trendline"><Table>' + headRow + bodyRows + '</Table></Worksheet></Workbook>';
-		const filename = `${ReportSpecs.filenameStem()}.xls`;
-		// Pass the raw string + MIME so download() builds a Blob (like the CSV path);
-		// a data: URI can't carry a multi-MB export.
-		download(xml, filename, "application/vnd.ms-excel");
+		const csv = [
+			fields.map(f => escape(ReportSpecs.exportLabel(f))).join(","),
+			...rows.map(r => fields.map(f => escape(r[f])).join(","))
+		].join("\r\n");
+		const filename = `${ReportSpecs.filenameStem()}.csv`;
+		download("\ufeff" + csv, filename, "text/csv;charset=utf-8");
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
