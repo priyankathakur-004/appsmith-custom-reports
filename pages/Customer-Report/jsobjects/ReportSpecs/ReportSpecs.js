@@ -462,7 +462,28 @@ export default {
 		return Object.keys(rows[0]).map(k => ({ label: k, value: k }));
 	},
 
+	// Embed mode passes the customer as ?customer=<fdg_code>. Return a clear message
+	// when that link is wrong — a numeric ID, or an unknown code — instead of
+	// silently showing an empty report. Returns "" when the param is valid or
+	// absent. Reads getCustomers.data, which is fine here: this is only consumed by
+	// widget bindings (StatusText), not a query body, so no reactive-dependency
+	// concern.
+	customerError: () => {
+		const raw = (appsmith.URL && appsmith.URL.queryParams && appsmith.URL.queryParams.customer);
+		const code = (raw == null ? "" : String(raw)).trim();
+		if (code === "") return ""; // no ?customer= → standalone / dropdown mode
+		const rows = (typeof getCustomers !== "undefined" && getCustomers.data) || [];
+		if (!Array.isArray(rows) || rows.length === 0) return ""; // list still loading — don't flash an error
+		const lc = code.toLowerCase();
+		if (rows.find(r => String(r.fdg_code || "").toLowerCase().trim() === lc)) return ""; // valid code
+		const byId = rows.find(r => String(r.id) === code);
+		if (byId) return `This link uses a customer ID (${code}). Use the customer code instead — ?customer=${byId.fdg_code}`;
+		return `Unknown customer code "${code}" — no data for this link. Check the ?customer= value in the URL.`;
+	},
+
 	status: () => {
+		const err = ReportSpecs.customerError();
+		if (err) return "⚠️ " + err;
 		if (runReport.isLoading) return "Loading...";
 		const total = ReportSpecs.totalRows();
 		if (total == null) return "Pick a customer and click Run";

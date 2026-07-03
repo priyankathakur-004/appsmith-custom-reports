@@ -8,6 +8,9 @@
     },
     {
       "key": "fontFamily"
+    },
+    {
+      "key": "textColor"
     }
   ],
   "dynamicHeight": "AUTO_HEIGHT",
@@ -39,7 +42,7 @@
   "shouldTruncate": false,
   "text": "{{ ReportSpecs.status() }}",
   "textAlign": "LEFT",
-  "textColor": "#6B7280",
+  "textColor": "{{ ReportSpecs.customerError() ? '#B91C1C' : '#6B7280' }}",
   "topRow": 50,
   "type": "TEXT_WIDGET",
   "version": 1,
