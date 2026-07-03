@@ -2,7 +2,7 @@
   "accentColor": "#0F2A47",
   "animateLoading": true,
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
-  "bottomRow": 4,
+  "bottomRow": 5,
   "boxShadow": "none",
   "defaultOptionValue": "{{ (() => { const raw = (appsmith.URL && appsmith.URL.queryParams && appsmith.URL.queryParams.customer) || ''; const code = String(raw).toLowerCase().trim(); const rows = (getCustomers && getCustomers.data) || []; if (code) { const m = rows.find(r => String(r.fdg_code || '').toLowerCase().trim() === code); return m ? m.fdg_code : ''; } return ''; })() }}",
   "dynamicBindingPathList": [
@@ -10,10 +10,10 @@
       "key": "sourceData"
     },
     {
-      "key": "defaultOptionValue"
+      "key": "borderRadius"
     },
     {
-      "key": "borderRadius"
+      "key": "defaultOptionValue"
     }
   ],
   "dynamicHeight": "FIXED",
@@ -34,9 +34,9 @@
   "isVisible": false,
   "key": "cr_custsel",
   "labelAlignment": "left",
-  "labelPosition": "Top",
+  "labelPosition": "Left",
   "labelStyle": "",
-  "labelText": "",
+  "labelText": "Customers",
   "labelTextColor": "#0F2A47",
   "labelTextSize": "0.875rem",
   "labelWidth": 5,
@@ -60,7 +60,7 @@
   "placeholderText": "Select customer",
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 30,
+  "rightColumn": 16,
   "serverSideFiltering": false,
   "sourceData": "{{ getCustomers.data }}",
   "topRow": 0,
