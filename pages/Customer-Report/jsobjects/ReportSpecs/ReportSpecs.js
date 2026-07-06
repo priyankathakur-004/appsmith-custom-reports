@@ -224,16 +224,25 @@ export default {
 		return names.map(n => ReportSpecs._quote(n)).join(",");
 	},
 
-	// includeGrid: when false, only the customer + date + panel-widget filters are
-	// emitted (used by getDistinctValues so a set filter's checkbox list reflects
-	// the customer/panel scope, not the grid's own column selections).
-	filterClauses: (includeGrid = true) => {
+	// includeGrid: include the AG Grid column filters (default true).
+	// excludeField: skip any filter that targets this column alias — used by the
+	// set-filter value list (getDistinctValues) so it reflects every OTHER active
+	// filter but NOT the column's own selection (otherwise the checkbox list would
+	// collapse to just what you already picked). Field→panel-widget mapping is in
+	// the `skip(...)` guards below.
+	filterClauses: (includeGrid = true, excludeField = null) => {
 		const parts = ["WHERE 1=1"];
 		const cidSql = ReportSpecs.customerIdSql();
 		// Fail closed: with no customer resolved (missing/unknown ?customer= fdg_code),
 		// match no rows instead of returning every tenant's data.
 		if (cidSql === "0") return "WHERE 1=0";
 		parts.push(`AND amf.customer_id = ${cidSql}`);
+		// True when the column we're listing values for is the one this filter
+		// targets, so we skip it (don't let a column filter constrain its own list).
+		const skip = (aliases) => {
+			if (!excludeField) return false;
+			return Array.isArray(aliases) ? aliases.indexOf(excludeField) >= 0 : aliases === excludeField;
+		};
 
 		// Date range (always applied if provided). amf.time_period is the canonical
 		// month bucket — start of month for monthly feed.
@@ -248,26 +257,26 @@ export default {
 
 		// State / Province (+ Not In)
 		const states = (typeof StateProvinceSelect !== "undefined" && StateProvinceSelect.selectedOptionValues) || [];
-		if (states.length > 0) {
+		if (states.length > 0 && !skip("locationState")) {
 			const notIn = (typeof StateNotIn !== "undefined") && StateNotIn.isSwitchedOn;
 			parts.push(ReportSpecs._inList("l.state", states, notIn));
 		}
 
 		// Country
 		const countries = (typeof CountrySelect !== "undefined" && CountrySelect.selectedOptionValues) || [];
-		if (countries.length > 0) {
+		if (countries.length > 0 && !skip("locationCountry")) {
 			parts.push(ReportSpecs._inList("l.country", countries));
 		}
 
 		// Location status — lives on location_detail (lt) per the schema.
 		const statuses = (typeof LocationStatusSelect !== "undefined" && LocationStatusSelect.selectedOptionValues) || [];
-		if (statuses.length > 0) {
+		if (statuses.length > 0 && !skip("locationStatus")) {
 			parts.push(ReportSpecs._inList("lt.location_status", statuses));
 		}
 
 		// Vendor — selecting by vendor code (the stable join key).
 		const vendors = (typeof VendorSelect !== "undefined" && VendorSelect.selectedOptionValues) || [];
-		if (vendors.length > 0) {
+		if (vendors.length > 0 && !skip(["vendor", "vendorCode"])) {
 			parts.push(ReportSpecs._inList("amf.vendor_code", vendors));
 		}
 		// Vendor Territory — not available in UBM. UBM stores vendor *location*
@@ -276,14 +285,14 @@ export default {
 
 		// Service / Utility type (+ Not In)
 		const services = (typeof ServiceTypesSelect !== "undefined" && ServiceTypesSelect.selectedOptionValues) || [];
-		if (services.length > 0) {
+		if (services.length > 0 && !skip("utilityType")) {
 			const notIn = (typeof ServiceNotIn !== "undefined") && ServiceNotIn.isSwitchedOn;
 			parts.push(ReportSpecs._inList("amf.utility_type", services, notIn));
 		}
 
 		// Location name / number — free text, partial match on name/address or id.
 		const loc = (typeof LocationName !== "undefined" && LocationName.text) || "";
-		if (loc.trim() !== "") {
+		if (loc.trim() !== "" && !skip(["location", "locationAddress", "locationId"])) {
 			const safe = String(loc).trim().replace(/'/g, "''");
 			parts.push(`AND (l.name ILIKE '%${safe}%' OR l.address ILIKE '%${safe}%' OR CAST(l.id AS TEXT) = '${safe}')`);
 		}
@@ -399,6 +408,7 @@ export default {
 			return oneCond(expr, f);
 		};
 		Object.keys(gridModel || {}).forEach(field => {
+			if (field === excludeField) return; // don't constrain a column's list by its own filter
 			const expr = rawExpr(field);
 			if (!expr) return;
 			const clause = buildCond(expr, gridModel[field]);
@@ -438,15 +448,12 @@ export default {
 		return (i >= 0 ? o.sql.slice(0, i) : o.sql).trim();
 	},
 
-	// WHERE for the distinct-values query. Deliberately scoped to the CUSTOMER
-	// ONLY — not the panel or grid filters — so a set filter always lists every
-	// value that exists for the column (native AG Grid behavior). Scoping it to
-	// the active filters would collapse the checkbox list (e.g. to a single
-	// utility type) and stop users picking anything outside the current view.
+	// WHERE for the set-filter value list. Reflects every OTHER active filter
+	// (date, panel, and other grid columns) but not the column's own filter — so
+	// the checkbox list shows only values present in the currently filtered data,
+	// while still letting you (re)select any value that remains available.
 	distinctWhere: () => {
-		const cidSql = ReportSpecs.customerIdSql();
-		if (cidSql === "0") return "WHERE 1=0"; // no customer => no values
-		return `WHERE amf.customer_id = ${cidSql}`;
+		return ReportSpecs.filterClauses(true, appsmith.store.reportsDistinctField);
 	},
 
 	// onFetchDistinct handler: the grid asks for a column's checkbox values.
