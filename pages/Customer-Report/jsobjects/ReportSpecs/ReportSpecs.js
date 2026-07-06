@@ -456,6 +456,20 @@ export default {
 		return ReportSpecs.filterClauses(true, appsmith.store.reportsDistinctField);
 	},
 
+	// Minimal FROM for the set-filter value query (perf): start from the feed and
+	// add only the joins the selected column and the active (non-self) filters
+	// actually reference — so a distinct on an amf-only column (utility type, bill
+	// type, …) skips the location/vendor joins entirely. location_detail (lt)
+	// joins on amf.location_id directly so it never drags in the locations table.
+	distinctFrom: () => {
+		const sql = ReportSpecs.distinctExpr() + " " + ReportSpecs.distinctWhere();
+		const parts = ["bill_management_v2.analytics_monthly_feed amf"];
+		if (/\bl\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id");
+		if (/\blt\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = amf.location_id");
+		if (/\bcvn\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.customers_providers_pretty_name cvn ON cvn.code = amf.vendor_code AND cvn.customer_id = amf.customer_id");
+		return parts.join("\n");
+	},
+
 	// onFetchDistinct handler: the grid asks for a column's checkbox values.
 	// Persist the requested field, run the distinct query, then bump the ts the
 	// grid watches so it can hand the values to the pending set filter.

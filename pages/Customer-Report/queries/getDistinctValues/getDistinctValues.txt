@@ -1,5 +1,5 @@
 SELECT DISTINCT {{ ReportSpecs.distinctExpr() }} AS value
-FROM {{ ReportSpecs.fromClause }}
+FROM {{ ReportSpecs.distinctFrom() }}
 {{ ReportSpecs.distinctWhere() }}
   AND {{ ReportSpecs.distinctExpr() }} IS NOT NULL
 ORDER BY 1
