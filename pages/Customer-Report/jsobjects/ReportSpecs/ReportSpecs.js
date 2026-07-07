@@ -9,81 +9,86 @@ export default {
 	// =====================================================================
 
 	// ----- Visible fields catalog (what the user picks from FieldsSelect) -----
-	// Each entry: { value (alias used in column picker), label, sql (SELECT expr) }.
-	// SELECT clause is built by selectClause() from the user's pick.
+	// Each entry: { value (alias used in column picker), label, description, sql }.
+	// - value:       column-picker alias, also the SELECT output alias.
+	// - label:       friendly header (grid + CSV/XLSX export read this — keep clean).
+	// - description: one-line, user-facing "what this field returns", surfaced in
+	//                the FieldsSelect helper text via selectedFieldsHelp(). NOT the
+	//                CSV's auto-generated boilerplate — written for end users.
+	// - sql:         the SELECT expression, built into the query by selectClause().
 	visibleFieldOptions: [
 		// --- Time / period ---
-		{ value: "month", label: "Month", sql: "TO_CHAR(amf.time_period, 'YYYY-MM') AS \"month\"" },
-		{ value: "statementDate", label: "Statement Date", sql: "TO_CHAR(amf.statement_date, 'YYYY-MM-DD') AS \"statementDate\"" },
-		{ value: "startDate", label: "Service Start", sql: "TO_CHAR(amf.start_date, 'YYYY-MM-DD') AS \"startDate\"" },
-		{ value: "endDate", label: "Service End", sql: "TO_CHAR(amf.end_date, 'YYYY-MM-DD') AS \"endDate\"" },
-		{ value: "daysOfService", label: "Days of Service", sql: "amf.days_of_service AS \"daysOfService\"" },
+		{ value: "month", label: "Month", description: "Billing month bucket (YYYY-MM)", sql: "TO_CHAR(amf.time_period, 'YYYY-MM') AS \"month\"" },
+		{ value: "statementDate", label: "Statement Date", description: "Bill statement / invoice date", sql: "TO_CHAR(amf.statement_date, 'YYYY-MM-DD') AS \"statementDate\"" },
+		{ value: "startDate", label: "Service Start", description: "Start of the service period", sql: "TO_CHAR(amf.start_date, 'YYYY-MM-DD') AS \"startDate\"" },
+		{ value: "endDate", label: "Service End", description: "End of the service period", sql: "TO_CHAR(amf.end_date, 'YYYY-MM-DD') AS \"endDate\"" },
+		{ value: "daysOfService", label: "Days of Service", description: "Number of days in the service period", sql: "amf.days_of_service AS \"daysOfService\"" },
 
 		// --- Location ---
-		{ value: "location", label: "Location", sql: "l.name AS \"location\"" },
-		{ value: "locationId", label: "Location ID", sql: "l.id AS \"locationId\"" },
-		{ value: "locationAddress", label: "Location Address", sql: "l.address AS \"locationAddress\"" },
-		{ value: "locationCity", label: "City", sql: "l.city AS \"locationCity\"" },
-		{ value: "locationState", label: "State/Province", sql: "l.state AS \"locationState\"" },
-		{ value: "locationCountry", label: "Country", sql: "l.country AS \"locationCountry\"" },
-		{ value: "locationZip", label: "Location Zip", sql: "l.postcode AS \"locationZip\"" },
-		{ value: "locationStatus", label: "Location Status", sql: "lt.location_status AS \"locationStatus\"" },
-		{ value: "buildingType", label: "Building Type", sql: "l.building_type AS \"buildingType\"" },
-		{ value: "squareFeet", label: "Square Feet", sql: "l.square_feet AS \"squareFeet\"" },
-		{ value: "locationNumber", label: "Location Number", sql: "lt.location_number AS \"locationNumber\"" },
+		{ value: "location", label: "Location", description: "Location name", sql: "l.name AS \"location\"" },
+		{ value: "locationId", label: "Location ID", description: "Internal location identifier", sql: "l.id AS \"locationId\"" },
+		{ value: "locationAddress", label: "Location Address", description: "Street address of the location", sql: "l.address AS \"locationAddress\"" },
+		{ value: "locationCity", label: "City", description: "Location city", sql: "l.city AS \"locationCity\"" },
+		{ value: "locationState", label: "State/Province", description: "Location state or province", sql: "l.state AS \"locationState\"" },
+		{ value: "locationCountry", label: "Country", description: "Location country", sql: "l.country AS \"locationCountry\"" },
+		{ value: "locationZip", label: "Location Zip", description: "Location postal / ZIP code", sql: "l.postcode AS \"locationZip\"" },
+		{ value: "locationStatus", label: "Location Status", description: "Location status (e.g. Operational)", sql: "lt.location_status AS \"locationStatus\"" },
+		{ value: "buildingType", label: "Building Type", description: "Building type / category", sql: "l.building_type AS \"buildingType\"" },
+		{ value: "squareFeet", label: "Square Feet", description: "Location floor area (sq ft)", sql: "l.square_feet AS \"squareFeet\"" },
+		{ value: "locationNumber", label: "Location Number", description: "Location / site reference number", sql: "lt.location_number AS \"locationNumber\"" },
 
 		// --- Hierarchy: removed. UBM has no hierarchy/grouping attributes
 		// (location_division / top / second / third group) — confirmed by
 		// UBM team 2026-06-17. Do not re-add without a real source column.
 
 		// --- Vendor / bill identity ---
-		{ value: "vendor", label: "Vendor", sql: "COALESCE(cvn.pretty_name, amf.vendor_code) AS \"vendor\"" },
-		{ value: "vendorCode", label: "Vendor Code", sql: "amf.vendor_code AS \"vendorCode\"" },
-		{ value: "billType", label: "Bill Type", sql: "amf.bill_type AS \"billType\"" },
-		{ value: "utilityType", label: "Service / Utility Type", sql: "amf.utility_type AS \"utilityType\"" },
+		{ value: "vendor", label: "Vendor", description: "Vendor / utility provider name", sql: "COALESCE(cvn.pretty_name, amf.vendor_code) AS \"vendor\"" },
+		{ value: "vendorCode", label: "Vendor Code", description: "Vendor code (stable join key)", sql: "amf.vendor_code AS \"vendorCode\"" },
+		{ value: "billType", label: "Bill Type", description: "Bill type (e.g. Full Service, Distribution Only)", sql: "amf.bill_type AS \"billType\"" },
+		{ value: "utilityType", label: "Service / Utility Type", description: "Service / utility type (Electric, Water, …)", sql: "amf.utility_type AS \"utilityType\"" },
 
 		// --- Usage / consumption ---
-		{ value: "uom", label: "Unit of Measure", sql: "amf.total_consumption_uom AS \"uom\"" },
-		{ value: "totalConsumption", label: "Total Consumption", sql: "amf.total_consumption AS \"totalConsumption\"" },
-		{ value: "totalGenConsumption", label: "Generation Consumption", sql: "amf.total_gen_consumption AS \"totalGenConsumption\"" },
-		{ value: "demand", label: "Max Demand", sql: "amf.max_demand AS \"demand\"" },
-		{ value: "cogenConsumption", label: "Cogeneration Consumption", sql: "amf.total_cogen_consumption AS \"cogenConsumption\"" },
+		{ value: "uom", label: "Unit of Measure", description: "Unit of measure for consumption", sql: "amf.total_consumption_uom AS \"uom\"" },
+		{ value: "totalConsumption", label: "Total Consumption", description: "Total metered consumption", sql: "amf.total_consumption AS \"totalConsumption\"" },
+		{ value: "totalGenConsumption", label: "Generation Consumption", description: "On-site generation consumption", sql: "amf.total_gen_consumption AS \"totalGenConsumption\"" },
+		{ value: "demand", label: "Max Demand", description: "Maximum demand (kW)", sql: "amf.max_demand AS \"demand\"" },
+		{ value: "cogenConsumption", label: "Cogeneration Consumption", description: "Cogeneration consumption", sql: "amf.total_cogen_consumption AS \"cogenConsumption\"" },
 
 		// --- Consumption by time-of-use tier ---
-		{ value: "consumptionOnpeak", label: "Consumption (On-Peak)", sql: "amf.total_consumption_onpeak AS \"consumptionOnpeak\"" },
-		{ value: "consumptionMidpeak", label: "Consumption (Mid-Peak)", sql: "amf.total_consumption_midpeak AS \"consumptionMidpeak\"" },
-		{ value: "consumptionOffpeak", label: "Consumption (Off-Peak)", sql: "amf.total_consumption_offpeak AS \"consumptionOffpeak\"" },
-		{ value: "consumptionShoulderpeak", label: "Consumption (Shoulder-Peak)", sql: "amf.total_consumption_shoulderpeak AS \"consumptionShoulderpeak\"" },
-		{ value: "consumptionSuperpeak", label: "Consumption (Super-Peak)", sql: "amf.total_consumption_superpeak AS \"consumptionSuperpeak\"" },
-		{ value: "consumptionSuperoffpeak", label: "Consumption (Super-Off-Peak)", sql: "amf.total_consumption_superoffpeak AS \"consumptionSuperoffpeak\"" },
+		{ value: "consumptionOnpeak", label: "Consumption (On-Peak)", description: "Consumption during on-peak hours", sql: "amf.total_consumption_onpeak AS \"consumptionOnpeak\"" },
+		{ value: "consumptionMidpeak", label: "Consumption (Mid-Peak)", description: "Consumption during mid-peak hours", sql: "amf.total_consumption_midpeak AS \"consumptionMidpeak\"" },
+		{ value: "consumptionOffpeak", label: "Consumption (Off-Peak)", description: "Consumption during off-peak hours", sql: "amf.total_consumption_offpeak AS \"consumptionOffpeak\"" },
+		{ value: "consumptionShoulderpeak", label: "Consumption (Shoulder-Peak)", description: "Consumption during shoulder-peak hours", sql: "amf.total_consumption_shoulderpeak AS \"consumptionShoulderpeak\"" },
+		{ value: "consumptionSuperpeak", label: "Consumption (Super-Peak)", description: "Consumption during super-peak hours", sql: "amf.total_consumption_superpeak AS \"consumptionSuperpeak\"" },
+		{ value: "consumptionSuperoffpeak", label: "Consumption (Super-Off-Peak)", description: "Consumption during super-off-peak hours", sql: "amf.total_consumption_superoffpeak AS \"consumptionSuperoffpeak\"" },
 
 		// --- Charges (granular) ---
-		{ value: "totalCharges", label: "Total Charges", sql: "amf.total_charges AS \"totalCharges\"" },
-		{ value: "totalChargesUsage", label: "Usage Charges", sql: "amf.total_charges_usage AS \"totalChargesUsage\"" },
-		{ value: "totalChargesConsumption", label: "Consumption Charges", sql: "amf.total_charges_consumption AS \"totalChargesConsumption\"" },
-		{ value: "totalChargesDemand", label: "Demand Charges", sql: "amf.total_charges_demand AS \"totalChargesDemand\"" },
-		{ value: "totalChargesTaxes", label: "Tax Charges", sql: "amf.total_charges_taxes AS \"totalChargesTaxes\"" },
-		{ value: "totalChargesCustomer", label: "Customer Charges", sql: "amf.total_charges_customer AS \"totalChargesCustomer\"" },
-		{ value: "totalChargesOther", label: "Other Charges", sql: "amf.total_charges_other AS \"totalChargesOther\"" },
-		{ value: "totalChargesGeneration", label: "Generation Charges", sql: "amf.total_charges_generation AS \"totalChargesGeneration\"" },
-		{ value: "totalChargesCommodity", label: "Commodity Charges", sql: "amf.total_charges_commodity AS \"totalChargesCommodity\"" },
-		{ value: "totalChargesBilledUse", label: "Billed Use Charges", sql: "amf.total_charges_billeduse AS \"totalChargesBilledUse\"" },
+		{ value: "totalCharges", label: "Total Charges", description: "Total charges on the bill", sql: "amf.total_charges AS \"totalCharges\"" },
+		{ value: "totalChargesUsage", label: "Usage Charges", description: "Charges for usage", sql: "amf.total_charges_usage AS \"totalChargesUsage\"" },
+		{ value: "totalChargesConsumption", label: "Consumption Charges", description: "Charges for consumption", sql: "amf.total_charges_consumption AS \"totalChargesConsumption\"" },
+		{ value: "totalChargesDemand", label: "Demand Charges", description: "Charges for demand", sql: "amf.total_charges_demand AS \"totalChargesDemand\"" },
+		{ value: "totalChargesTaxes", label: "Tax Charges", description: "Tax charges", sql: "amf.total_charges_taxes AS \"totalChargesTaxes\"" },
+		{ value: "totalChargesCustomer", label: "Customer Charges", description: "Fixed customer / account charges", sql: "amf.total_charges_customer AS \"totalChargesCustomer\"" },
+		{ value: "totalChargesOther", label: "Other Charges", description: "Other / miscellaneous charges", sql: "amf.total_charges_other AS \"totalChargesOther\"" },
+		{ value: "totalChargesGeneration", label: "Generation Charges", description: "Generation / supply charges", sql: "amf.total_charges_generation AS \"totalChargesGeneration\"" },
+		{ value: "totalChargesCommodity", label: "Commodity Charges", description: "Commodity charges", sql: "amf.total_charges_commodity AS \"totalChargesCommodity\"" },
+		{ value: "totalChargesBilledUse", label: "Billed Use Charges", description: "Billed-use charges (UBM carries this as a subcharge)", sql: "amf.total_charges_billeduse AS \"totalChargesBilledUse\"" },
 
 		// --- Consumption charges by time-of-use tier ---
-		{ value: "chargesConsumptionOnpeak", label: "Consumption Charges (On-Peak)", sql: "amf.total_charges_consumption_onpeak AS \"chargesConsumptionOnpeak\"" },
-		{ value: "chargesConsumptionMidpeak", label: "Consumption Charges (Mid-Peak)", sql: "amf.total_charges_consumption_midpeak AS \"chargesConsumptionMidpeak\"" },
-		{ value: "chargesConsumptionOffpeak", label: "Consumption Charges (Off-Peak)", sql: "amf.total_charges_consumption_offpeak AS \"chargesConsumptionOffpeak\"" },
-		{ value: "chargesConsumptionShoulderpeak", label: "Consumption Charges (Shoulder-Peak)", sql: "amf.total_charges_consumption_shoulderpeak AS \"chargesConsumptionShoulderpeak\"" },
-		{ value: "chargesConsumptionSuperpeak", label: "Consumption Charges (Super-Peak)", sql: "amf.total_charges_consumption_superpeak AS \"chargesConsumptionSuperpeak\"" },
+		{ value: "chargesConsumptionOnpeak", label: "Consumption Charges (On-Peak)", description: "Consumption charges, on-peak", sql: "amf.total_charges_consumption_onpeak AS \"chargesConsumptionOnpeak\"" },
+		{ value: "chargesConsumptionMidpeak", label: "Consumption Charges (Mid-Peak)", description: "Consumption charges, mid-peak", sql: "amf.total_charges_consumption_midpeak AS \"chargesConsumptionMidpeak\"" },
+		{ value: "chargesConsumptionOffpeak", label: "Consumption Charges (Off-Peak)", description: "Consumption charges, off-peak", sql: "amf.total_charges_consumption_offpeak AS \"chargesConsumptionOffpeak\"" },
+		{ value: "chargesConsumptionShoulderpeak", label: "Consumption Charges (Shoulder-Peak)", description: "Consumption charges, shoulder-peak", sql: "amf.total_charges_consumption_shoulderpeak AS \"chargesConsumptionShoulderpeak\"" },
+		{ value: "chargesConsumptionSuperpeak", label: "Consumption Charges (Super-Peak)", description: "Consumption charges, super-peak", sql: "amf.total_charges_consumption_superpeak AS \"chargesConsumptionSuperpeak\"" },
 
 		// --- Weather (raw degree-days only) ---
 		// UBM has no "normalization type" attribute; we expose raw HDD/CDD and
 		// any normalization is done client-side. (UBM team 2026-06-17.)
-		{ value: "totalHdd", label: "Heating Degree Days", sql: "amf.total_hdd_billblock AS \"totalHdd\"" },
-		{ value: "totalCdd", label: "Cooling Degree Days", sql: "amf.total_cdd_billblock AS \"totalCdd\"" },
-		{ value: "degreeDaysTotal", label: "Degree Days (Total)", sql: "amf.total_dd_billblock AS \"degreeDaysTotal\"" },
-		{ value: "kwhPerDd", label: "kWh per Degree Day", sql: "amf.kwh_per_dd_billblock AS \"kwhPerDd\"" },
-		{ value: "genKwhPerDd", label: "Gen kWh per Degree Day", sql: "amf.gen_kwh_per_dd_billblock AS \"genKwhPerDd\"" }
+		{ value: "totalHdd", label: "Heating Degree Days", description: "Heating degree days for the period", sql: "amf.total_hdd_billblock AS \"totalHdd\"" },
+		{ value: "totalCdd", label: "Cooling Degree Days", description: "Cooling degree days for the period", sql: "amf.total_cdd_billblock AS \"totalCdd\"" },
+		{ value: "degreeDaysTotal", label: "Degree Days (Total)", description: "Total degree days (HDD + CDD)", sql: "amf.total_dd_billblock AS \"degreeDaysTotal\"" },
+		{ value: "kwhPerDd", label: "kWh per Degree Day", description: "kWh per degree day (weather-normalized use)", sql: "amf.kwh_per_dd_billblock AS \"kwhPerDd\"" },
+		{ value: "genKwhPerDd", label: "Gen kWh per Degree Day", description: "Generation kWh per degree day", sql: "amf.gen_kwh_per_dd_billblock AS \"genKwhPerDd\"" }
 	],
 
 	defaultVisibleFields: [
@@ -192,8 +197,26 @@ export default {
 		return `(SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '${code}' AND active IS NOT FALSE LIMIT 1)`;
 	},
 
-	// Visible-fields options for the FieldsSelect dropdown.
-	fieldOptions: () => ReportSpecs.visibleFieldOptions.map(f => ({ label: f.label, value: f.value })),
+	// Visible-fields options for the FieldsSelect dropdown. `description` rides
+	// along so a helper Text widget can explain each field (MultiSelect V2 renders
+	// only `label` in the list, so the description surfaces via selectedFieldsHelp
+	// below, not inside the dropdown row itself).
+	fieldOptions: () => ReportSpecs.visibleFieldOptions.map(f => ({ label: f.label, value: f.value, description: f.description })),
+
+	// Human-readable help for the fields currently picked in FieldsSelect. The
+	// FieldsHelpText Text widget (below the dropdown) binds its text to
+	// {{ ReportSpecs.selectedFieldsHelp() }} so users see what each chosen field
+	// returns. Plain text (the Text widget doesn't render markdown), one field per
+	// line. Falls back to the default field set before the user picks anything.
+	selectedFieldsHelp: () => {
+		const picked = (FieldsSelect && FieldsSelect.selectedOptionValues) || [];
+		const fields = (Array.isArray(picked) && picked.length > 0) ? picked : ReportSpecs.defaultVisibleFields;
+		const lines = fields
+			.map(v => ReportSpecs.visibleFieldOptions.find(o => o.value === v))
+			.filter(Boolean)
+			.map(o => `• ${o.label} — ${o.description || ""}`);
+		return lines.length ? "Fields in this report:\n" + lines.join("\n") : "";
+	},
 
 	// ----- SELECT builder -----
 	selectClause: () => {
@@ -454,6 +477,20 @@ export default {
 	// while still letting you (re)select any value that remains available.
 	distinctWhere: () => {
 		return ReportSpecs.filterClauses(true, appsmith.store.reportsDistinctField);
+	},
+
+	// Minimal FROM for the set-filter value query (perf): start from the feed and
+	// add only the joins the selected column and the active (non-self) filters
+	// actually reference — so a distinct on an amf-only column (utility type, bill
+	// type, …) skips the location/vendor joins entirely. location_detail (lt)
+	// joins on amf.location_id directly so it never drags in the locations table.
+	distinctFrom: () => {
+		const sql = ReportSpecs.distinctExpr() + " " + ReportSpecs.distinctWhere();
+		const parts = ["bill_management_v2.analytics_monthly_feed amf"];
+		if (/\bl\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id");
+		if (/\blt\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = amf.location_id");
+		if (/\bcvn\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.customers_providers_pretty_name cvn ON cvn.code = amf.vendor_code AND cvn.customer_id = amf.customer_id");
+		return parts.join("\n");
 	},
 
 	// onFetchDistinct handler: the grid asks for a column's checkbox values.

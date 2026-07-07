@@ -1,51 +1,49 @@
 {
   "animateLoading": true,
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
-  "bottomRow": 55,
+  "bottomRow": 51,
   "dynamicBindingPathList": [
-    {
-      "key": "text"
-    },
     {
       "key": "fontFamily"
     },
     {
-      "key": "textColor"
+      "key": "text"
     }
   ],
   "dynamicHeight": "AUTO_HEIGHT",
   "dynamicTriggerPathList": [],
   "fontFamily": "{{appsmith.theme.fontFamily.appFont}}",
-  "fontSize": "0.875rem",
+  "fontSize": "0.75rem",
   "fontStyle": "",
   "isLoading": false,
   "isVisible": true,
-  "key": "cr_status",
+  "key": "fldhlp1key09",
   "leftColumn": 0,
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 4,
-  "minWidth": 200,
-  "mobileBottomRow": 49,
+  "minWidth": 450,
+  "mobileBottomRow": 6,
   "mobileLeftColumn": 0,
-  "mobileRightColumn": 30,
-  "mobileTopRow": 46,
+  "mobileRightColumn": 64,
+  "mobileTopRow": 0,
   "needsErrorInfo": false,
-  "originalBottomRow": 55,
-  "originalTopRow": 51,
+  "originalBottomRow": 51,
+  "originalTopRow": 45,
   "overflow": "NONE",
-  "parentColumnSpace": 16,
-  "parentId": "0",
+  "parentColumnSpace": 19.09375,
+  "parentId": "ukh00f6t26",
   "parentRowSpace": 10,
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 37,
+  "rightColumn": 64,
   "shouldTruncate": false,
-  "text": "{{ ReportSpecs.status() }}",
+  "text": "{{ ReportSpecs.selectedFieldsHelp() }}",
   "textAlign": "LEFT",
-  "textColor": "{{ ReportSpecs.customerError() ? '#B91C1C' : '#6B7280' }}",
-  "topRow": 51,
+  "textColor": "#6B7280",
+  "topRow": 45,
+  "truncateButtonColor": "#1E5FCC",
   "type": "TEXT_WIDGET",
   "version": 1,
-  "widgetId": "g434or27xz",
-  "widgetName": "StatusText"
+  "widgetId": "fldhlp1txt0900",
+  "widgetName": "FieldsHelpText"
 }
