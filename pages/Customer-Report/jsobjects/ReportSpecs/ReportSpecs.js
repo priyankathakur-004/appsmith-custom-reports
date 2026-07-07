@@ -12,9 +12,10 @@ export default {
 	// Each entry: { value (alias used in column picker), label, description, sql }.
 	// - value:       column-picker alias, also the SELECT output alias.
 	// - label:       friendly header (grid + CSV/XLSX export read this — keep clean).
-	// - description: one-line, user-facing "what this field returns", surfaced in
-	//                the FieldsSelect helper text via selectedFieldsHelp(). NOT the
-	//                CSV's auto-generated boilerplate — written for end users.
+	// - description: one-line, user-facing "what this field returns", surfaced as
+	//                the info (ⓘ) icon tooltip on each grid column header via
+	//                fieldDescriptions(). NOT the CSV's auto-generated boilerplate —
+	//                written for end users.
 	// - sql:         the SELECT expression, built into the query by selectClause().
 	visibleFieldOptions: [
 		// --- Time / period ---
@@ -197,26 +198,8 @@ export default {
 		return `(SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '${code}' AND active IS NOT FALSE LIMIT 1)`;
 	},
 
-	// Visible-fields options for the FieldsSelect dropdown. `description` rides
-	// along so a helper Text widget can explain each field (MultiSelect V2 renders
-	// only `label` in the list, so the description surfaces via selectedFieldsHelp
-	// below, not inside the dropdown row itself).
-	fieldOptions: () => ReportSpecs.visibleFieldOptions.map(f => ({ label: f.label, value: f.value, description: f.description })),
-
-	// Human-readable help for the fields currently picked in FieldsSelect. The
-	// FieldsHelpText Text widget (below the dropdown) binds its text to
-	// {{ ReportSpecs.selectedFieldsHelp() }} so users see what each chosen field
-	// returns. Plain text (the Text widget doesn't render markdown), one field per
-	// line. Falls back to the default field set before the user picks anything.
-	selectedFieldsHelp: () => {
-		const picked = (FieldsSelect && FieldsSelect.selectedOptionValues) || [];
-		const fields = (Array.isArray(picked) && picked.length > 0) ? picked : ReportSpecs.defaultVisibleFields;
-		const lines = fields
-			.map(v => ReportSpecs.visibleFieldOptions.find(o => o.value === v))
-			.filter(Boolean)
-			.map(o => `• ${o.label} — ${o.description || ""}`);
-		return lines.length ? "Fields in this report:\n" + lines.join("\n") : "";
-	},
+	// Visible-fields options for the FieldsSelect dropdown.
+	fieldOptions: () => ReportSpecs.visibleFieldOptions.map(f => ({ label: f.label, value: f.value })),
 
 	// ----- SELECT builder -----
 	selectClause: () => {
@@ -598,6 +581,15 @@ export default {
 	fieldCatalog: () => {
 		const m = {};
 		ReportSpecs.visibleFieldOptions.forEach(o => { m[o.value] = o.label; });
+		return m;
+	},
+
+	// Field descriptions keyed by field, mirroring fieldCatalog(). Delivered to the
+	// GridWidget model so each AG Grid column header can show an info (ⓘ) icon with
+	// this text on hover/click. Sourced from visibleFieldOptions[].description.
+	fieldDescriptions: () => {
+		const m = {};
+		ReportSpecs.visibleFieldOptions.forEach(o => { m[o.value] = o.description || ""; });
 		return m;
 	},
 
