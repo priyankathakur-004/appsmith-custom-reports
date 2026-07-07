@@ -1,6 +1,6 @@
 {
-  "gitSyncId": "6a0ae213387c6535a0660595_9d5c227d-2a28-4f7d-81b6-149d658d940a",
-  "id": "Customer-Report_ReportSpecs.selectedFieldsHelp",
+  "gitSyncId": "6a2faffbefa801713d7ed2e0_1b43e17e-5d7e-48ec-99c1-321f238d213d",
+  "id": "Customer-Report_ReportSpecs.fieldDescriptions",
   "pluginId": "js-plugin",
   "pluginType": "JS",
   "unpublishedAction": {
@@ -22,8 +22,8 @@
         "key": "body"
       }
     ],
-    "fullyQualifiedName": "ReportSpecs.selectedFieldsHelp",
-    "name": "selectedFieldsHelp",
+    "fullyQualifiedName": "ReportSpecs.fieldDescriptions",
+    "name": "fieldDescriptions",
     "pageId": "Customer-Report",
     "runBehaviour": "MANUAL",
     "userSetOnLoad": false
