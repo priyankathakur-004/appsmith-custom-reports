@@ -1,4 +1,6 @@
 SELECT {{ ReportSpecs.selectClause() }}
 FROM {{ ReportSpecs.fromClause }}
 {{ ReportSpecs.filterClauses() }}
-ORDER BY {{ ReportSpecs.orderBy() }};
+ORDER BY {{ ReportSpecs.exportOrderBy() }}
+LIMIT {{ Math.max(1, Number(this.params.size) || 2000) }}
+OFFSET {{ Math.max(0, Number(this.params.start) || 0) }};

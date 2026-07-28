@@ -556,14 +556,30 @@ export default {
 		return base;
 	},
 
-	// ----- Export size guard -----
-	// The report runs inside an iframe on the client's portal, and the browser
-	// refuses the generated download once the file gets large (observed break
-	// point ~5MB). Nothing inside the iframe can raise that ceiling, so both
-	// Export buttons pre-flight the payload and gray themselves out rather than
-	// firing a download that silently never lands. See exportTooBigMsg() for the
-	// tooltip the buttons show while disabled.
-	MAX_EXPORT_BYTES: 4.5 * 1024 * 1024,
+	// ----- Export size handling -----
+	// Appsmith caps a single query response at 5MB and fails the whole query with
+	// "Response size exceeded the maximum supported size of 5 MB. Please use LIMIT
+	// to reduce the amount of data fetched." exportRows used to have no LIMIT at
+	// all, so any large tenant hit that ceiling server-side and no CSV was ever
+	// built. (This is an Appsmith limit, not the browser or the iframe — it can't
+	// be raised from app code, and on Appsmith Cloud it can't be raised at all.)
+	//
+	// The cap is per response, not on the total, so fetchAllExportRows() pulls the
+	// result set in pages sized to stay under it and concatenates them here. The
+	// MAX_EXPORT_BYTES ceiling below is now only a backstop against a browser
+	// running out of memory building one enormous string — deliberately generous,
+	// since 5MB is no longer the binding constraint.
+	MAX_EXPORT_BYTES: 60 * 1024 * 1024,
+
+	// Target size for each exportRows response. Well under Appsmith's 5MB cap so
+	// a bad bytes-per-row estimate still lands inside it.
+	EXPORT_PAGE_TARGET_BYTES: 2.5 * 1024 * 1024,
+	// Keep the floor low enough that it can never itself push a response over the
+	// 5MB cap: at 100 rows a page that only happens above ~52KB per row.
+	EXPORT_PAGE_MIN: 100,
+	EXPORT_PAGE_MAX: 20000,
+	// Backstop so a runaway loop can't fire unbounded queries.
+	EXPORT_MAX_PAGES: 500,
 
 	// UTF-8 byte length. TextEncoder is available in Appsmith's JS worker; the
 	// fallback keeps the guard functional (under-counting only on non-ASCII)
@@ -624,12 +640,65 @@ export default {
 	exportTooBigMsg: () => {
 		if (!ReportSpecs.exportTooBig()) return "";
 		const total = ReportSpecs.totalRows();
-		const mb = (ReportSpecs.exportBytes() / (1024 * 1024)).toFixed(1);
+		const mb = (ReportSpecs.exportBytes() / (1024 * 1024)).toFixed(0);
 		const budget = ReportSpecs.exportRowBudget();
 		const advice = budget
 			? `Narrow the date range or filters to about ${budget.toLocaleString()} rows, or select fewer columns.`
 			: "Narrow the date range or filters, or select fewer columns.";
-		return `Too many records to download: ${total.toLocaleString()} rows (~${mb} MB). The embedded report can't download files over ~5 MB. ${advice}`;
+		return `Too many records to export: ${total.toLocaleString()} rows (~${mb} MB) is more than the browser can build in one file. ${advice}`;
+	},
+
+	// Unique tiebreaker appended to the export's ORDER BY. LIMIT/OFFSET paging is
+	// only correct when the sort is total: with ties, Postgres may order tied rows
+	// differently between two queries, which silently duplicates some rows and
+	// drops others across page boundaries. orderByClause ("l.id, amf.time_period")
+	// is NOT unique — one location has many rows per month across vendors and
+	// utility types — so the export needs a real key on top of it.
+	//
+	// !! VERIFY AGAINST THE UBM SCHEMA. If analytics_monthly_feed's primary key is
+	// named something other than "id", change this one string. A wrong name makes
+	// exportRows fail loudly on the first click, which is the intended failure mode
+	// — far better than paging that quietly returns wrong data.
+	EXPORT_TIEBREAK: "amf.id",
+
+	// The grid's ORDER BY plus the uniqueness guarantee paging needs.
+	exportOrderBy: () => `${ReportSpecs.orderBy()}, ${ReportSpecs.EXPORT_TIEBREAK}`,
+
+	// Rows per exportRows call, sized so each response stays under Appsmith's 5MB
+	// cap at the current column selection. Falls back to a conservative fixed page
+	// when there's nothing loaded to sample.
+	exportPageSize: () => {
+		const per = ReportSpecs.bytesPerRow();
+		if (!per) return 2000;
+		const n = Math.floor(ReportSpecs.EXPORT_PAGE_TARGET_BYTES / per);
+		return Math.min(ReportSpecs.EXPORT_PAGE_MAX, Math.max(ReportSpecs.EXPORT_PAGE_MIN, n));
+	},
+
+	// Pull the whole filtered result set a page at a time, so no single response
+	// trips Appsmith's 5MB ceiling. Paging params go through run() params rather
+	// than storeValue, because a stored value isn't guaranteed to have propagated
+	// into the query binding by the time run() evaluates it.
+	fetchAllExportRows: async () => {
+		const size = ReportSpecs.exportPageSize();
+		const total = ReportSpecs.totalRows();
+		const out = [];
+		for (let page = 0; page < ReportSpecs.EXPORT_MAX_PAGES; page++) {
+			await exportRows.run({ start: page * size, size: size });
+			const batch = exportRows.data || [];
+			// Don't spread — a 20k-element spread can overflow the argument stack.
+			batch.forEach(r => out.push(r));
+			if (batch.length < size) return out; // short page = last page
+			// Progress for the multi-minute case, so a big export doesn't look hung.
+			if (page > 0 && page % 5 === 0) {
+				const of = total ? ` of ${total.toLocaleString()}` : "";
+				showAlert(`Fetching export… ${out.length.toLocaleString()}${of} rows`, "info");
+			}
+		}
+		showAlert(
+			`Export stopped at ${out.length.toLocaleString()} rows (page limit reached). Narrow your filters and try again.`,
+			"warning"
+		);
+		return out;
 	},
 
 	// Measures the finished payload and refuses the download if it exceeds the
@@ -639,7 +708,7 @@ export default {
 		const bytes = ReportSpecs.byteLen(payload);
 		if (bytes <= ReportSpecs.MAX_EXPORT_BYTES) return true;
 		showAlert(
-			`Too many records to download: this export is ~${(bytes / (1024 * 1024)).toFixed(1)} MB and the embedded report can't download files over ~5 MB. Narrow your filters or select fewer columns.`,
+			`This export is ~${(bytes / (1024 * 1024)).toFixed(0)} MB, which is more than the browser can download in one file. Narrow your filters or select fewer columns.`,
 			"error"
 		);
 		return false;
@@ -705,10 +774,9 @@ export default {
 			showAlert("Select a customer before exporting", "warning");
 			return;
 		}
-		// exportRows has no LIMIT/OFFSET, so this pulls the full filtered/sorted
-		// result set — not just the page currently visible in the grid.
-		await exportRows.run();
-		const rows = exportRows.data || [];
+		// Pulls the full filtered/sorted result set — not just the page currently
+		// visible in the grid — in chunks that stay under Appsmith's 5MB response cap.
+		const rows = await ReportSpecs.fetchAllExportRows();
 		if (!rows.length) {
 			showAlert("Nothing to export — run a query first", "warning");
 			return;
@@ -737,8 +805,7 @@ export default {
 			showAlert("Select a customer before exporting", "warning");
 			return;
 		}
-		await exportRows.run();
-		const rows = exportRows.data || [];
+		const rows = await ReportSpecs.fetchAllExportRows();
 		if (!rows.length) {
 			showAlert("Nothing to export — run a query first", "warning");
 			return;
