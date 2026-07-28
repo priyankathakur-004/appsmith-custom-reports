@@ -607,30 +607,91 @@ export default {
 		await storeValue("reportsFieldLabels", map, true);
 	},
 
+	// Appsmith caps a single query/API response at 5 MB. exportRows used to run
+	// unbounded, so any report past roughly 10-15k wide rows died with a
+	// "response size exceeds the maximum" error before download() was ever
+	// reached. exportRows now takes LIMIT/OFFSET from the store and we stitch
+	// the slices together here — no single response gets near the cap, and the
+	// finished file can be any size.
+	//
+	// Pull the full filtered/sorted result set in LIMIT/OFFSET slices — not just
+	// the page currently visible in the grid. Returns the accumulated rows, or
+	// null if a slice failed outright.
+	fetchExportRows: async () => {
+		// 5000 rows leaves a ~1 KB/row budget before a slice hits the 5 MB cap.
+		// Very wide reports can still blow that, so back off on failure instead
+		// of giving up.
+		const CHUNK = 5000;
+		const MIN_CHUNK = 250;
+		// Ceiling on a single export. Past this the browser has to hold the whole
+		// CSV in memory as one string before download() can take it, and the tab
+		// starts to struggle. Raise it if your users genuinely need more — and
+		// raise the exportCsv/exportXlsx action timeouts to match.
+		const MAX_ROWS = 250000;
+
+		const all = [];
+		let limit = CHUNK;
+		let offset = 0;
+		let truncated = false;
+		for (;;) {
+			await storeValue("reportsExportLimit", limit);
+			await storeValue("reportsExportOffset", offset);
+			let batch;
+			try {
+				await exportRows.run();
+				batch = exportRows.data || [];
+			} catch (e) {
+				// Almost always the 5 MB response cap on an unusually wide row set.
+				// Halve the slice and retry the same offset.
+				if (limit > MIN_CHUNK) {
+					limit = Math.max(MIN_CHUNK, Math.floor(limit / 2));
+					showAlert(`Rows are wide — retrying in batches of ${limit.toLocaleString()}`, "warning");
+					continue;
+				}
+				showAlert("Export failed: rows are too wide to fetch. Deselect some columns and try again.", "error");
+				return null;
+			}
+			for (const r of batch) all.push(r);
+			// A short slice means we've reached the end of the result set.
+			if (batch.length < limit) break;
+			offset += batch.length;
+			if (all.length >= MAX_ROWS) { truncated = true; break; }
+			showAlert(`Fetching… ${all.length.toLocaleString()} rows so far`, "info");
+		}
+		await storeValue("reportsExportOffset", 0);
+		if (truncated) {
+			showAlert(`Export capped at ${MAX_ROWS.toLocaleString()} rows — narrow the filters for the rest`, "warning");
+		}
+		return all;
+	},
+
+	// Shared CSV serializer. eol is "\n" for plain CSV, "\r\n" for the Excel
+	// flavor (Excel wants CRLF for clean column splitting).
+	buildCsv: (rows, fields, eol) => {
+		const escape = v => {
+			if (v === null || v === undefined) return "";
+			if (typeof v === "object") v = JSON.stringify(v);
+			const s = String(v);
+			return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+		};
+		const lines = [fields.map(f => escape(ReportSpecs.exportLabel(f))).join(",")];
+		for (const r of rows) lines.push(fields.map(f => escape(r[f])).join(","));
+		return lines.join(eol);
+	},
+
 	exportCsv: async () => {
 		if (ReportSpecs.customerIdSql() === "0") {
 			showAlert("Select a customer before exporting", "warning");
 			return;
 		}
-		// exportRows has no LIMIT/OFFSET, so this pulls the full filtered/sorted
-		// result set — not just the page currently visible in the grid.
-		await exportRows.run();
-		const rows = exportRows.data || [];
+		const rows = await ReportSpecs.fetchExportRows();
+		if (rows === null) return;
 		if (!rows.length) {
 			showAlert("Nothing to export — run a query first", "warning");
 			return;
 		}
 		const fields = ReportSpecs.exportFields(rows);
-		const escape = v => {
-			if (v === null || v === undefined) return "";
-			if (typeof v === "object") v = JSON.stringify(v);
-			const s = String(v);
-			return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-		};
-		const csv = [
-			fields.map(f => escape(ReportSpecs.exportLabel(f))).join(","),
-			...rows.map(r => fields.map(f => escape(r[f])).join(","))
-		].join("\n");
+		const csv = ReportSpecs.buildCsv(rows, fields, "\n");
 		const filename = `${ReportSpecs.filenameStem()}.csv`;
 		download(csv, filename, "text/csv");
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
@@ -641,8 +702,8 @@ export default {
 			showAlert("Select a customer before exporting", "warning");
 			return;
 		}
-		await exportRows.run();
-		const rows = exportRows.data || [];
+		const rows = await ReportSpecs.fetchExportRows();
+		if (rows === null) return;
 		if (!rows.length) {
 			showAlert("Nothing to export — run a query first", "warning");
 			return;
@@ -653,16 +714,7 @@ export default {
 		// tricks (HTML table / SpreadsheetML) open as raw markup in Numbers/Sheets.
 		// A UTF-8-BOM CSV opens natively as a spreadsheet in Excel, Numbers and
 		// Sheets — the BOM + CRLF is exactly what Excel expects for clean columns.
-		const escape = v => {
-			if (v === null || v === undefined) return "";
-			if (typeof v === "object") v = JSON.stringify(v);
-			const s = String(v);
-			return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-		};
-		const csv = [
-			fields.map(f => escape(ReportSpecs.exportLabel(f))).join(","),
-			...rows.map(r => fields.map(f => escape(r[f])).join(","))
-		].join("\r\n");
+		const csv = ReportSpecs.buildCsv(rows, fields, "\r\n");
 		const filename = `${ReportSpecs.filenameStem()}.csv`;
 		download("\ufeff" + csv, filename, "text/csv;charset=utf-8");
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");

@@ -1,6 +1,6 @@
 {
-  "gitSyncId": "6a0ae213387c6535a0660595_dbefc1ce-c7da-4ec2-a593-6ffea0c98e15",
-  "id": "Customer-Report_ReportSpecs.exportCsv",
+  "gitSyncId": "6a0ae213387c6535a0660595_8d8a24b6-fd88-4717-a7e9-41648fe6e40a",
+  "id": "Customer-Report_ReportSpecs.buildCsv",
   "pluginId": "js-plugin",
   "pluginType": "JS",
   "unpublishedAction": {
@@ -22,8 +22,8 @@
         "key": "body"
       }
     ],
-    "fullyQualifiedName": "ReportSpecs.exportCsv",
-    "name": "exportCsv",
+    "fullyQualifiedName": "ReportSpecs.buildCsv",
+    "name": "buildCsv",
     "pageId": "Customer-Report",
     "runBehaviour": "MANUAL",
     "userSetOnLoad": false
