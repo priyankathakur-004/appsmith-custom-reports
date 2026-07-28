@@ -9,6 +9,12 @@
   "dynamicBindingPathList": [
     {
       "key": "borderRadius"
+    },
+    {
+      "key": "isDisabled"
+    },
+    {
+      "key": "tooltip"
     }
   ],
   "dynamicTriggerPathList": [
@@ -19,7 +25,7 @@
   "iconAlign": "left",
   "iconName": "download",
   "isDefaultClickDisabled": true,
-  "isDisabled": false,
+  "isDisabled": "{{ ReportSpecs.exportTooBig() }}",
   "isLoading": false,
   "isVisible": true,
   "key": "cr_expbtn",
@@ -43,6 +49,7 @@
   "responsiveBehavior": "hug",
   "rightColumn": 63,
   "text": "Export to CSV",
+  "tooltip": "{{ ReportSpecs.exportTooBigMsg() }}",
   "topRow": 53,
   "type": "BUTTON_WIDGET",
   "version": 1,

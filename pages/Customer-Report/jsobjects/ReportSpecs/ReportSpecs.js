@@ -549,7 +549,100 @@ export default {
 		if (runReport.isLoading) return "Loading...";
 		const total = ReportSpecs.totalRows();
 		if (total == null) return "Pick a customer and click Run";
-		return `${total.toLocaleString()} total rows · Cost Analysis – Trendline`;
+		const base = `${total.toLocaleString()} total rows · Cost Analysis – Trendline`;
+		// Repeat the export warning here: a tooltip on a disabled button is easy
+		// to miss, and this line is always on screen.
+		if (ReportSpecs.exportTooBig()) return `${base} · ⚠️ too many records to export — narrow your filters to download`;
+		return base;
+	},
+
+	// ----- Export size guard -----
+	// The report runs inside an iframe on the client's portal, and the browser
+	// refuses the generated download once the file gets large (observed break
+	// point ~5MB). Nothing inside the iframe can raise that ceiling, so both
+	// Export buttons pre-flight the payload and gray themselves out rather than
+	// firing a download that silently never lands. See exportTooBigMsg() for the
+	// tooltip the buttons show while disabled.
+	MAX_EXPORT_BYTES: 4.5 * 1024 * 1024,
+
+	// UTF-8 byte length. TextEncoder is available in Appsmith's JS worker; the
+	// fallback keeps the guard functional (under-counting only on non-ASCII)
+	// if a future sandbox drops it.
+	byteLen: (s) => {
+		try { return new TextEncoder().encode(s).length; } catch (e) { return String(s).length; }
+	},
+
+	// Bytes-per-row estimate sampled from the page already in the grid, so it
+	// reflects the user's actual column picks and real data width instead of a
+	// fixed guess. Null when there's nothing loaded to sample from.
+	bytesPerRow: () => {
+		const rows = runReport.data;
+		if (!Array.isArray(rows) || rows.length === 0) return null;
+		const fields = ReportSpecs.exportFields(rows);
+		if (fields.length === 0) return null;
+		const sample = rows.slice(0, 50);
+		let bytes = 0;
+		sample.forEach(r => {
+			const line = fields.map(f => {
+				const v = r[f];
+				if (v === null || v === undefined) return "";
+				return (typeof v === "object") ? JSON.stringify(v) : String(v);
+			}).join(",");
+			bytes += ReportSpecs.byteLen(line) + 2; // + CRLF
+		});
+		// Two bytes per field of slack for the quoting escape() adds to any
+		// value containing a comma, quote or newline.
+		return Math.ceil(bytes / sample.length) + fields.length * 2;
+	},
+
+	// Projected size of the full export. Null until both the count and a sample
+	// page are available.
+	exportBytes: () => {
+		const total = ReportSpecs.totalRows();
+		const per = ReportSpecs.bytesPerRow();
+		if (total == null || per == null) return null;
+		return total * per;
+	},
+
+	// How many rows fit under the cap at the current column selection — quoted
+	// in the tooltip so the user knows how far they need to narrow things.
+	exportRowBudget: () => {
+		const per = ReportSpecs.bytesPerRow();
+		if (!per) return null;
+		return Math.floor(ReportSpecs.MAX_EXPORT_BYTES / per);
+	},
+
+	// Bound to isDisabled on both Export buttons. Deliberately false while the
+	// estimate is unknown — don't block an export we have no evidence is too big.
+	exportTooBig: () => {
+		const bytes = ReportSpecs.exportBytes();
+		return bytes != null && bytes > ReportSpecs.MAX_EXPORT_BYTES;
+	},
+
+	// Bound to tooltip on both Export buttons. Empty while the export is fine,
+	// so no tooltip renders in the normal case.
+	exportTooBigMsg: () => {
+		if (!ReportSpecs.exportTooBig()) return "";
+		const total = ReportSpecs.totalRows();
+		const mb = (ReportSpecs.exportBytes() / (1024 * 1024)).toFixed(1);
+		const budget = ReportSpecs.exportRowBudget();
+		const advice = budget
+			? `Narrow the date range or filters to about ${budget.toLocaleString()} rows, or select fewer columns.`
+			: "Narrow the date range or filters, or select fewer columns.";
+		return `Too many records to download: ${total.toLocaleString()} rows (~${mb} MB). The embedded report can't download files over ~5 MB. ${advice}`;
+	},
+
+	// Measures the finished payload and refuses the download if it exceeds the
+	// cap. Returns true when it's safe to call download(). Alerts on failure so
+	// the click isn't a no-op.
+	assertDownloadable: (payload) => {
+		const bytes = ReportSpecs.byteLen(payload);
+		if (bytes <= ReportSpecs.MAX_EXPORT_BYTES) return true;
+		showAlert(
+			`Too many records to download: this export is ~${(bytes / (1024 * 1024)).toFixed(1)} MB and the embedded report can't download files over ~5 MB. Narrow your filters or select fewer columns.`,
+			"error"
+		);
+		return false;
 	},
 
 	// ----- Export -----
@@ -631,6 +724,9 @@ export default {
 			fields.map(f => escape(ReportSpecs.exportLabel(f))).join(","),
 			...rows.map(r => fields.map(f => escape(r[f])).join(","))
 		].join("\n");
+		// Backstop for when the pre-flight estimate ran low (wide outlier rows,
+		// stale count). Better a clear message than a download that never lands.
+		if (!ReportSpecs.assertDownloadable(csv)) return;
 		const filename = `${ReportSpecs.filenameStem()}.csv`;
 		download(csv, filename, "text/csv");
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
@@ -663,6 +759,7 @@ export default {
 			fields.map(f => escape(ReportSpecs.exportLabel(f))).join(","),
 			...rows.map(r => fields.map(f => escape(r[f])).join(","))
 		].join("\r\n");
+		if (!ReportSpecs.assertDownloadable("\ufeff" + csv)) return;
 		const filename = `${ReportSpecs.filenameStem()}.csv`;
 		download("\ufeff" + csv, filename, "text/csv;charset=utf-8");
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
