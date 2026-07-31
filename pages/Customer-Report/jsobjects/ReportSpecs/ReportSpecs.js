@@ -751,6 +751,42 @@ export default {
 		return lines.join(eol);
 	},
 
+	// Excel serializer — same approach as the Customer page's UBMUtils.exportXlsx,
+	// which produces a file Excel opens as a real spreadsheet: an HTML table served
+	// under the Excel mime type with an .xls extension. A true binary .xlsx would
+	// need SheetJS, whose XLSX.utils is blocked by Appsmith's JS sandbox.
+	//
+	// Values Excel would silently reformat on the way in are marked as text with
+	// mso-number-format so they survive the round trip. Genuine measures are left
+	// alone so charges and consumption still sum in the sheet.
+	//
+	// Some of that has to be decided per column, not per value: a GL code of
+	// "501480.000" and a charge of "1234.500" are the same shape, and Excel drops
+	// the trailing zeros on both. So identifier columns — site/zip/vendor codes and
+	// every account attribute (GL code, GL description, …) — are always text, and
+	// everything else falls back to a per-value check for leading zeros and for
+	// digit strings past Excel's 15-digit precision.
+	textFields: ["locationNumber", "locationZip", "vendorCode"],
+
+	buildXlsHtml: (rows, fields) => {
+		const esc = v => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		const alwaysText = {};
+		ReportSpecs.textFields.forEach(f => { alwaysText[f] = true; });
+		ReportSpecs.accountAttrColumns().forEach(o => { alwaysText[o.value] = true; });
+		const cell = (v, field) => {
+			if (v === null || v === undefined) return "<td></td>";
+			if (typeof v === "object") v = JSON.stringify(v);
+			const s = String(v);
+			const forceText = alwaysText[field] || /^0\d+$/.test(s) || /^\d{16,}$/.test(s);
+			return forceText
+				? `<td style="mso-number-format:'\\@'">${esc(s)}</td>`
+				: `<td>${esc(s)}</td>`;
+		};
+		const head = "<tr>" + fields.map(f => `<th>${esc(ReportSpecs.exportLabel(f))}</th>`).join("") + "</tr>";
+		const body = rows.map(r => "<tr>" + fields.map(f => cell(r[f], f)).join("") + "</tr>").join("");
+		return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body><table>${head}${body}</table></body></html>`;
+	},
+
 	exportCsv: async () => {
 		if (ReportSpecs.customerIdSql() === "0") {
 			showAlert("Select a customer before exporting", "warning");
@@ -781,14 +817,14 @@ export default {
 			return;
 		}
 		const fields = ReportSpecs.exportFields(rows);
-		// A true binary .xlsx needs a working library, and the installed SheetJS's
-		// XLSX.utils is blocked by Appsmith's JS sandbox. The library-free .xls
-		// tricks (HTML table / SpreadsheetML) open as raw markup in Numbers/Sheets.
-		// A UTF-8-BOM CSV opens natively as a spreadsheet in Excel, Numbers and
-		// Sheets — the BOM + CRLF is exactly what Excel expects for clean columns.
-		const csv = ReportSpecs.buildCsv(rows, fields, "\r\n");
-		const filename = `${ReportSpecs.filenameStem()}.csv`;
-		download("\ufeff" + csv, filename, "text/csv;charset=utf-8");
+		const filename = `${ReportSpecs.filenameStem()}.xls`;
+		const mime = "application/vnd.ms-excel";
+		// The Customer page hands download() a data: URI. Here the payload can be a
+		// quarter-million rows, and encodeURIComponent-ing that much HTML into a URL
+		// is what would fall over first — so pass the markup straight through and let
+		// download() wrap it in a Blob under the same mime type. Identical bytes on
+		// disk, no URL length ceiling.
+		download(ReportSpecs.buildXlsHtml(rows, fields), filename, mime);
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
