@@ -55,7 +55,7 @@
   "placeholderText": "All",
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 33,
+  "rightColumn": 32,
   "serverSideFiltering": false,
   "sourceData": "{{ getAccountStatuses.data }}",
   "topRow": 33,

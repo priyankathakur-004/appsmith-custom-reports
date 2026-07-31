@@ -6,7 +6,16 @@
   "unpublishedAction": {
     "actionConfiguration": {
       "encodeParamsToggle": true,
-      "jsArguments": [],
+      "jsArguments": [
+        {
+          "name": "includeGrid",
+          "value": "{{true}}"
+        },
+        {
+          "name": "excludeField",
+          "value": "{{null}}"
+        }
+      ],
       "paginationType": "NONE",
       "timeoutInMillisecond": 10000
     },
