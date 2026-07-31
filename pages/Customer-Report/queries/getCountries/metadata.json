@@ -30,6 +30,6 @@
     "name": "getCountries",
     "pageId": "Customer-Report",
     "runBehaviour": "AUTOMATIC",
-    "userSetOnLoad": false
+    "userSetOnLoad": true
   }
 }
