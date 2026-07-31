@@ -366,6 +366,19 @@ export default {
 			parts.push(ReportSpecs._inList("lt.location_status", statuses));
 		}
 
+		// Account # — one option per account code. A code repeats across commodities
+		// (137636-551343 exists as WATER, SEWER and FIREPROTECTION), so the picker
+		// lists it once and selecting it takes every service on that account, which
+		// is how the GL report is read.
+		const accounts = (typeof AccountNumberSelect !== "undefined" && AccountNumberSelect.selectedOptionValues) || [];
+		if (accounts.length > 0 && !skip("accountNumber")) {
+			const list = accounts.map(v => ReportSpecs._quote(v)).join(",");
+			parts.push(
+				"AND EXISTS (SELECT 1 FROM bill_management_v2.virtual_accounts va " +
+				`WHERE va.id = amf.virtual_account_id AND va.account_code IN (${list}))`
+			);
+		}
+
 		// Account status — the status of the utility account itself, which is the one
 		// the GL report needs; Location Status above is a different thing. EXISTS
 		// rather than a comparison against the SELECT's scalar subquery so the status
@@ -1079,7 +1092,8 @@ export default {
 		const widgetNames = [
 			"FieldsSelect", "StartDate", "EndDate",
 			"LocationName", "StateProvinceSelect", "StateNotIn",
-			"CountrySelect", "LocationStatusSelect", "AccountStatusSelect",
+			"CountrySelect", "LocationStatusSelect",
+			"AccountNumberSelect", "AccountStatusSelect",
 			"VendorSelect", "ServiceTypesSelect", "ServiceNotIn",
 			"LocationAttributesSelect", "AccountAttributesSelect",
 			"AccountAttributeValuesSelect"
