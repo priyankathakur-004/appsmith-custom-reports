@@ -118,7 +118,7 @@ export default {
 	// allows ORDER BY on output aliases, so sorting by alias is safe. The stable
 	// default is always appended as a tiebreaker so paging stays deterministic.
 	orderBy: () => {
-		const known = ReportSpecs.visibleFieldOptions.map(o => o.value);
+		const known = ReportSpecs.allFieldOptions().map(o => o.value);
 		let model = [];
 		try { model = JSON.parse(appsmith.store.reportsSortModel || "[]"); } catch (e) { model = []; }
 		const terms = (Array.isArray(model) ? model : [])
@@ -199,8 +199,64 @@ export default {
 		return `(SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '${code}' AND active IS NOT FALSE LIMIT 1)`;
 	},
 
-	// Visible-fields options for the FieldsSelect dropdown.
+	// Visible-fields options for the FieldsSelect dropdown. Account attributes are
+	// NOT listed here — they're picked in AccountAttributesSelect and become columns
+	// automatically (see accountAttrColumns).
 	fieldOptions: () => ReportSpecs.visibleFieldOptions.map(f => ({ label: f.label, value: f.value })),
+
+	// ----- Account attributes as output columns -----
+	// Picking an attribute in AccountAttributesSelect used to filter the report but
+	// never showed the value, so GL Code / GL Description could be filtered on but
+	// not reported on. Each picked attribute name now also becomes a report column,
+	// pulled per row from the virtual account's attribute mapping. Picking values in
+	// AccountAttributeValuesSelect still filters (see filterClauses); picking only a
+	// name adds the column with no filter.
+	//
+	// A VA can carry the same attribute more than once, so values are aggregated
+	// with " | ". This is a correlated subquery per attribute — fine for a page of
+	// rows, noticeably slower on a large export with several attributes picked.
+	accountAttrColumns: () => {
+		const names = (typeof AccountAttributesSelect !== "undefined" && AccountAttributesSelect.selectedOptionValues) || [];
+		const used = {};
+		return names
+			.filter(n => n != null && String(n).trim() !== "")
+			.map(n => {
+				const name = String(n).trim();
+				// Alias must be a stable, SQL-safe key: the grid uses it as a column
+				// field and as the store key for renames/sorts/filters.
+				let alias = "attr_" + name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+				if (alias === "attr_") alias = "attr_unnamed";
+				if (used[alias]) alias = alias + "_" + (++used[alias]); else used[alias] = 1;
+				const q = ReportSpecs._quote(name);
+				return {
+					value: alias,
+					label: name,
+					description: "Account attribute: " + name,
+					sql:
+						"(SELECT string_agg(DISTINCT vam.attribute_value, ' | ' ORDER BY vam.attribute_value) " +
+						"FROM bill_management_v2.virtual_accounts_attributes_mapping vam " +
+						"JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta " +
+						"ON vmeta.id = vam.virtual_accounts_attributes_metadata_id " +
+						"WHERE vam.virtual_account_id = amf.virtual_account_id " +
+						"AND vmeta.customer_id = amf.customer_id " +
+						"AND vmeta.deleted_at IS NULL " +
+						`AND vmeta.attribute_name = ${q}) AS "${alias}"`
+				};
+			});
+	},
+
+	// Every column the current report can emit: the catalog plus whatever account
+	// attributes are picked. Single lookup source for SELECT/label/sort/filter code.
+	allFieldOptions: () => ReportSpecs.visibleFieldOptions.concat(ReportSpecs.accountAttrColumns()),
+
+	// The field list the grid should render, in order: visible-field picks (or the
+	// defaults when nothing is picked) followed by the account attribute columns.
+	// Mirrors exactly what selectClause() puts in the SELECT.
+	gridColumns: () => {
+		const picked = (FieldsSelect && FieldsSelect.selectedOptionValues) || [];
+		const fields = (Array.isArray(picked) && picked.length > 0) ? picked : ReportSpecs.defaultVisibleFields;
+		return fields.concat(ReportSpecs.accountAttrColumns().map(o => o.value));
+	},
 
 	// ----- SELECT builder -----
 	selectClause: () => {
@@ -209,7 +265,8 @@ export default {
 		const exprs = fields
 			.map(f => ReportSpecs.visibleFieldOptions.find(o => o.value === f))
 			.filter(Boolean)
-			.map(o => o.sql);
+			.map(o => o.sql)
+			.concat(ReportSpecs.accountAttrColumns().map(o => o.sql));
 		return exprs.length > 0 ? exprs.join(", ") : "1 AS placeholder";
 	},
 
@@ -297,11 +354,24 @@ export default {
 			parts.push(ReportSpecs._inList("amf.utility_type", services, notIn));
 		}
 
-		// Location name / number — free text, partial match on name/address or id.
-		const loc = (typeof LocationName !== "undefined" && LocationName.text) || "";
-		if (loc.trim() !== "" && !skip(["location", "locationAddress", "locationId"])) {
-			const safe = String(loc).trim().replace(/'/g, "''");
-			parts.push(`AND (l.name ILIKE '%${safe}%' OR l.address ILIKE '%${safe}%' OR CAST(l.id AS TEXT) = '${safe}')`);
+		// Location name / number — LocationName is a multi-select of the customer's
+		// locations (option value = location id), populated by getLocationsForCustomer.
+		// It used to be a free-text box that matched name/address/id only, so a typed
+		// site number never matched and a combined "Name/Number" string matched
+		// nothing at all. The text branch is kept as a fallback (and now also looks at
+		// location_number) so the filter still works if the widget is ever swapped
+		// back to an input.
+		const locFields = ["location", "locationId", "locationNumber", "locationAddress"];
+		const locIds = (typeof LocationName !== "undefined" && LocationName.selectedOptionValues) || [];
+		const locText = (typeof LocationName !== "undefined" && LocationName.text) || "";
+		if (locIds.length > 0 && !skip(locFields)) {
+			parts.push(ReportSpecs._inList("l.id", locIds));
+		} else if (locText.trim() !== "" && !skip(locFields)) {
+			const safe = String(locText).trim().replace(/'/g, "''");
+			parts.push(
+				`AND (l.name ILIKE '%${safe}%' OR l.address ILIKE '%${safe}%' ` +
+				`OR CAST(lt.location_number AS TEXT) ILIKE '%${safe}%' OR CAST(l.id AS TEXT) = '${safe}')`
+			);
 		}
 
 		// Location attributes (LocationAttributesSelect) — source is the
@@ -352,7 +422,7 @@ export default {
 		let gridModel = {};
 		try { gridModel = JSON.parse(appsmith.store.reportsFilterModel || "{}"); } catch (e) { gridModel = {}; }
 		const rawExpr = (fieldValue) => {
-			const o = ReportSpecs.visibleFieldOptions.find(x => x.value === fieldValue);
+			const o = ReportSpecs.allFieldOptions().find(x => x.value === fieldValue);
 			if (!o) return null;
 			const i = o.sql.lastIndexOf(" AS ");
 			return (i >= 0 ? o.sql.slice(0, i) : o.sql).trim();
@@ -446,10 +516,11 @@ export default {
 
 	// ----- Set-filter distinct values (checkbox lists) -----
 	// Raw SQL expression for the column the grid is currently asking distinct
-	// values for. Whitelisted via visibleFieldOptions, so it's injection-safe.
+	// values for. Whitelisted via allFieldOptions (catalog + picked account
+	// attributes, whose names are quoted with _quote), so it's injection-safe.
 	distinctExpr: () => {
 		const field = appsmith.store.reportsDistinctField;
-		const o = ReportSpecs.visibleFieldOptions.find(x => x.value === field);
+		const o = ReportSpecs.allFieldOptions().find(x => x.value === field);
 		if (!o) return "NULL";
 		const i = o.sql.lastIndexOf(" AS ");
 		return (i >= 0 ? o.sql.slice(0, i) : o.sql).trim();
@@ -561,10 +632,11 @@ export default {
 	},
 
 	// Export fields honor the user's FieldsSelect picks (column order + which
-	// columns), falling back to whatever the export query returned.
+	// columns) plus any account attribute columns, falling back to whatever the
+	// export query returned.
 	exportFields: (rows) => {
-		const picked = (FieldsSelect && FieldsSelect.selectedOptionValues) || [];
-		if (Array.isArray(picked) && picked.length > 0) return picked;
+		const cols = ReportSpecs.gridColumns();
+		if (cols.length > 0) return cols;
 		return (rows && rows[0]) ? Object.keys(rows[0]) : [];
 	},
 
@@ -572,7 +644,7 @@ export default {
 		// Honor the user's browser-local column renames, then the catalog label.
 		const ov = (appsmith.store.reportsFieldLabels || {})[field];
 		if (ov) return ov;
-		const o = ReportSpecs.visibleFieldOptions.find(x => x.value === field);
+		const o = ReportSpecs.allFieldOptions().find(x => x.value === field);
 		return o ? o.label : field;
 	},
 
@@ -581,16 +653,16 @@ export default {
 	// shows friendly names and knows the baseline to reset a rename back to.
 	fieldCatalog: () => {
 		const m = {};
-		ReportSpecs.visibleFieldOptions.forEach(o => { m[o.value] = o.label; });
+		ReportSpecs.allFieldOptions().forEach(o => { m[o.value] = o.label; });
 		return m;
 	},
 
 	// Field descriptions keyed by field, mirroring fieldCatalog(). Delivered to the
 	// GridWidget model so each AG Grid column header can show an info (ⓘ) icon with
-	// this text on hover/click. Sourced from visibleFieldOptions[].description.
+	// this text on hover/click. Sourced from allFieldOptions()[].description.
 	fieldDescriptions: () => {
 		const m = {};
-		ReportSpecs.visibleFieldOptions.forEach(o => { m[o.value] = o.description || ""; });
+		ReportSpecs.allFieldOptions().forEach(o => { m[o.value] = o.description || ""; });
 		return m;
 	},
 
