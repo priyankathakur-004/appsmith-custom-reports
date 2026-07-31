@@ -463,6 +463,211 @@ export default {
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
+	// ----- Excel export -----
+	// Ported from the Customer-Report page. The library-free .xls trick this replaced
+	// (an HTML table under the Excel mime type) opens in Excel but renders as raw
+	// markup in Numbers and Sheets, and SheetJS's XLSX.utils is unreachable through
+	// Appsmith's sandbox — so this writes a real .xlsx by hand. An xlsx is a ZIP of
+	// XML parts, and stored (uncompressed) entries need no deflate, so the writer is
+	// just a CRC32, a ZIP directory and the sheet XML.
+
+	// Identifier columns must stay text or Excel eats them: an account number loses
+	// its leading zero, a long meter id loses precision past 15 digits. Joined rows
+	// are keyed "<endpoint>__<field>", so the test runs on the trailing field name.
+	isTextField: (name) => {
+		const base = String(name).split("__").pop();
+		return /(^id$|Id$|Code$|Zip$|Group$|^number$)/.test(base);
+	},
+
+	_utf8: (str) => {
+		if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(str);
+		const out = [];
+		for (let i = 0; i < str.length; i++) {
+			let c = str.charCodeAt(i);
+			if (c >= 0xD800 && c <= 0xDBFF && i + 1 < str.length) {
+				const c2 = str.charCodeAt(i + 1);
+				if (c2 >= 0xDC00 && c2 <= 0xDFFF) { c = 0x10000 + ((c - 0xD800) << 10) + (c2 - 0xDC00); i++; }
+			}
+			if (c < 0x80) out.push(c);
+			else if (c < 0x800) out.push(0xC0 | (c >> 6), 0x80 | (c & 0x3F));
+			else if (c < 0x10000) out.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+			else out.push(0xF0 | (c >> 18), 0x80 | ((c >> 12) & 0x3F), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+		}
+		return new Uint8Array(out);
+	},
+
+	_crc32: (bytes) => {
+		const table = new Int32Array(256);
+		for (let n = 0; n < 256; n++) {
+			let c = n;
+			for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+			table[n] = c;
+		}
+		let crc = -1;
+		for (let i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ table[(crc ^ bytes[i]) & 0xFF];
+		return (crc ^ -1) >>> 0;
+	},
+
+	// Minimal ZIP writer, stored (method 0) entries only.
+	_zip: (files) => {
+		const u16 = n => new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF]);
+		const u32 = n => new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF]);
+		const DOS_DATE = 0x0021; // 1980-01-01; fixed so exports are byte-identical
+		const parts = [];
+		const central = [];
+		let offset = 0;
+		files.forEach(f => {
+			const name = UBMUtils._utf8(f.name);
+			const crc = UBMUtils._crc32(f.data);
+			const size = f.data.length;
+			[u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(DOS_DATE),
+			 u32(crc), u32(size), u32(size), u16(name.length), u16(0), name, f.data
+			].forEach(c => parts.push(c));
+			central.push([u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(DOS_DATE),
+				u32(crc), u32(size), u32(size), u16(name.length), u16(0), u16(0), u16(0), u16(0),
+				u32(0), u32(offset), name]);
+			offset += 30 + name.length + size;
+		});
+		let cdSize = 0;
+		central.forEach(entry => entry.forEach(c => { parts.push(c); cdSize += c.length; }));
+		[u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length),
+		 u32(cdSize), u32(offset), u16(0)].forEach(c => parts.push(c));
+
+		let total = 0;
+		parts.forEach(p => { total += p.length; });
+		const out = new Uint8Array(total);
+		let at = 0;
+		parts.forEach(p => { out.set(p, at); at += p.length; });
+		return out;
+	},
+
+	_base64: (bytes) => {
+		let bin = "";
+		const CHUNK = 0x8000; // apply() blows the stack on much more than this
+		for (let i = 0; i < bytes.length; i += CHUNK) {
+			bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+		}
+		return btoa(bin);
+	},
+
+	buildXlsx: (rows, fields) => {
+		const esc = s => String(s)
+			.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
+			.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		const colName = (i) => {
+			let s = "", n = i + 1;
+			while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+			return s;
+		};
+		// Numeric-looking values become real numbers, minus the two shapes that lose
+		// information: a leading zero, and a whole number past Excel's 15-digit
+		// precision. Long decimals stay numeric — that's float noise off the feed.
+		const isNumeric = (field, s) => {
+			if (UBMUtils.isTextField(field)) return false;
+			if (!/^-?\d+(\.\d+)?$/.test(s)) return false;
+			if (/^-?0\d/.test(s)) return false;
+			return /\./.test(s) || s.replace(/-/g, "").length <= 15;
+		};
+
+		// Strings go through the shared-string table: this data repeats heavily, so
+		// one entry per distinct value plus a bare index per cell is much smaller
+		// than an inline <is><t> on every row.
+		const strings = new Map();
+		let strRefs = 0;
+		const strIndex = (s) => {
+			strRefs++;
+			let i = strings.get(s);
+			if (i === undefined) { i = strings.size; strings.set(s, i); }
+			return i;
+		};
+		const widths = fields.map(() => 0);
+		const cellXml = (v, field, ref, ci) => {
+			if (v === null || v === undefined) return "";
+			if (typeof v === "object") v = JSON.stringify(v);
+			const s = String(v);
+			if (s === "") return "";
+			if (s.length > widths[ci]) widths[ci] = s.length;
+			if (typeof v === "number" || isNumeric(field, s)) return `<c r="${ref}"><v>${esc(s)}</v></c>`;
+			return `<c r="${ref}" t="s"><v>${strIndex(s)}</v></c>`;
+		};
+
+		const body = [];
+		body.push("<row r=\"1\">" + fields.map((f, i) => {
+			const label = String(f);
+			if (label.length > widths[i]) widths[i] = label.length;
+			return `<c r="${colName(i)}1" s="1" t="s"><v>${strIndex(label)}</v></c>`;
+		}).join("") + "</row>");
+		rows.forEach((r, ri) => {
+			const n = ri + 2;
+			body.push(`<row r="${n}">` + fields.map((f, i) => cellXml(r[f], f, colName(i) + n, i)).join("") + "</row>");
+		});
+
+		// Without explicit widths every column falls back to the default ~8 chars and
+		// long values wrap over several lines.
+		const cols = "<cols>" + widths.map((w, i) =>
+			`<col min="${i + 1}" max="${i + 1}" width="${Math.min(45, Math.max(10, w + 2))}" customWidth="1"/>`
+		).join("") + "</cols>";
+
+		const sheet = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+			'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+			cols, "<sheetData>", body.join(""), "</sheetData></worksheet>"];
+
+		const sst = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+			`<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${strRefs}" uniqueCount="${strings.size}">`];
+		strings.forEach((_i, s) => { sst.push(`<si><t xml:space="preserve">${esc(s)}</t></si>`); });
+		sst.push("</sst>");
+
+		const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+
+		// Without a stylesheet each app picks its own default font, and Numbers picks
+		// a large one. Format 0 is the body, 1 the bold header referenced as s="1".
+		// The empty fills/borders are required filler.
+		const styles = XML +
+			'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+			'<fonts count="2">' +
+			'<font><sz val="10"/><name val="Calibri"/><family val="2"/></font>' +
+			'<font><b/><sz val="10"/><name val="Calibri"/><family val="2"/></font>' +
+			"</fonts>" +
+			'<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+			'<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+			'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+			'<cellXfs count="2">' +
+			'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+			'<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+			"</cellXfs>" +
+			'<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+			"</styleSheet>";
+
+		const files = [
+			{ name: "[Content_Types].xml", data: XML +
+				'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+				'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+				'<Default Extension="xml" ContentType="application/xml"/>' +
+				'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+				'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+				'<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>' +
+				'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+				"</Types>" },
+			{ name: "_rels/.rels", data: XML +
+				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+				'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+				"</Relationships>" },
+			{ name: "xl/workbook.xml", data: XML +
+				'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+				'<sheets><sheet name="Report" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+			{ name: "xl/_rels/workbook.xml.rels", data: XML +
+				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+				'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+				'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>' +
+				'<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+				"</Relationships>" },
+			{ name: "xl/worksheets/sheet1.xml", data: sheet.join("") },
+			{ name: "xl/sharedStrings.xml", data: sst.join("") },
+			{ name: "xl/styles.xml", data: styles }
+		];
+		return UBMUtils._zip(files.map(f => ({ name: f.name, data: UBMUtils._utf8(f.data) })));
+	},
+
 	exportXlsx: () => {
 		if (!UBMUtils.activeCustomer()) {
 			showAlert("Select a customer before exporting", "warning");
@@ -476,24 +681,30 @@ export default {
 			showAlert("Nothing to export — run a query first", "warning");
 			return;
 		}
-		// Library-free Excel export: build an HTML table that Excel opens natively as .xls.
-		// Avoids reliance on XLSX.utils which may be unreachable through Appsmith's sandbox.
-		const esc = (v) => {
-			if (v === null || v === undefined) return "";
-			if (typeof v === "object") v = JSON.stringify(v);
-			return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-		};
-		const header = "<tr>" + fields.map(f => `<th>${esc(f)}</th>`).join("") + "</tr>";
-		const tbody = rows.map(r => "<tr>" + fields.map(f => `<td>${esc(r[f])}</td>`).join("") + "</tr>").join("");
-		const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body><table>${header}${tbody}</table></body></html>`;
-
 		const customer = UBMUtils.activeCustomerLabel().replace(/\s+/g, "_");
 		const keys = UBMUtils.selectedKeys().join("+");
 		const stamp = moment().format("YYYYMMDD-HHmmss");
-		const filename = `${customer}-${keys}-${stamp}.xls`;
+		const stem = `${customer}-${keys}-${stamp}`;
 
-		const mime = "application/vnd.ms-excel";
-		download(`data:${mime};charset=utf-8,${encodeURIComponent(html)}`, filename, mime);
+		// ZIP entries are stored uncompressed, so a very wide/long result can build a
+		// file big enough to hurt the browser tab. Past the ceiling, hand back CSV
+		// rather than hang: same data, and Excel still opens it.
+		const MAX_BYTES = 64 * 1024 * 1024;
+		let bytes = null;
+		try {
+			bytes = UBMUtils.buildXlsx(rows, fields);
+		} catch (e) {
+			console.error("XLSX build failed:", e);
+		}
+		if (!bytes || bytes.length > MAX_BYTES) {
+			const why = bytes ? "too large for an Excel file" : "couldn't be written as Excel";
+			showAlert(`This export is ${why} — downloading it as CSV instead.`, "warning");
+			UBMUtils.exportCsv();
+			return;
+		}
+		const filename = `${stem}.xlsx`;
+		const mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+		download(`data:${mime};base64,${UBMUtils._base64(bytes)}`, filename, mime);
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
