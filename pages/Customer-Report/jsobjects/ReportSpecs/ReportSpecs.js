@@ -44,7 +44,8 @@ export default {
 		// UBM team 2026-06-17. Do not re-add without a real source column.
 
 		// --- Vendor / account identity ---
-		{ value: "vendor", label: "Vendor", description: "Vendor / utility provider name", sql: "COALESCE(cvn.pretty_name, amf.vendor_code) AS \"vendor\"" },
+		{ value: "vendor", label: "Vendor", description: "Vendor / utility provider name", sql: "COALESCE((SELECT NULLIF(btrim(cpv.name), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim(pv.name), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1), amf.vendor_code) AS \"vendor\"" },
+		{ value: "vendorNameAp", label: "Vendor Name (AP)", description: "Remittance / accounts-payable name for the vendor — the name an ERP such as JDE is most likely to expect", sql: "COALESCE((SELECT NULLIF(btrim(cpv.remittance_name), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim(pv.remittance_name), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorNameAp\"" },
 		{ value: "vendorCode", label: "Vendor Code", description: "Vendor code (stable join key)", sql: "amf.vendor_code AS \"vendorCode\"" },
 		// Account # and Account Status come from the virtual account behind each feed
 		// row. Both are scalar subqueries rather than joins to the base FROM: they
@@ -109,12 +110,17 @@ export default {
 	// location_detail (lt) holds description/address/city/state/postcode for
 	// the location; locations (l) is the parent (id, customer_id, country).
 	// Pattern mirrors pages/Locations/queries/getLocationLists.
+	//
+	// The vendor name used to come from a customers_providers_pretty_name join here.
+	// That view carried the raw code as the "pretty" name for 209 of Simon's 377
+	// vendors, and joining a view on every report run cost us for the privilege. The
+	// vendor field now reads customers_providers_vendors.name instead — populated for
+	// 377 of 384 — as a scalar subquery, which also can't multiply rows the way that
+	// join could (a vendor code can appear more than once per customer).
 	fromClause:
 		`bill_management_v2.analytics_monthly_feed amf
 		LEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id
-		LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id
-		LEFT JOIN bill_management_v2.customers_providers_pretty_name cvn
-			ON cvn.code = amf.vendor_code AND cvn.customer_id = amf.customer_id`,
+		LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id`,
 
 	// Default ORDER BY (stable paging key) — also the tiebreaker for orderBy().
 	orderByClause: "l.id, amf.time_period",
@@ -566,7 +572,8 @@ export default {
 		const parts = ["bill_management_v2.analytics_monthly_feed amf"];
 		if (/\bl\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id");
 		if (/\blt\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = amf.location_id");
-		if (/\bcvn\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.customers_providers_pretty_name cvn ON cvn.code = amf.vendor_code AND cvn.customer_id = amf.customer_id");
+		// Vendor and account columns are scalar subqueries off amf, so they need no
+		// join here — they carry their own FROM.
 		return parts.join("\n");
 	},
 
