@@ -751,40 +751,186 @@ export default {
 		return lines.join(eol);
 	},
 
-	// Excel serializer — same approach as the Customer page's UBMUtils.exportXlsx,
-	// which produces a file Excel opens as a real spreadsheet: an HTML table served
-	// under the Excel mime type with an .xls extension. A true binary .xlsx would
-	// need SheetJS, whose XLSX.utils is blocked by Appsmith's JS sandbox.
-	//
-	// Values Excel would silently reformat on the way in are marked as text with
-	// mso-number-format so they survive the round trip. Genuine measures are left
-	// alone so charges and consumption still sum in the sheet.
-	//
-	// Some of that has to be decided per column, not per value: a GL code of
-	// "501480.000" and a charge of "1234.500" are the same shape, and Excel drops
-	// the trailing zeros on both. So identifier columns — site/zip/vendor codes and
-	// every account attribute (GL code, GL description, …) — are always text, and
-	// everything else falls back to a per-value check for leading zeros and for
-	// digit strings past Excel's 15-digit precision.
+	// ----- Excel export -----
+	// The library-free .xls trick (an HTML table under the Excel mime type) renders
+	// as raw markup in Numbers and Sheets, and SheetJS's XLSX.utils is blocked by
+	// Appsmith's JS sandbox — so this writes a real .xlsx by hand. An xlsx is just a
+	// ZIP of XML parts; entries are stored uncompressed, which costs file size but
+	// needs no deflate implementation. Opens natively in Excel, Numbers and Sheets.
+
+	// Columns whose values are identifiers, not measures, and so must stay text: a
+	// site number has to survive as "0115" rather than 115, and a GL code as
+	// "501480.000" rather than 501480. Account attribute columns are added to this
+	// set at build time. Everything else is typed per value (see cellXml below), so
+	// charges and consumption still land as numbers and sum in the sheet.
 	textFields: ["locationNumber", "locationZip", "vendorCode"],
 
-	buildXlsHtml: (rows, fields) => {
-		const esc = v => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	_utf8: (str) => {
+		if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(str);
+		// Manual fallback, surrogate pairs included.
+		const out = [];
+		for (let i = 0; i < str.length; i++) {
+			let c = str.charCodeAt(i);
+			if (c >= 0xD800 && c <= 0xDBFF && i + 1 < str.length) {
+				const c2 = str.charCodeAt(i + 1);
+				if (c2 >= 0xDC00 && c2 <= 0xDFFF) { c = 0x10000 + ((c - 0xD800) << 10) + (c2 - 0xDC00); i++; }
+			}
+			if (c < 0x80) out.push(c);
+			else if (c < 0x800) out.push(0xC0 | (c >> 6), 0x80 | (c & 0x3F));
+			else if (c < 0x10000) out.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+			else out.push(0xF0 | (c >> 18), 0x80 | ((c >> 12) & 0x3F), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+		}
+		return new Uint8Array(out);
+	},
+
+	_crc32: (bytes) => {
+		const table = new Int32Array(256);
+		for (let n = 0; n < 256; n++) {
+			let c = n;
+			for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+			table[n] = c;
+		}
+		let crc = -1;
+		for (let i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ table[(crc ^ bytes[i]) & 0xFF];
+		return (crc ^ -1) >>> 0;
+	},
+
+	// Minimal ZIP writer, stored (method 0) entries only.
+	// files: [{ name, data: Uint8Array }]
+	_zip: (files) => {
+		const u16 = n => new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF]);
+		const u32 = n => new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF]);
+		const DOS_DATE = 0x0021; // 1980-01-01; fixed so exports are byte-identical
+		const parts = [];
+		const central = [];
+		let offset = 0;
+		files.forEach(f => {
+			const name = ReportSpecs._utf8(f.name);
+			const crc = ReportSpecs._crc32(f.data);
+			const size = f.data.length;
+			// Local file header: sig, version, flags (bit 11 = UTF-8 names), method,
+			// time, date, crc, compressed size, uncompressed size, name len, extra len.
+			[u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(DOS_DATE),
+			 u32(crc), u32(size), u32(size), u16(name.length), u16(0), name, f.data
+			].forEach(c => parts.push(c));
+			central.push([u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(DOS_DATE),
+				u32(crc), u32(size), u32(size), u16(name.length), u16(0), u16(0), u16(0), u16(0),
+				u32(0), u32(offset), name]);
+			offset += 30 + name.length + size;
+		});
+		let cdSize = 0;
+		central.forEach(entry => entry.forEach(c => { parts.push(c); cdSize += c.length; }));
+		[u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length),
+		 u32(cdSize), u32(offset), u16(0)].forEach(c => parts.push(c));
+
+		let total = 0;
+		parts.forEach(p => { total += p.length; });
+		const out = new Uint8Array(total);
+		let at = 0;
+		parts.forEach(p => { out.set(p, at); at += p.length; });
+		return out;
+	},
+
+	_base64: (bytes) => {
+		let bin = "";
+		const CHUNK = 0x8000; // apply() blows the stack on much more than this
+		for (let i = 0; i < bytes.length; i += CHUNK) {
+			bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+		}
+		return btoa(bin);
+	},
+
+	// Build the .xlsx as bytes.
+	buildXlsx: (rows, fields) => {
 		const alwaysText = {};
 		ReportSpecs.textFields.forEach(f => { alwaysText[f] = true; });
 		ReportSpecs.accountAttrColumns().forEach(o => { alwaysText[o.value] = true; });
-		const cell = (v, field) => {
-			if (v === null || v === undefined) return "<td></td>";
+
+		const esc = s => String(s)
+			.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
+			.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		const colName = (i) => {
+			let s = "", n = i + 1;
+			while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+			return s;
+		};
+		// Identifier columns are text by definition. Anywhere else a numeric-looking
+		// value is written as a number, except the two shapes where that would lose
+		// information: a leading zero (an identifier, not a measure), and a whole
+		// number longer than Excel's 15-digit precision (an account number). Long
+		// decimals are left numeric — those are float noise off the feed, and Excel
+		// rounding 107.87800000000001 to 107.878 is the right answer.
+		const isNumeric = (field, s) => {
+			if (alwaysText[field]) return false;
+			if (!/^-?\d+(\.\d+)?$/.test(s)) return false;
+			if (/^-?0\d/.test(s)) return false;
+			return /\./.test(s) || s.replace(/-/g, "").length <= 15;
+		};
+		// Strings go through the shared-string table rather than inline. This data
+		// repeats heavily — the same location, vendor and unit on every row — so one
+		// <si> per distinct value and a bare index per cell is far smaller than an
+		// inline <is><t>. With entries stored uncompressed that's the difference
+		// between a large export producing a file and falling back to CSV.
+		const strings = new Map();
+		let strRefs = 0;
+		const strIndex = (s) => {
+			strRefs++;
+			let i = strings.get(s);
+			if (i === undefined) { i = strings.size; strings.set(s, i); }
+			return i;
+		};
+		const cellXml = (v, field, ref) => {
+			if (v === null || v === undefined) return "";
 			if (typeof v === "object") v = JSON.stringify(v);
 			const s = String(v);
-			const forceText = alwaysText[field] || /^0\d+$/.test(s) || /^\d{16,}$/.test(s);
-			return forceText
-				? `<td style="mso-number-format:'\\@'">${esc(s)}</td>`
-				: `<td>${esc(s)}</td>`;
+			if (s === "") return "";
+			if (typeof v === "number" || isNumeric(field, s)) return `<c r="${ref}"><v>${esc(s)}</v></c>`;
+			return `<c r="${ref}" t="s"><v>${strIndex(s)}</v></c>`;
 		};
-		const head = "<tr>" + fields.map(f => `<th>${esc(ReportSpecs.exportLabel(f))}</th>`).join("") + "</tr>";
-		const body = rows.map(r => "<tr>" + fields.map(f => cell(r[f], f)).join("") + "</tr>").join("");
-		return `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body><table>${head}${body}</table></body></html>`;
+
+		const sheet = [];
+		sheet.push('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
+		sheet.push('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>');
+		sheet.push("<row r=\"1\">" + fields.map((f, i) =>
+			`<c r="${colName(i)}1" t="s"><v>${strIndex(String(ReportSpecs.exportLabel(f)))}</v></c>`
+		).join("") + "</row>");
+		rows.forEach((r, ri) => {
+			const n = ri + 2;
+			sheet.push(`<row r="${n}">` + fields.map((f, i) => cellXml(r[f], f, colName(i) + n)).join("") + "</row>");
+		});
+		sheet.push("</sheetData></worksheet>");
+
+		const sst = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+			`<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${strRefs}" uniqueCount="${strings.size}">`];
+		strings.forEach((_i, s) => { sst.push(`<si><t xml:space="preserve">${esc(s)}</t></si>`); });
+		sst.push("</sst>");
+
+		const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+		const files = [
+			{ name: "[Content_Types].xml", data: XML +
+				'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+				'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+				'<Default Extension="xml" ContentType="application/xml"/>' +
+				'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+				'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+				'<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>' +
+				"</Types>" },
+			{ name: "_rels/.rels", data: XML +
+				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+				'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+				"</Relationships>" },
+			{ name: "xl/workbook.xml", data: XML +
+				'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+				'<sheets><sheet name="Report" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+			{ name: "xl/_rels/workbook.xml.rels", data: XML +
+				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+				'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+				'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>' +
+				"</Relationships>" },
+			{ name: "xl/worksheets/sheet1.xml", data: sheet.join("") },
+			{ name: "xl/sharedStrings.xml", data: sst.join("") }
+		];
+		return ReportSpecs._zip(files.map(f => ({ name: f.name, data: ReportSpecs._utf8(f.data) })));
 	},
 
 	exportCsv: async () => {
@@ -817,14 +963,26 @@ export default {
 			return;
 		}
 		const fields = ReportSpecs.exportFields(rows);
-		const filename = `${ReportSpecs.filenameStem()}.xls`;
-		const mime = "application/vnd.ms-excel";
-		// The Customer page hands download() a data: URI. Here the payload can be a
-		// quarter-million rows, and encodeURIComponent-ing that much HTML into a URL
-		// is what would fall over first — so pass the markup straight through and let
-		// download() wrap it in a Blob under the same mime type. Identical bytes on
-		// disk, no URL length ceiling.
-		download(ReportSpecs.buildXlsHtml(rows, fields), filename, mime);
+		const stem = ReportSpecs.filenameStem();
+		// ZIP entries are stored uncompressed, so a very wide/long report can build a
+		// file big enough to hurt the browser tab. Past the ceiling, hand back the CSV
+		// rather than hang: it carries the same data and Excel still opens it.
+		const MAX_BYTES = 64 * 1024 * 1024;
+		let bytes = null;
+		try {
+			bytes = ReportSpecs.buildXlsx(rows, fields);
+		} catch (e) {
+			console.error("XLSX build failed:", e);
+		}
+		if (!bytes || bytes.length > MAX_BYTES) {
+			const why = bytes ? "too large for an Excel file" : "couldn't be written as Excel";
+			showAlert(`This export is ${why} — downloading it as CSV instead.`, "warning");
+			download("﻿" + ReportSpecs.buildCsv(rows, fields, "\r\n"), `${stem}.csv`, "text/csv;charset=utf-8");
+			return;
+		}
+		const filename = `${stem}.xlsx`;
+		const mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+		download(`data:${mime};base64,${ReportSpecs._base64(bytes)}`, filename, mime);
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
