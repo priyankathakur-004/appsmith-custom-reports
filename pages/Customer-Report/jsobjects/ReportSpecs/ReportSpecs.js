@@ -43,9 +43,16 @@ export default {
 		// (location_division / top / second / third group) — confirmed by
 		// UBM team 2026-06-17. Do not re-add without a real source column.
 
-		// --- Vendor / bill identity ---
+		// --- Vendor / account identity ---
 		{ value: "vendor", label: "Vendor", description: "Vendor / utility provider name", sql: "COALESCE(cvn.pretty_name, amf.vendor_code) AS \"vendor\"" },
 		{ value: "vendorCode", label: "Vendor Code", description: "Vendor code (stable join key)", sql: "amf.vendor_code AS \"vendorCode\"" },
+		// Account # and Account Status come from the virtual account behind each feed
+		// row. Both are scalar subqueries rather than joins to the base FROM: they
+		// cost nothing when the field isn't selected, and — unlike a join to
+		// virtual_accounts_status, which we can't prove is one row per account —
+		// they can't quietly multiply the report's rows.
+		{ value: "accountNumber", label: "Account #", description: "Utility account number as it appears on the bill", sql: "(SELECT va.account_code FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id) AS \"accountNumber\"" },
+		{ value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status", sql: "(SELECT vas.account_status FROM bill_management_v2.virtual_accounts_status vas WHERE vas.virtual_account_id = amf.virtual_account_id LIMIT 1) AS \"accountStatus\"" },
 		{ value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
 		{ value: "utilityType", label: "Service / Utility Type", description: "Type or category of utility type.", sql: "amf.utility_type AS \"utilityType\"" },
 
@@ -763,7 +770,7 @@ export default {
 	// "501480.000" rather than 501480. Account attribute columns are added to this
 	// set at build time. Everything else is typed per value (see cellXml below), so
 	// charges and consumption still land as numbers and sum in the sheet.
-	textFields: ["locationNumber", "locationZip", "vendorCode"],
+	textFields: ["locationNumber", "locationZip", "vendorCode", "accountNumber"],
 
 	_utf8: (str) => {
 		if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(str);
