@@ -206,74 +206,89 @@ export default {
 		return `(SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '${code}' AND active IS NOT FALSE LIMIT 1)`;
 	},
 
-	// Visible-fields options for the FieldsSelect dropdown. Account attributes are
-	// NOT listed here — they're picked in AccountAttributesSelect and become columns
-	// automatically (see accountAttrColumns).
-	fieldOptions: () => ReportSpecs.visibleFieldOptions.map(f => ({ label: f.label, value: f.value })),
-
-	// ----- Account attributes as output columns -----
-	// Picking an attribute in AccountAttributesSelect used to filter the report but
-	// never showed the value, so GL Code / GL Description could be filtered on but
-	// not reported on. Each picked attribute name now also becomes a report column,
-	// pulled per row from the virtual account's attribute mapping. Picking values in
-	// AccountAttributeValuesSelect still filters (see filterClauses); picking only a
-	// name adds the column with no filter.
+	// ----- Visible Columns -----
+	// One picker chooses every output column: the catalog above plus the customer's
+	// account attributes (GL Code 1, GL Allocation 1 (%), Constellation Acct ID, …).
+	// Attributes used to be added from the Account Attributes filter instead, which
+	// meant filtering on one forced its column into the report and there was no way
+	// to deselect it. That picker now only narrows the values list you filter by.
 	//
-	// A VA can carry the same attribute more than once, so values are aggregated
-	// with " | ". This is a correlated subquery per attribute — fine for a page of
-	// rows, noticeably slower on a large export with several attributes picked.
-	accountAttrColumns: () => {
-		const names = (typeof AccountAttributesSelect !== "undefined" && AccountAttributesSelect.selectedOptionValues) || [];
-		const used = {};
-		return names
-			.filter(n => n != null && String(n).trim() !== "")
-			.map(n => {
-				const name = String(n).trim();
-				// Alias must be a stable, SQL-safe key: the grid uses it as a column
-				// field and as the store key for renames/sorts/filters.
-				let alias = "attr_" + name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-				if (alias === "attr_") alias = "attr_unnamed";
-				if (used[alias]) alias = alias + "_" + (++used[alias]); else used[alias] = 1;
-				const q = ReportSpecs._quote(name);
-				return {
-					value: alias,
-					label: name,
-					description: "Account attribute: " + name,
-					sql:
-						"(SELECT string_agg(DISTINCT vam.attribute_value, ' | ' ORDER BY vam.attribute_value) " +
-						"FROM bill_management_v2.virtual_accounts_attributes_mapping vam " +
-						"JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta " +
-						"ON vmeta.id = vam.virtual_accounts_attributes_metadata_id " +
-						"WHERE vam.virtual_account_id = amf.virtual_account_id " +
-						"AND vmeta.customer_id = amf.customer_id " +
-						"AND vmeta.deleted_at IS NULL " +
-						`AND vmeta.attribute_name = ${q}) AS "${alias}"`
-				};
-			});
+	// An attribute option carries its name inside the option value ("attr:GL Code 1")
+	// rather than an id resolved against getAccountAttributesList. The SQL builders
+	// below run inside query bodies, and Appsmith rejects a query that depends on
+	// another query's data — carrying the name means they never have to look it up.
+	ATTR_PREFIX: "attr:",
+
+	isAttrPick: (v) => String(v).indexOf(ReportSpecs.ATTR_PREFIX) === 0,
+
+	fieldOptions: () => {
+		const catalog = ReportSpecs.visibleFieldOptions.map(f => ({ label: f.label, value: f.value }));
+		const rows = (typeof getAccountAttributesList !== "undefined" && getAccountAttributesList.data) || [];
+		const attrs = (Array.isArray(rows) ? rows : [])
+			.filter(r => r && r.value)
+			.map(r => ({ label: "Account attribute · " + r.value, value: ReportSpecs.ATTR_PREFIX + r.value }));
+		return catalog.concat(attrs);
 	},
 
-	// Every column the current report can emit: the catalog plus whatever account
-	// attributes are picked. Single lookup source for SELECT/label/sort/filter code.
-	allFieldOptions: () => ReportSpecs.visibleFieldOptions.concat(ReportSpecs.accountAttrColumns()),
+	// One account attribute pick -> the same { value, label, description, sql } shape
+	// as a catalog entry, so everything downstream treats them alike. `value` is the
+	// SELECT alias and the grid's column key, so it has to be SQL- and grid-safe
+	// whatever the attribute is called ("GL Allocation 1 (%)").
+	//
+	// A virtual account can carry the same attribute more than once, so values are
+	// aggregated with " | ". This is a correlated subquery per attribute — fine for a
+	// page of rows, noticeably slower on a large export with several picked.
+	accountAttrColumn: (pick) => {
+		const name = String(pick).slice(ReportSpecs.ATTR_PREFIX.length).trim();
+		let alias = "attr_" + name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+		if (alias === "attr_") alias = "attr_unnamed";
+		return {
+			value: alias,
+			label: name,
+			description: "Account attribute: " + name,
+			sql:
+				"(SELECT string_agg(DISTINCT vam.attribute_value, ' | ' ORDER BY vam.attribute_value) " +
+				"FROM bill_management_v2.virtual_accounts_attributes_mapping vam " +
+				"JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta " +
+				"ON vmeta.id = vam.virtual_accounts_attributes_metadata_id " +
+				"WHERE vam.virtual_account_id = amf.virtual_account_id " +
+				"AND vmeta.customer_id = amf.customer_id " +
+				"AND vmeta.deleted_at IS NULL " +
+				`AND vmeta.attribute_name = ${ReportSpecs._quote(name)}) AS "${alias}"`
+		};
+	},
 
-	// The field list the grid should render, in order: visible-field picks (or the
-	// defaults when nothing is picked) followed by the account attribute columns.
-	// Mirrors exactly what selectClause() puts in the SELECT.
-	gridColumns: () => {
+	// The report's columns, resolved and in the order they were picked — catalog
+	// entries and attributes interleaved exactly as they sit in Visible Columns.
+	// Single source for the SELECT, the grid, exports and header labels.
+	selectedColumns: () => {
 		const picked = (FieldsSelect && FieldsSelect.selectedOptionValues) || [];
 		const fields = (Array.isArray(picked) && picked.length > 0) ? picked : ReportSpecs.defaultVisibleFields;
-		return fields.concat(ReportSpecs.accountAttrColumns().map(o => o.value));
+		const used = {};
+		const out = [];
+		fields.forEach(f => {
+			const o = ReportSpecs.isAttrPick(f)
+				? ReportSpecs.accountAttrColumn(f)
+				: ReportSpecs.visibleFieldOptions.find(x => x.value === f);
+			if (!o) return;
+			// Two attributes can slug down to the same alias; keep them distinct.
+			if (used[o.value]) { used[o.value]++; out.push(Object.assign({}, o, { value: o.value + "_" + used[o.value] })); }
+			else { used[o.value] = 1; out.push(o); }
+		});
+		return out;
 	},
+
+	accountAttrColumns: () => ReportSpecs.selectedColumns().filter(o => String(o.value).indexOf("attr_") === 0),
+
+	// Every column the report can emit: the catalog plus the attributes in play.
+	// Single lookup source for SELECT/label/sort/filter code.
+	allFieldOptions: () => ReportSpecs.visibleFieldOptions.concat(ReportSpecs.accountAttrColumns()),
+
+	gridColumns: () => ReportSpecs.selectedColumns().map(o => o.value),
 
 	// ----- SELECT builder -----
 	selectClause: () => {
-		const picked = (FieldsSelect && FieldsSelect.selectedOptionValues) || [];
-		const fields = (Array.isArray(picked) && picked.length > 0) ? picked : ReportSpecs.defaultVisibleFields;
-		const exprs = fields
-			.map(f => ReportSpecs.visibleFieldOptions.find(o => o.value === f))
-			.filter(Boolean)
-			.map(o => o.sql)
-			.concat(ReportSpecs.accountAttrColumns().map(o => o.sql));
+		const exprs = ReportSpecs.selectedColumns().map(o => o.sql);
 		return exprs.length > 0 ? exprs.join(", ") : "1 AS placeholder";
 	},
 
@@ -851,7 +866,13 @@ export default {
 	buildXlsx: (rows, fields) => {
 		const alwaysText = {};
 		ReportSpecs.textFields.forEach(f => { alwaysText[f] = true; });
-		ReportSpecs.accountAttrColumns().forEach(o => { alwaysText[o.value] = true; });
+		// Attributes are identifiers by default — a GL code of "501480.000" must not
+		// become 501480. The exception is a percentage: "GL Allocation 1 (%)" is a
+		// measure, and someone checking that a location's allocations total 100 needs
+		// it to be a number.
+		ReportSpecs.accountAttrColumns()
+			.filter(o => !/%/.test(o.label))
+			.forEach(o => { alwaysText[o.value] = true; });
 
 		const esc = s => String(s)
 			.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
