@@ -879,26 +879,41 @@ export default {
 			if (i === undefined) { i = strings.size; strings.set(s, i); }
 			return i;
 		};
-		const cellXml = (v, field, ref) => {
+		// Widest rendered value per column, used to size the columns below.
+		const widths = fields.map(() => 0);
+		const cellXml = (v, field, ref, ci) => {
 			if (v === null || v === undefined) return "";
 			if (typeof v === "object") v = JSON.stringify(v);
 			const s = String(v);
 			if (s === "") return "";
+			if (s.length > widths[ci]) widths[ci] = s.length;
 			if (typeof v === "number" || isNumeric(field, s)) return `<c r="${ref}"><v>${esc(s)}</v></c>`;
 			return `<c r="${ref}" t="s"><v>${strIndex(s)}</v></c>`;
 		};
 
-		const sheet = [];
-		sheet.push('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
-		sheet.push('<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>');
-		sheet.push("<row r=\"1\">" + fields.map((f, i) =>
-			`<c r="${colName(i)}1" t="s"><v>${strIndex(String(ReportSpecs.exportLabel(f)))}</v></c>`
-		).join("") + "</row>");
+		const body = [];
+		body.push("<row r=\"1\">" + fields.map((f, i) => {
+			const label = String(ReportSpecs.exportLabel(f));
+			if (label.length > widths[i]) widths[i] = label.length;
+			// s="1" is the bold header style from styles.xml.
+			return `<c r="${colName(i)}1" s="1" t="s"><v>${strIndex(label)}</v></c>`;
+		}).join("") + "</row>");
 		rows.forEach((r, ri) => {
 			const n = ri + 2;
-			sheet.push(`<row r="${n}">` + fields.map((f, i) => cellXml(r[f], f, colName(i) + n)).join("") + "</row>");
+			body.push(`<row r="${n}">` + fields.map((f, i) => cellXml(r[f], f, colName(i) + n, i)).join("") + "</row>");
 		});
-		sheet.push("</sheetData></worksheet>");
+
+		// Without explicit widths every column falls back to the default ~8 chars, so
+		// a location name wraps over five lines and the sheet is unreadable. Size to
+		// the widest value, floored so short columns keep a readable header and capped
+		// so one long description can't push the rest off screen.
+		const cols = "<cols>" + widths.map((w, i) =>
+			`<col min="${i + 1}" max="${i + 1}" width="${Math.min(45, Math.max(10, w + 2))}" customWidth="1"/>`
+		).join("") + "</cols>";
+
+		const sheet = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+			'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+			cols, "<sheetData>", body.join(""), "</sheetData></worksheet>"];
 
 		const sst = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
 			`<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${strRefs}" uniqueCount="${strings.size}">`];
@@ -906,6 +921,28 @@ export default {
 		sst.push("</sst>");
 
 		const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+
+		// Without a stylesheet each app picks its own default font, and Numbers picks a
+		// large one — so the size is pinned here. Two cell formats: 0 is the body,
+		// 1 is the bold header the row above references as s="1". The empty fills and
+		// borders are required filler; Excel rejects a stylesheet whose fills list
+		// doesn't start with "none" and "gray125".
+		const styles = XML +
+			'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+			'<fonts count="2">' +
+			'<font><sz val="10"/><name val="Calibri"/><family val="2"/></font>' +
+			'<font><b/><sz val="10"/><name val="Calibri"/><family val="2"/></font>' +
+			"</fonts>" +
+			'<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+			'<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+			'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+			'<cellXfs count="2">' +
+			'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+			'<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+			"</cellXfs>" +
+			'<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+			"</styleSheet>";
+
 		const files = [
 			{ name: "[Content_Types].xml", data: XML +
 				'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
@@ -914,6 +951,7 @@ export default {
 				'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
 				'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
 				'<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>' +
+				'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
 				"</Types>" },
 			{ name: "_rels/.rels", data: XML +
 				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
@@ -926,9 +964,11 @@ export default {
 				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
 				'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
 				'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>' +
+				'<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
 				"</Relationships>" },
 			{ name: "xl/worksheets/sheet1.xml", data: sheet.join("") },
-			{ name: "xl/sharedStrings.xml", data: sst.join("") }
+			{ name: "xl/sharedStrings.xml", data: sst.join("") },
+			{ name: "xl/styles.xml", data: styles }
 		];
 		return ReportSpecs._zip(files.map(f => ({ name: f.name, data: ReportSpecs._utf8(f.data) })));
 	},
