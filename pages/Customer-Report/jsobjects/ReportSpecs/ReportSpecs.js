@@ -89,6 +89,21 @@ export default {
 		{ group: "Charges", value: "totalChargesConsumption", label: "Consumption Charges", description: "Monetary value for consumption charges.", sql: "amf.total_charges_consumption AS \"totalChargesConsumption\"" },
 		{ group: "Charges", value: "totalChargesDemand", label: "Demand Charges", description: "Monetary value for demand charges.", sql: "amf.total_charges_demand AS \"totalChargesDemand\"" },
 		{ group: "Charges", value: "totalChargesTaxes", label: "Tax Charges", description: "Tax portion of the bill's charges — the column to use for the client's Tax line.", sql: "amf.total_charges_taxes AS \"totalChargesTaxes\"" },
+		// Late fees are the one charge type with no column on the feed. They live in
+		// analytics_billing_line_items as code = 'LATEFEE' (bill_type = 'live'), at
+		// bill grain — and a bill fans out to about 3.6 feed rows for this customer
+		// (25,374 rows from 7,098 bills), so attaching the bill's fee to each row
+		// would treble it in any total.
+		//
+		// Attributing it to one row per bill isn't available either: block_id repeats
+		// too (12,038 blocks across those 25,374 rows), so there's no column that
+		// picks a single row. Instead the fee is divided across the bill's rows. Any
+		// one row shows a share rather than the whole fee, which reads oddly, but the
+		// column totals correctly at every level of filtering — and a wrong total in a
+		// finance export is the worse failure. Net of recoupments, matching the Bill
+		// Health late-fee tab; split it with charge > 0 / charge < 0 if the two are
+		// ever needed apart.
+		{ group: "Charges", value: "lateCharges", label: "Late Charges", description: "Late fees on the bill behind this row, net of any recouped fees. A bill covers several report rows, so each row shows its share of the fee rather than the whole amount — the column still adds up correctly.", sql: "((SELECT COALESCE(SUM(li.charge), 0) FROM bill_management_v2.analytics_billing_line_items li WHERE li.bill_id = amf.bill_id AND li.code = 'LATEFEE' AND li.bill_type = 'live') / NULLIF((SELECT COUNT(*) FROM bill_management_v2.analytics_monthly_feed a2 WHERE a2.bill_id = amf.bill_id), 0)) AS \"lateCharges\"" },
 		{ group: "Charges", value: "totalChargesCustomer", label: "Customer Charges", description: "Monetary value for customer charges.", sql: "amf.total_charges_customer AS \"totalChargesCustomer\"" },
 		{ group: "Charges", value: "totalChargesOther", label: "Other Charges", description: "Charges outside the usage, consumption, demand, tax, customer, generation and commodity buckets — the closest the feed has to a miscellaneous line.", sql: "amf.total_charges_other AS \"totalChargesOther\"" },
 		{ group: "Charges", value: "totalChargesGeneration", label: "Generation Charges", description: "Monetary value for generation charges.", sql: "amf.total_charges_generation AS \"totalChargesGeneration\"" },
