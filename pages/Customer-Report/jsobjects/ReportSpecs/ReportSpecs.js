@@ -366,6 +366,19 @@ export default {
 			parts.push(ReportSpecs._inList("lt.location_status", statuses));
 		}
 
+		// Account status — the status of the utility account itself, which is the one
+		// the GL report needs; Location Status above is a different thing. EXISTS
+		// rather than a comparison against the SELECT's scalar subquery so the status
+		// table's index on virtual_account_id can be used.
+		const acctStatuses = (typeof AccountStatusSelect !== "undefined" && AccountStatusSelect.selectedOptionValues) || [];
+		if (acctStatuses.length > 0 && !skip("accountStatus")) {
+			const list = acctStatuses.map(v => ReportSpecs._quote(v)).join(",");
+			parts.push(
+				"AND EXISTS (SELECT 1 FROM bill_management_v2.virtual_accounts_status vas " +
+				`WHERE vas.virtual_account_id = amf.virtual_account_id AND vas.account_status IN (${list}))`
+			);
+		}
+
 		// Vendor — selecting by vendor code (the stable join key).
 		const vendors = (typeof VendorSelect !== "undefined" && VendorSelect.selectedOptionValues) || [];
 		if (vendors.length > 0 && !skip(["vendor", "vendorCode"])) {
@@ -1066,7 +1079,7 @@ export default {
 		const widgetNames = [
 			"FieldsSelect", "StartDate", "EndDate",
 			"LocationName", "StateProvinceSelect", "StateNotIn",
-			"CountrySelect", "LocationStatusSelect",
+			"CountrySelect", "LocationStatusSelect", "AccountStatusSelect",
 			"VendorSelect", "ServiceTypesSelect", "ServiceNotIn",
 			"LocationAttributesSelect", "AccountAttributesSelect",
 			"AccountAttributeValuesSelect"
