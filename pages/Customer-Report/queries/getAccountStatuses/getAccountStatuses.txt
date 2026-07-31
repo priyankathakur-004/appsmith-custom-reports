@@ -1,0 +1,6 @@
+SELECT DISTINCT vas.account_status AS value, vas.account_status AS label
+FROM bill_management_v2.virtual_accounts_status vas
+JOIN bill_management_v2.virtual_accounts va ON va.id = vas.virtual_account_id
+WHERE va.customer_id = {{ ReportSpecs.customerIdSql() }}
+  AND vas.account_status IS NOT NULL AND vas.account_status <> ''
+ORDER BY 1;

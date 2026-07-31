@@ -1,21 +1,12 @@
 {
-  "gitSyncId": "6a0ae213387c6535a0660595_98b1d4ab-e220-4a44-9f0b-ecae108c2af5",
-  "id": "Customer-Report_ReportSpecs.filterClauses",
+  "gitSyncId": "6a0ae213387c6535a0660595_47a1307f-b44f-45bc-88cb-f00416bf6d7a",
+  "id": "Customer-Report_ReportSpecs.selectedColumns",
   "pluginId": "js-plugin",
   "pluginType": "JS",
   "unpublishedAction": {
     "actionConfiguration": {
       "encodeParamsToggle": true,
-      "jsArguments": [
-        {
-          "name": "includeGrid",
-          "value": "{{true}}"
-        },
-        {
-          "name": "excludeField",
-          "value": "{{null}}"
-        }
-      ],
+      "jsArguments": [],
       "paginationType": "NONE",
       "timeoutInMillisecond": 10000
     },
@@ -31,8 +22,8 @@
         "key": "body"
       }
     ],
-    "fullyQualifiedName": "ReportSpecs.filterClauses",
-    "name": "filterClauses",
+    "fullyQualifiedName": "ReportSpecs.selectedColumns",
+    "name": "selectedColumns",
     "pageId": "Customer-Report",
     "runBehaviour": "MANUAL",
     "userSetOnLoad": false

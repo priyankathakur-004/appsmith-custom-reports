@@ -1,0 +1,11 @@
+SELECT
+  l.id::text AS value,
+  (
+    COALESCE(NULLIF(btrim(l.name::text), ''), 'Location ' || l.id::text)
+    || COALESCE(' (' || MAX(NULLIF(btrim(lt.location_number::text), '')) || ')', '')
+  )::varchar AS label
+FROM bill_management_v2.locations l
+LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id
+WHERE l.customer_id = {{ ReportSpecs.customerIdSql() }}
+GROUP BY l.id, l.name
+ORDER BY label;

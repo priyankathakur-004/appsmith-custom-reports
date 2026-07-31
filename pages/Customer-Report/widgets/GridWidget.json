@@ -5,7 +5,7 @@
   "borderWidth": "0",
   "bottomRow": 171,
   "boxShadow": "none",
-  "defaultModel": "{{ ({ rows: runReport.data, totalRows: (runReportCount.data && runReportCount.data[0] && Number(runReportCount.data[0].total)) || null, refreshKey: Number(appsmith.store.reportsRefreshKey) || 0, pageStart: Number(appsmith.store.reportsPageStart) || 0, responseTs: Number(appsmith.store.reportsResponseTs) || 0, columns: FieldsSelect.selectedOptionValues, fieldDefaults: ReportSpecs.fieldCatalog(), fieldDescriptions: ReportSpecs.fieldDescriptions(), fieldOverrides: appsmith.store.reportsFieldLabels || {}, distinctValues: getDistinctValues.data, distinctFieldResolved: appsmith.store.reportsDistinctField, distinctRespTs: Number(appsmith.store.reportsDistinctTs) || 0 }) }}",
+  "defaultModel": "{{ ({ rows: runReport.data, totalRows: (runReportCount.data && runReportCount.data[0] && Number(runReportCount.data[0].total)) || null, refreshKey: Number(appsmith.store.reportsRefreshKey) || 0, pageStart: Number(appsmith.store.reportsPageStart) || 0, responseTs: Number(appsmith.store.reportsResponseTs) || 0, columns: ReportSpecs.gridColumns(), fieldDefaults: ReportSpecs.fieldCatalog(), fieldDescriptions: ReportSpecs.fieldDescriptions(), fieldOverrides: appsmith.store.reportsFieldLabels || {}, distinctValues: getDistinctValues.data, distinctFieldResolved: appsmith.store.reportsDistinctField, distinctRespTs: Number(appsmith.store.reportsDistinctTs) || 0 }) }}",
   "dynamicBindingPathList": [
     {
       "key": "defaultModel"

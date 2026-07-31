@@ -1,11 +1,11 @@
 {
-  "gitSyncId": "6a0ae213387c6535a0660595_85754ffc-0f61-4d32-936a-be7b27787868",
-  "id": "Customer-Report_getStates",
+  "gitSyncId": "6a0ae213387c6535a0660595_de003a11-6e82-4cd6-bef7-cc2f0920adc2",
+  "id": "Customer-Report_getAccountStatuses",
   "pluginId": "postgres-plugin",
   "pluginType": "DB",
   "unpublishedAction": {
     "actionConfiguration": {
-      "body": "SELECT DISTINCT state AS value, state AS label\nFROM bill_management_v2.locations\nWHERE customer_id = {{ ReportSpecs.customerIdSql() }}\n  AND state IS NOT NULL AND state <> ''\n  {{ CountrySelect.selectedOptionValues && CountrySelect.selectedOptionValues.length > 0 ? \"AND country IN ('\" + CountrySelect.selectedOptionValues.join(\"','\") + \"')\" : \"\" }}\nORDER BY state;\n",
+      "body": "SELECT DISTINCT vas.account_status AS value, vas.account_status AS label\nFROM bill_management_v2.virtual_accounts_status vas\nJOIN bill_management_v2.virtual_accounts va ON va.id = vas.virtual_account_id\nWHERE va.customer_id = {{ ReportSpecs.customerIdSql() }}\n  AND vas.account_status IS NOT NULL AND vas.account_status <> ''\nORDER BY 1;\n",
       "encodeParamsToggle": true,
       "paginationType": "NONE",
       "pluginSpecifiedTemplates": [
@@ -13,7 +13,7 @@
           "value": false
         }
       ],
-      "timeoutInMillisecond": 10000
+      "timeoutInMillisecond": 15000
     },
     "confirmBeforeExecute": false,
     "datasource": {
@@ -27,7 +27,7 @@
         "key": "body"
       }
     ],
-    "name": "getStates",
+    "name": "getAccountStatuses",
     "pageId": "Customer-Report",
     "runBehaviour": "AUTOMATIC",
     "userSetOnLoad": true

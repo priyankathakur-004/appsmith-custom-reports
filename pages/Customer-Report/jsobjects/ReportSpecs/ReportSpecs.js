@@ -20,77 +20,85 @@ export default {
 	// - sql:         the SELECT expression, built into the query by selectClause().
 	visibleFieldOptions: [
 		// --- Time / period ---
-		{ value: "month", label: "Month", description: "Billing month bucket (YYYY-MM)", sql: "TO_CHAR(amf.time_period, 'YYYY-MM') AS \"month\"" },
-		{ value: "statementDate", label: "Statement Date", description: "Date associated with invoice date.", sql: "TO_CHAR(amf.statement_date, 'YYYY-MM-DD') AS \"statementDate\"" },
-		{ value: "startDate", label: "Service Start", description: "Date associated with service start date.", sql: "TO_CHAR(amf.start_date, 'YYYY-MM-DD') AS \"startDate\"" },
-		{ value: "endDate", label: "Service End", description: "Date associated with service end date.", sql: "TO_CHAR(amf.end_date, 'YYYY-MM-DD') AS \"endDate\"" },
-		{ value: "daysOfService", label: "Days of Service", description: "Number of days associated with days of service.", sql: "amf.days_of_service AS \"daysOfService\"" },
+		{ group: "Period", value: "month", label: "Month", description: "Billing month bucket (YYYY-MM)", sql: "TO_CHAR(amf.time_period, 'YYYY-MM') AS \"month\"" },
+		{ group: "Period", value: "statementDate", label: "Statement Date", description: "Date associated with invoice date.", sql: "TO_CHAR(amf.statement_date, 'YYYY-MM-DD') AS \"statementDate\"" },
+		{ group: "Period", value: "startDate", label: "Service Start", description: "Date associated with service start date.", sql: "TO_CHAR(amf.start_date, 'YYYY-MM-DD') AS \"startDate\"" },
+		{ group: "Period", value: "endDate", label: "Service End", description: "Date associated with service end date.", sql: "TO_CHAR(amf.end_date, 'YYYY-MM-DD') AS \"endDate\"" },
+		{ group: "Period", value: "daysOfService", label: "Days of Service", description: "Number of days associated with days of service.", sql: "amf.days_of_service AS \"daysOfService\"" },
 
 		// --- Location ---
-		{ value: "location", label: "Location", description: "Location name", sql: "l.name AS \"location\"" },
-		{ value: "locationId", label: "Location ID", description: "Unique identifier for location id.", sql: "l.id AS \"locationId\"" },
-		{ value: "locationAddress", label: "Location Address", description: "Street address of the location", sql: "l.address AS \"locationAddress\"" },
-		{ value: "locationCity", label: "City", description: "Location city", sql: "l.city AS \"locationCity\"" },
-		{ value: "locationState", label: "State/Province", description: "Location state or province", sql: "l.state AS \"locationState\"" },
-		{ value: "locationCountry", label: "Country", description: "Location country", sql: "l.country AS \"locationCountry\"" },
-		{ value: "locationZip", label: "Location Zip", description: "Location postal / ZIP code", sql: "l.postcode AS \"locationZip\"" },
-		{ value: "locationStatus", label: "Location Status", description: "Current status of status.", sql: "lt.location_status AS \"locationStatus\"" },
-		{ value: "buildingType", label: "Building Type", description: "Type or category of location building type.", sql: "l.building_type AS \"buildingType\"" },
-		{ value: "squareFeet", label: "Square Feet", description: "Location floor area (sq ft)", sql: "l.square_feet AS \"squareFeet\"" },
-		{ value: "locationNumber", label: "Location Number", description: "Reference number for site number.", sql: "lt.location_number AS \"locationNumber\"" },
+		{ group: "Location", value: "location", label: "Location", description: "Location name", sql: "l.name AS \"location\"" },
+		{ group: "Location", value: "locationId", label: "Location ID", description: "Unique identifier for location id.", sql: "l.id AS \"locationId\"" },
+		{ group: "Location", value: "locationAddress", label: "Location Address", description: "Street address of the location", sql: "l.address AS \"locationAddress\"" },
+		{ group: "Location", value: "locationCity", label: "City", description: "Location city", sql: "l.city AS \"locationCity\"" },
+		{ group: "Location", value: "locationState", label: "State/Province", description: "Location state or province", sql: "l.state AS \"locationState\"" },
+		{ group: "Location", value: "locationCountry", label: "Country", description: "Location country", sql: "l.country AS \"locationCountry\"" },
+		{ group: "Location", value: "locationZip", label: "Location Zip", description: "Location postal / ZIP code", sql: "l.postcode AS \"locationZip\"" },
+		{ group: "Location", value: "locationStatus", label: "Location Status", description: "Current status of status.", sql: "lt.location_status AS \"locationStatus\"" },
+		{ group: "Location", value: "buildingType", label: "Building Type", description: "Type or category of location building type.", sql: "l.building_type AS \"buildingType\"" },
+		{ group: "Location", value: "squareFeet", label: "Square Feet", description: "Location floor area (sq ft)", sql: "l.square_feet AS \"squareFeet\"" },
+		{ group: "Location", value: "locationNumber", label: "Location Number", description: "Reference number for site number.", sql: "lt.location_number AS \"locationNumber\"" },
 
 		// --- Hierarchy: removed. UBM has no hierarchy/grouping attributes
 		// (location_division / top / second / third group) — confirmed by
 		// UBM team 2026-06-17. Do not re-add without a real source column.
 
-		// --- Vendor / bill identity ---
-		{ value: "vendor", label: "Vendor", description: "Vendor / utility provider name", sql: "COALESCE(cvn.pretty_name, amf.vendor_code) AS \"vendor\"" },
-		{ value: "vendorCode", label: "Vendor Code", description: "Vendor code (stable join key)", sql: "amf.vendor_code AS \"vendorCode\"" },
-		{ value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
-		{ value: "utilityType", label: "Service / Utility Type", description: "Type or category of utility type.", sql: "amf.utility_type AS \"utilityType\"" },
+		// --- Vendor / account identity ---
+		{ group: "Vendor / Account", value: "vendor", label: "Vendor", description: "Vendor / utility provider name", sql: "COALESCE((SELECT NULLIF(btrim(cpv.name), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim(pv.name), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1), amf.vendor_code) AS \"vendor\"" },
+		{ group: "Vendor / Account", value: "vendorNameAp", label: "Vendor Name (AP)", description: "Remittance / accounts-payable name for the vendor — the name an ERP such as JDE is most likely to expect", sql: "COALESCE((SELECT NULLIF(btrim(cpv.remittance_name), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim(pv.remittance_name), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorNameAp\"" },
+		{ group: "Vendor / Account", value: "vendorCode", label: "Vendor Code", description: "Vendor code (stable join key)", sql: "amf.vendor_code AS \"vendorCode\"" },
+		// Account # and Account Status come from the virtual account behind each feed
+		// row. Both are scalar subqueries rather than joins to the base FROM: they
+		// cost nothing when the field isn't selected, and — unlike a join to
+		// virtual_accounts_status, which we can't prove is one row per account —
+		// they can't quietly multiply the report's rows.
+		{ group: "Vendor / Account", value: "accountNumber", label: "Account #", description: "Utility account number as it appears on the bill", sql: "(SELECT va.account_code FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id) AS \"accountNumber\"" },
+		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status", sql: "(SELECT vas.account_status FROM bill_management_v2.virtual_accounts_status vas WHERE vas.virtual_account_id = amf.virtual_account_id LIMIT 1) AS \"accountStatus\"" },
+		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
+		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Type or category of utility type.", sql: "amf.utility_type AS \"utilityType\"" },
 
 		// --- Usage / consumption ---
-		{ value: "uom", label: "Unit of Measure", description: "Unit of measure for consumption (e.g. CCF, KWH)", sql: "amf.total_consumption_uom AS \"uom\"" },
-		{ value: "totalConsumption", label: "Total Consumption", description: "Total metered consumption", sql: "amf.total_consumption AS \"totalConsumption\"" },
-		{ value: "totalGenConsumption", label: "Generation Consumption", description: "On-site generation consumption", sql: "amf.total_gen_consumption AS \"totalGenConsumption\"" },
-		{ value: "demand", label: "Max Demand", description: "Maximum demand (kW)", sql: "amf.max_demand AS \"demand\"" },
-		{ value: "cogenConsumption", label: "Cogeneration Consumption", description: "Cogeneration consumption", sql: "amf.total_cogen_consumption AS \"cogenConsumption\"" },
+		{ group: "Usage", value: "uom", label: "Unit of Measure", description: "Unit of measure for consumption (e.g. CCF, KWH)", sql: "amf.total_consumption_uom AS \"uom\"" },
+		{ group: "Usage", value: "totalConsumption", label: "Total Consumption", description: "Total metered consumption", sql: "amf.total_consumption AS \"totalConsumption\"" },
+		{ group: "Usage", value: "totalGenConsumption", label: "Generation Consumption", description: "On-site generation consumption", sql: "amf.total_gen_consumption AS \"totalGenConsumption\"" },
+		{ group: "Usage", value: "demand", label: "Max Demand", description: "Maximum demand (kW)", sql: "amf.max_demand AS \"demand\"" },
+		{ group: "Usage", value: "cogenConsumption", label: "Cogeneration Consumption", description: "Cogeneration consumption", sql: "amf.total_cogen_consumption AS \"cogenConsumption\"" },
 
 		// --- Consumption by time-of-use tier ---
-		{ value: "consumptionOnpeak", label: "Consumption (On-Peak)", description: "Consumption during on-peak hours", sql: "amf.total_consumption_onpeak AS \"consumptionOnpeak\"" },
-		{ value: "consumptionMidpeak", label: "Consumption (Mid-Peak)", description: "Consumption during mid-peak hours", sql: "amf.total_consumption_midpeak AS \"consumptionMidpeak\"" },
-		{ value: "consumptionOffpeak", label: "Consumption (Off-Peak)", description: "Consumption during off-peak hours", sql: "amf.total_consumption_offpeak AS \"consumptionOffpeak\"" },
-		{ value: "consumptionShoulderpeak", label: "Consumption (Shoulder-Peak)", description: "Consumption during shoulder-peak hours", sql: "amf.total_consumption_shoulderpeak AS \"consumptionShoulderpeak\"" },
-		{ value: "consumptionSuperpeak", label: "Consumption (Super-Peak)", description: "Consumption during super-peak hours", sql: "amf.total_consumption_superpeak AS \"consumptionSuperpeak\"" },
-		{ value: "consumptionSuperoffpeak", label: "Consumption (Super-Off-Peak)", description: "Consumption during super-off-peak hours", sql: "amf.total_consumption_superoffpeak AS \"consumptionSuperoffpeak\"" },
+		{ group: "Usage (time of use)", value: "consumptionOnpeak", label: "Consumption (On-Peak)", description: "Consumption during on-peak hours", sql: "amf.total_consumption_onpeak AS \"consumptionOnpeak\"" },
+		{ group: "Usage (time of use)", value: "consumptionMidpeak", label: "Consumption (Mid-Peak)", description: "Consumption during mid-peak hours", sql: "amf.total_consumption_midpeak AS \"consumptionMidpeak\"" },
+		{ group: "Usage (time of use)", value: "consumptionOffpeak", label: "Consumption (Off-Peak)", description: "Consumption during off-peak hours", sql: "amf.total_consumption_offpeak AS \"consumptionOffpeak\"" },
+		{ group: "Usage (time of use)", value: "consumptionShoulderpeak", label: "Consumption (Shoulder-Peak)", description: "Consumption during shoulder-peak hours", sql: "amf.total_consumption_shoulderpeak AS \"consumptionShoulderpeak\"" },
+		{ group: "Usage (time of use)", value: "consumptionSuperpeak", label: "Consumption (Super-Peak)", description: "Consumption during super-peak hours", sql: "amf.total_consumption_superpeak AS \"consumptionSuperpeak\"" },
+		{ group: "Usage (time of use)", value: "consumptionSuperoffpeak", label: "Consumption (Super-Off-Peak)", description: "Consumption during super-off-peak hours", sql: "amf.total_consumption_superoffpeak AS \"consumptionSuperoffpeak\"" },
 
 		// --- Charges (granular) ---
-		{ value: "totalCharges", label: "Total Charges", description: "Monetary value for total charges.", sql: "amf.total_charges AS \"totalCharges\"" },
-		{ value: "totalChargesUsage", label: "Usage Charges", description: "Monetary value for usage charges.", sql: "amf.total_charges_usage AS \"totalChargesUsage\"" },
-		{ value: "totalChargesConsumption", label: "Consumption Charges", description: "Monetary value for consumption charges.", sql: "amf.total_charges_consumption AS \"totalChargesConsumption\"" },
-		{ value: "totalChargesDemand", label: "Demand Charges", description: "Monetary value for demand charges.", sql: "amf.total_charges_demand AS \"totalChargesDemand\"" },
-		{ value: "totalChargesTaxes", label: "Tax Charges", description: "Monetary value for taxes charges.", sql: "amf.total_charges_taxes AS \"totalChargesTaxes\"" },
-		{ value: "totalChargesCustomer", label: "Customer Charges", description: "Monetary value for customer charges.", sql: "amf.total_charges_customer AS \"totalChargesCustomer\"" },
-		{ value: "totalChargesOther", label: "Other Charges", description: "Monetary value for other charges.", sql: "amf.total_charges_other AS \"totalChargesOther\"" },
-		{ value: "totalChargesGeneration", label: "Generation Charges", description: "Monetary value for generation charges.", sql: "amf.total_charges_generation AS \"totalChargesGeneration\"" },
-		{ value: "totalChargesCommodity", label: "Commodity Charges", description: "Monetary value for commodity charges.", sql: "amf.total_charges_commodity AS \"totalChargesCommodity\"" },
-		{ value: "totalChargesBilledUse", label: "Billed Use Charges", description: "Monetary value for billed usage subcharges.", sql: "amf.total_charges_billeduse AS \"totalChargesBilledUse\"" },
+		{ group: "Charges", value: "totalCharges", label: "Total Charges", description: "Monetary value for total charges.", sql: "amf.total_charges AS \"totalCharges\"" },
+		{ group: "Charges", value: "totalChargesUsage", label: "Usage Charges", description: "Monetary value for usage charges.", sql: "amf.total_charges_usage AS \"totalChargesUsage\"" },
+		{ group: "Charges", value: "totalChargesConsumption", label: "Consumption Charges", description: "Monetary value for consumption charges.", sql: "amf.total_charges_consumption AS \"totalChargesConsumption\"" },
+		{ group: "Charges", value: "totalChargesDemand", label: "Demand Charges", description: "Monetary value for demand charges.", sql: "amf.total_charges_demand AS \"totalChargesDemand\"" },
+		{ group: "Charges", value: "totalChargesTaxes", label: "Tax Charges", description: "Monetary value for taxes charges.", sql: "amf.total_charges_taxes AS \"totalChargesTaxes\"" },
+		{ group: "Charges", value: "totalChargesCustomer", label: "Customer Charges", description: "Monetary value for customer charges.", sql: "amf.total_charges_customer AS \"totalChargesCustomer\"" },
+		{ group: "Charges", value: "totalChargesOther", label: "Other Charges", description: "Monetary value for other charges.", sql: "amf.total_charges_other AS \"totalChargesOther\"" },
+		{ group: "Charges", value: "totalChargesGeneration", label: "Generation Charges", description: "Monetary value for generation charges.", sql: "amf.total_charges_generation AS \"totalChargesGeneration\"" },
+		{ group: "Charges", value: "totalChargesCommodity", label: "Commodity Charges", description: "Monetary value for commodity charges.", sql: "amf.total_charges_commodity AS \"totalChargesCommodity\"" },
+		{ group: "Charges", value: "totalChargesBilledUse", label: "Billed Use Charges", description: "Monetary value for billed usage subcharges.", sql: "amf.total_charges_billeduse AS \"totalChargesBilledUse\"" },
 
 		// --- Consumption charges by time-of-use tier ---
-		{ value: "chargesConsumptionOnpeak", label: "Consumption Charges (On-Peak)", description: "Monetary value for onpeak consumption charges.", sql: "amf.total_charges_consumption_onpeak AS \"chargesConsumptionOnpeak\"" },
-		{ value: "chargesConsumptionMidpeak", label: "Consumption Charges (Mid-Peak)", description: "Monetary value for midpeak consumption charges.", sql: "amf.total_charges_consumption_midpeak AS \"chargesConsumptionMidpeak\"" },
-		{ value: "chargesConsumptionOffpeak", label: "Consumption Charges (Off-Peak)", description: "Monetary value for offpeak consumption charges.", sql: "amf.total_charges_consumption_offpeak AS \"chargesConsumptionOffpeak\"" },
-		{ value: "chargesConsumptionShoulderpeak", label: "Consumption Charges (Shoulder-Peak)", description: "Monetary value for shoulderpeak consumption charges.", sql: "amf.total_charges_consumption_shoulderpeak AS \"chargesConsumptionShoulderpeak\"" },
-		{ value: "chargesConsumptionSuperpeak", label: "Consumption Charges (Super-Peak)", description: "Monetary value for superpeak consumption charges.", sql: "amf.total_charges_consumption_superpeak AS \"chargesConsumptionSuperpeak\"" },
+		{ group: "Charges (time of use)", value: "chargesConsumptionOnpeak", label: "Consumption Charges (On-Peak)", description: "Monetary value for onpeak consumption charges.", sql: "amf.total_charges_consumption_onpeak AS \"chargesConsumptionOnpeak\"" },
+		{ group: "Charges (time of use)", value: "chargesConsumptionMidpeak", label: "Consumption Charges (Mid-Peak)", description: "Monetary value for midpeak consumption charges.", sql: "amf.total_charges_consumption_midpeak AS \"chargesConsumptionMidpeak\"" },
+		{ group: "Charges (time of use)", value: "chargesConsumptionOffpeak", label: "Consumption Charges (Off-Peak)", description: "Monetary value for offpeak consumption charges.", sql: "amf.total_charges_consumption_offpeak AS \"chargesConsumptionOffpeak\"" },
+		{ group: "Charges (time of use)", value: "chargesConsumptionShoulderpeak", label: "Consumption Charges (Shoulder-Peak)", description: "Monetary value for shoulderpeak consumption charges.", sql: "amf.total_charges_consumption_shoulderpeak AS \"chargesConsumptionShoulderpeak\"" },
+		{ group: "Charges (time of use)", value: "chargesConsumptionSuperpeak", label: "Consumption Charges (Super-Peak)", description: "Monetary value for superpeak consumption charges.", sql: "amf.total_charges_consumption_superpeak AS \"chargesConsumptionSuperpeak\"" },
 
 		// --- Weather (raw degree-days only) ---
 		// UBM has no "normalization type" attribute; we expose raw HDD/CDD and
 		// any normalization is done client-side. (UBM team 2026-06-17.)
-		{ value: "totalHdd", label: "Heating Degree Days", description: "Number of days associated with heating degree days.", sql: "amf.total_hdd_billblock AS \"totalHdd\"" },
-		{ value: "totalCdd", label: "Cooling Degree Days", description: "Number of days associated with cooling degree days.", sql: "amf.total_cdd_billblock AS \"totalCdd\"" },
-		{ value: "degreeDaysTotal", label: "Degree Days (Total)", description: "Number of days associated with total degree days.", sql: "amf.total_dd_billblock AS \"degreeDaysTotal\"" },
-		{ value: "kwhPerDd", label: "kWh per Degree Day", description: "kWh per degree day (weather-normalized use)", sql: "amf.kwh_per_dd_billblock AS \"kwhPerDd\"" },
-		{ value: "genKwhPerDd", label: "Gen kWh per Degree Day", description: "Generation kWh per degree day", sql: "amf.gen_kwh_per_dd_billblock AS \"genKwhPerDd\"" }
+		{ group: "Weather", value: "totalHdd", label: "Heating Degree Days", description: "Number of days associated with heating degree days.", sql: "amf.total_hdd_billblock AS \"totalHdd\"" },
+		{ group: "Weather", value: "totalCdd", label: "Cooling Degree Days", description: "Number of days associated with cooling degree days.", sql: "amf.total_cdd_billblock AS \"totalCdd\"" },
+		{ group: "Weather", value: "degreeDaysTotal", label: "Degree Days (Total)", description: "Number of days associated with total degree days.", sql: "amf.total_dd_billblock AS \"degreeDaysTotal\"" },
+		{ group: "Weather", value: "kwhPerDd", label: "kWh per Degree Day", description: "kWh per degree day (weather-normalized use)", sql: "amf.kwh_per_dd_billblock AS \"kwhPerDd\"" },
+		{ group: "Weather", value: "genKwhPerDd", label: "Gen kWh per Degree Day", description: "Generation kWh per degree day", sql: "amf.gen_kwh_per_dd_billblock AS \"genKwhPerDd\"" }
 	],
 
 	defaultVisibleFields: [
@@ -102,12 +110,17 @@ export default {
 	// location_detail (lt) holds description/address/city/state/postcode for
 	// the location; locations (l) is the parent (id, customer_id, country).
 	// Pattern mirrors pages/Locations/queries/getLocationLists.
+	//
+	// The vendor name used to come from a customers_providers_pretty_name join here.
+	// That view carried the raw code as the "pretty" name for 209 of Simon's 377
+	// vendors, and joining a view on every report run cost us for the privilege. The
+	// vendor field now reads customers_providers_vendors.name instead — populated for
+	// 377 of 384 — as a scalar subquery, which also can't multiply rows the way that
+	// join could (a vendor code can appear more than once per customer).
 	fromClause:
 		`bill_management_v2.analytics_monthly_feed amf
 		LEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id
-		LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id
-		LEFT JOIN bill_management_v2.customers_providers_pretty_name cvn
-			ON cvn.code = amf.vendor_code AND cvn.customer_id = amf.customer_id`,
+		LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id`,
 
 	// Default ORDER BY (stable paging key) — also the tiebreaker for orderBy().
 	orderByClause: "l.id, amf.time_period",
@@ -118,7 +131,7 @@ export default {
 	// allows ORDER BY on output aliases, so sorting by alias is safe. The stable
 	// default is always appended as a tiebreaker so paging stays deterministic.
 	orderBy: () => {
-		const known = ReportSpecs.visibleFieldOptions.map(o => o.value);
+		const known = ReportSpecs.allFieldOptions().map(o => o.value);
 		let model = [];
 		try { model = JSON.parse(appsmith.store.reportsSortModel || "[]"); } catch (e) { model = []; }
 		const terms = (Array.isArray(model) ? model : [])
@@ -199,17 +212,109 @@ export default {
 		return `(SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '${code}' AND active IS NOT FALSE LIMIT 1)`;
 	},
 
-	// Visible-fields options for the FieldsSelect dropdown.
-	fieldOptions: () => ReportSpecs.visibleFieldOptions.map(f => ({ label: f.label, value: f.value })),
+	// ----- Visible Columns -----
+	// One picker chooses every output column: the catalog above plus the customer's
+	// account attributes (GL Code 1, GL Allocation 1 (%), Constellation Acct ID, …).
+	// Attributes used to be added from the Account Attributes filter instead, which
+	// meant filtering on one forced its column into the report and there was no way
+	// to deselect it. That picker now only narrows the values list you filter by.
+	//
+	// An attribute option carries its name inside the option value ("attr:GL Code 1")
+	// rather than an id resolved against getAccountAttributesList. The SQL builders
+	// below run inside query bodies, and Appsmith rejects a query that depends on
+	// another query's data — carrying the name means they never have to look it up.
+	ATTR_PREFIX: "attr:",
+
+	isAttrPick: (v) => String(v).indexOf(ReportSpecs.ATTR_PREFIX) === 0,
+
+	// Options are prefixed with their group and sorted alphabetically inside it.
+	// The list is 70-odd entries and the widget can't draw group headers, so without
+	// the prefix the ordering just looks arbitrary; with it, "Charges · " and
+	// "Location · " read as headings and typing a group name narrows to that section.
+	// Groups keep their catalog order (period → location → account → usage → charges
+	// → weather) rather than sorting alphabetically, so the list still reads from
+	// identity to measures. The prefix is display-only — exports and grid headers use
+	// the plain label from fieldCatalog().
+	fieldOptions: () => {
+		const order = [];
+		const byGroup = {};
+		ReportSpecs.visibleFieldOptions.forEach(f => {
+			const g = f.group || "Other";
+			if (!byGroup[g]) { byGroup[g] = []; order.push(g); }
+			byGroup[g].push({ label: g + " · " + f.label, value: f.value });
+		});
+		const catalog = [];
+		order.forEach(g => {
+			byGroup[g].sort((a, b) => a.label.localeCompare(b.label));
+			byGroup[g].forEach(o => catalog.push(o));
+		});
+		const rows = (typeof getAccountAttributesList !== "undefined" && getAccountAttributesList.data) || [];
+		const attrs = (Array.isArray(rows) ? rows : [])
+			.filter(r => r && r.value)
+			.map(r => ({ label: "Account attribute · " + r.value, value: ReportSpecs.ATTR_PREFIX + r.value }))
+			.sort((a, b) => a.label.localeCompare(b.label));
+		return catalog.concat(attrs);
+	},
+
+	// One account attribute pick -> the same { value, label, description, sql } shape
+	// as a catalog entry, so everything downstream treats them alike. `value` is the
+	// SELECT alias and the grid's column key, so it has to be SQL- and grid-safe
+	// whatever the attribute is called ("GL Allocation 1 (%)").
+	//
+	// A virtual account can carry the same attribute more than once, so values are
+	// aggregated with " | ". This is a correlated subquery per attribute — fine for a
+	// page of rows, noticeably slower on a large export with several picked.
+	accountAttrColumn: (pick) => {
+		const name = String(pick).slice(ReportSpecs.ATTR_PREFIX.length).trim();
+		let alias = "attr_" + name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+		if (alias === "attr_") alias = "attr_unnamed";
+		return {
+			value: alias,
+			label: name,
+			description: "Account attribute: " + name,
+			sql:
+				"(SELECT string_agg(DISTINCT vam.attribute_value, ' | ' ORDER BY vam.attribute_value) " +
+				"FROM bill_management_v2.virtual_accounts_attributes_mapping vam " +
+				"JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta " +
+				"ON vmeta.id = vam.virtual_accounts_attributes_metadata_id " +
+				"WHERE vam.virtual_account_id = amf.virtual_account_id " +
+				"AND vmeta.customer_id = amf.customer_id " +
+				"AND vmeta.deleted_at IS NULL " +
+				`AND vmeta.attribute_name = ${ReportSpecs._quote(name)}) AS "${alias}"`
+		};
+	},
+
+	// The report's columns, resolved and in the order they were picked — catalog
+	// entries and attributes interleaved exactly as they sit in Visible Columns.
+	// Single source for the SELECT, the grid, exports and header labels.
+	selectedColumns: () => {
+		const picked = (FieldsSelect && FieldsSelect.selectedOptionValues) || [];
+		const fields = (Array.isArray(picked) && picked.length > 0) ? picked : ReportSpecs.defaultVisibleFields;
+		const used = {};
+		const out = [];
+		fields.forEach(f => {
+			const o = ReportSpecs.isAttrPick(f)
+				? ReportSpecs.accountAttrColumn(f)
+				: ReportSpecs.visibleFieldOptions.find(x => x.value === f);
+			if (!o) return;
+			// Two attributes can slug down to the same alias; keep them distinct.
+			if (used[o.value]) { used[o.value]++; out.push(Object.assign({}, o, { value: o.value + "_" + used[o.value] })); }
+			else { used[o.value] = 1; out.push(o); }
+		});
+		return out;
+	},
+
+	accountAttrColumns: () => ReportSpecs.selectedColumns().filter(o => String(o.value).indexOf("attr_") === 0),
+
+	// Every column the report can emit: the catalog plus the attributes in play.
+	// Single lookup source for SELECT/label/sort/filter code.
+	allFieldOptions: () => ReportSpecs.visibleFieldOptions.concat(ReportSpecs.accountAttrColumns()),
+
+	gridColumns: () => ReportSpecs.selectedColumns().map(o => o.value),
 
 	// ----- SELECT builder -----
 	selectClause: () => {
-		const picked = (FieldsSelect && FieldsSelect.selectedOptionValues) || [];
-		const fields = (Array.isArray(picked) && picked.length > 0) ? picked : ReportSpecs.defaultVisibleFields;
-		const exprs = fields
-			.map(f => ReportSpecs.visibleFieldOptions.find(o => o.value === f))
-			.filter(Boolean)
-			.map(o => o.sql);
+		const exprs = ReportSpecs.selectedColumns().map(o => o.sql);
 		return exprs.length > 0 ? exprs.join(", ") : "1 AS placeholder";
 	},
 
@@ -281,6 +386,32 @@ export default {
 			parts.push(ReportSpecs._inList("lt.location_status", statuses));
 		}
 
+		// Account # — one option per account code. A code repeats across commodities
+		// (137636-551343 exists as WATER, SEWER and FIREPROTECTION), so the picker
+		// lists it once and selecting it takes every service on that account, which
+		// is how the GL report is read.
+		const accounts = (typeof AccountNumberSelect !== "undefined" && AccountNumberSelect.selectedOptionValues) || [];
+		if (accounts.length > 0 && !skip("accountNumber")) {
+			const list = accounts.map(v => ReportSpecs._quote(v)).join(",");
+			parts.push(
+				"AND EXISTS (SELECT 1 FROM bill_management_v2.virtual_accounts va " +
+				`WHERE va.id = amf.virtual_account_id AND va.account_code IN (${list}))`
+			);
+		}
+
+		// Account status — the status of the utility account itself, which is the one
+		// the GL report needs; Location Status above is a different thing. EXISTS
+		// rather than a comparison against the SELECT's scalar subquery so the status
+		// table's index on virtual_account_id can be used.
+		const acctStatuses = (typeof AccountStatusSelect !== "undefined" && AccountStatusSelect.selectedOptionValues) || [];
+		if (acctStatuses.length > 0 && !skip("accountStatus")) {
+			const list = acctStatuses.map(v => ReportSpecs._quote(v)).join(",");
+			parts.push(
+				"AND EXISTS (SELECT 1 FROM bill_management_v2.virtual_accounts_status vas " +
+				`WHERE vas.virtual_account_id = amf.virtual_account_id AND vas.account_status IN (${list}))`
+			);
+		}
+
 		// Vendor — selecting by vendor code (the stable join key).
 		const vendors = (typeof VendorSelect !== "undefined" && VendorSelect.selectedOptionValues) || [];
 		if (vendors.length > 0 && !skip(["vendor", "vendorCode"])) {
@@ -297,11 +428,24 @@ export default {
 			parts.push(ReportSpecs._inList("amf.utility_type", services, notIn));
 		}
 
-		// Location name / number — free text, partial match on name/address or id.
-		const loc = (typeof LocationName !== "undefined" && LocationName.text) || "";
-		if (loc.trim() !== "" && !skip(["location", "locationAddress", "locationId"])) {
-			const safe = String(loc).trim().replace(/'/g, "''");
-			parts.push(`AND (l.name ILIKE '%${safe}%' OR l.address ILIKE '%${safe}%' OR CAST(l.id AS TEXT) = '${safe}')`);
+		// Location name / number — LocationName is a multi-select of the customer's
+		// locations (option value = location id), populated by getLocationsForCustomer.
+		// It used to be a free-text box that matched name/address/id only, so a typed
+		// site number never matched and a combined "Name/Number" string matched
+		// nothing at all. The text branch is kept as a fallback (and now also looks at
+		// location_number) so the filter still works if the widget is ever swapped
+		// back to an input.
+		const locFields = ["location", "locationId", "locationNumber", "locationAddress"];
+		const locIds = (typeof LocationName !== "undefined" && LocationName.selectedOptionValues) || [];
+		const locText = (typeof LocationName !== "undefined" && LocationName.text) || "";
+		if (locIds.length > 0 && !skip(locFields)) {
+			parts.push(ReportSpecs._inList("l.id", locIds));
+		} else if (locText.trim() !== "" && !skip(locFields)) {
+			const safe = String(locText).trim().replace(/'/g, "''");
+			parts.push(
+				`AND (l.name ILIKE '%${safe}%' OR l.address ILIKE '%${safe}%' ` +
+				`OR CAST(lt.location_number AS TEXT) ILIKE '%${safe}%' OR CAST(l.id AS TEXT) = '${safe}')`
+			);
 		}
 
 		// Location attributes (LocationAttributesSelect) — source is the
@@ -352,7 +496,7 @@ export default {
 		let gridModel = {};
 		try { gridModel = JSON.parse(appsmith.store.reportsFilterModel || "{}"); } catch (e) { gridModel = {}; }
 		const rawExpr = (fieldValue) => {
-			const o = ReportSpecs.visibleFieldOptions.find(x => x.value === fieldValue);
+			const o = ReportSpecs.allFieldOptions().find(x => x.value === fieldValue);
 			if (!o) return null;
 			const i = o.sql.lastIndexOf(" AS ");
 			return (i >= 0 ? o.sql.slice(0, i) : o.sql).trim();
@@ -446,10 +590,11 @@ export default {
 
 	// ----- Set-filter distinct values (checkbox lists) -----
 	// Raw SQL expression for the column the grid is currently asking distinct
-	// values for. Whitelisted via visibleFieldOptions, so it's injection-safe.
+	// values for. Whitelisted via allFieldOptions (catalog + picked account
+	// attributes, whose names are quoted with _quote), so it's injection-safe.
 	distinctExpr: () => {
 		const field = appsmith.store.reportsDistinctField;
-		const o = ReportSpecs.visibleFieldOptions.find(x => x.value === field);
+		const o = ReportSpecs.allFieldOptions().find(x => x.value === field);
 		if (!o) return "NULL";
 		const i = o.sql.lastIndexOf(" AS ");
 		return (i >= 0 ? o.sql.slice(0, i) : o.sql).trim();
@@ -473,7 +618,8 @@ export default {
 		const parts = ["bill_management_v2.analytics_monthly_feed amf"];
 		if (/\bl\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id");
 		if (/\blt\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = amf.location_id");
-		if (/\bcvn\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.customers_providers_pretty_name cvn ON cvn.code = amf.vendor_code AND cvn.customer_id = amf.customer_id");
+		// Vendor and account columns are scalar subqueries off amf, so they need no
+		// join here — they carry their own FROM.
 		return parts.join("\n");
 	},
 
@@ -561,10 +707,11 @@ export default {
 	},
 
 	// Export fields honor the user's FieldsSelect picks (column order + which
-	// columns), falling back to whatever the export query returned.
+	// columns) plus any account attribute columns, falling back to whatever the
+	// export query returned.
 	exportFields: (rows) => {
-		const picked = (FieldsSelect && FieldsSelect.selectedOptionValues) || [];
-		if (Array.isArray(picked) && picked.length > 0) return picked;
+		const cols = ReportSpecs.gridColumns();
+		if (cols.length > 0) return cols;
 		return (rows && rows[0]) ? Object.keys(rows[0]) : [];
 	},
 
@@ -572,7 +719,7 @@ export default {
 		// Honor the user's browser-local column renames, then the catalog label.
 		const ov = (appsmith.store.reportsFieldLabels || {})[field];
 		if (ov) return ov;
-		const o = ReportSpecs.visibleFieldOptions.find(x => x.value === field);
+		const o = ReportSpecs.allFieldOptions().find(x => x.value === field);
 		return o ? o.label : field;
 	},
 
@@ -581,16 +728,16 @@ export default {
 	// shows friendly names and knows the baseline to reset a rename back to.
 	fieldCatalog: () => {
 		const m = {};
-		ReportSpecs.visibleFieldOptions.forEach(o => { m[o.value] = o.label; });
+		ReportSpecs.allFieldOptions().forEach(o => { m[o.value] = o.label; });
 		return m;
 	},
 
 	// Field descriptions keyed by field, mirroring fieldCatalog(). Delivered to the
 	// GridWidget model so each AG Grid column header can show an info (ⓘ) icon with
-	// this text on hover/click. Sourced from visibleFieldOptions[].description.
+	// this text on hover/click. Sourced from allFieldOptions()[].description.
 	fieldDescriptions: () => {
 		const m = {};
-		ReportSpecs.visibleFieldOptions.forEach(o => { m[o.value] = o.description || ""; });
+		ReportSpecs.allFieldOptions().forEach(o => { m[o.value] = o.description || ""; });
 		return m;
 	},
 
@@ -679,6 +826,234 @@ export default {
 		return lines.join(eol);
 	},
 
+	// ----- Excel export -----
+	// The library-free .xls trick (an HTML table under the Excel mime type) renders
+	// as raw markup in Numbers and Sheets, and SheetJS's XLSX.utils is blocked by
+	// Appsmith's JS sandbox — so this writes a real .xlsx by hand. An xlsx is just a
+	// ZIP of XML parts; entries are stored uncompressed, which costs file size but
+	// needs no deflate implementation. Opens natively in Excel, Numbers and Sheets.
+
+	// Columns whose values are identifiers, not measures, and so must stay text: a
+	// site number has to survive as "0115" rather than 115, and a GL code as
+	// "501480.000" rather than 501480. Account attribute columns are added to this
+	// set at build time. Everything else is typed per value (see cellXml below), so
+	// charges and consumption still land as numbers and sum in the sheet.
+	textFields: ["locationNumber", "locationZip", "vendorCode", "accountNumber"],
+
+	_utf8: (str) => {
+		if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(str);
+		// Manual fallback, surrogate pairs included.
+		const out = [];
+		for (let i = 0; i < str.length; i++) {
+			let c = str.charCodeAt(i);
+			if (c >= 0xD800 && c <= 0xDBFF && i + 1 < str.length) {
+				const c2 = str.charCodeAt(i + 1);
+				if (c2 >= 0xDC00 && c2 <= 0xDFFF) { c = 0x10000 + ((c - 0xD800) << 10) + (c2 - 0xDC00); i++; }
+			}
+			if (c < 0x80) out.push(c);
+			else if (c < 0x800) out.push(0xC0 | (c >> 6), 0x80 | (c & 0x3F));
+			else if (c < 0x10000) out.push(0xE0 | (c >> 12), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+			else out.push(0xF0 | (c >> 18), 0x80 | ((c >> 12) & 0x3F), 0x80 | ((c >> 6) & 0x3F), 0x80 | (c & 0x3F));
+		}
+		return new Uint8Array(out);
+	},
+
+	_crc32: (bytes) => {
+		const table = new Int32Array(256);
+		for (let n = 0; n < 256; n++) {
+			let c = n;
+			for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+			table[n] = c;
+		}
+		let crc = -1;
+		for (let i = 0; i < bytes.length; i++) crc = (crc >>> 8) ^ table[(crc ^ bytes[i]) & 0xFF];
+		return (crc ^ -1) >>> 0;
+	},
+
+	// Minimal ZIP writer, stored (method 0) entries only.
+	// files: [{ name, data: Uint8Array }]
+	_zip: (files) => {
+		const u16 = n => new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF]);
+		const u32 = n => new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF]);
+		const DOS_DATE = 0x0021; // 1980-01-01; fixed so exports are byte-identical
+		const parts = [];
+		const central = [];
+		let offset = 0;
+		files.forEach(f => {
+			const name = ReportSpecs._utf8(f.name);
+			const crc = ReportSpecs._crc32(f.data);
+			const size = f.data.length;
+			// Local file header: sig, version, flags (bit 11 = UTF-8 names), method,
+			// time, date, crc, compressed size, uncompressed size, name len, extra len.
+			[u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(DOS_DATE),
+			 u32(crc), u32(size), u32(size), u16(name.length), u16(0), name, f.data
+			].forEach(c => parts.push(c));
+			central.push([u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(DOS_DATE),
+				u32(crc), u32(size), u32(size), u16(name.length), u16(0), u16(0), u16(0), u16(0),
+				u32(0), u32(offset), name]);
+			offset += 30 + name.length + size;
+		});
+		let cdSize = 0;
+		central.forEach(entry => entry.forEach(c => { parts.push(c); cdSize += c.length; }));
+		[u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length),
+		 u32(cdSize), u32(offset), u16(0)].forEach(c => parts.push(c));
+
+		let total = 0;
+		parts.forEach(p => { total += p.length; });
+		const out = new Uint8Array(total);
+		let at = 0;
+		parts.forEach(p => { out.set(p, at); at += p.length; });
+		return out;
+	},
+
+	_base64: (bytes) => {
+		let bin = "";
+		const CHUNK = 0x8000; // apply() blows the stack on much more than this
+		for (let i = 0; i < bytes.length; i += CHUNK) {
+			bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+		}
+		return btoa(bin);
+	},
+
+	// Build the .xlsx as bytes.
+	buildXlsx: (rows, fields) => {
+		const alwaysText = {};
+		ReportSpecs.textFields.forEach(f => { alwaysText[f] = true; });
+		// Attributes are identifiers by default — a GL code of "501480.000" must not
+		// become 501480. The exception is a percentage: "GL Allocation 1 (%)" is a
+		// measure, and someone checking that a location's allocations total 100 needs
+		// it to be a number.
+		ReportSpecs.accountAttrColumns()
+			.filter(o => !/%/.test(o.label))
+			.forEach(o => { alwaysText[o.value] = true; });
+
+		const esc = s => String(s)
+			.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
+			.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		const colName = (i) => {
+			let s = "", n = i + 1;
+			while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
+			return s;
+		};
+		// Identifier columns are text by definition. Anywhere else a numeric-looking
+		// value is written as a number, except the two shapes where that would lose
+		// information: a leading zero (an identifier, not a measure), and a whole
+		// number longer than Excel's 15-digit precision (an account number). Long
+		// decimals are left numeric — those are float noise off the feed, and Excel
+		// rounding 107.87800000000001 to 107.878 is the right answer.
+		const isNumeric = (field, s) => {
+			if (alwaysText[field]) return false;
+			if (!/^-?\d+(\.\d+)?$/.test(s)) return false;
+			if (/^-?0\d/.test(s)) return false;
+			return /\./.test(s) || s.replace(/-/g, "").length <= 15;
+		};
+		// Strings go through the shared-string table rather than inline. This data
+		// repeats heavily — the same location, vendor and unit on every row — so one
+		// <si> per distinct value and a bare index per cell is far smaller than an
+		// inline <is><t>. With entries stored uncompressed that's the difference
+		// between a large export producing a file and falling back to CSV.
+		const strings = new Map();
+		let strRefs = 0;
+		const strIndex = (s) => {
+			strRefs++;
+			let i = strings.get(s);
+			if (i === undefined) { i = strings.size; strings.set(s, i); }
+			return i;
+		};
+		// Widest rendered value per column, used to size the columns below.
+		const widths = fields.map(() => 0);
+		const cellXml = (v, field, ref, ci) => {
+			if (v === null || v === undefined) return "";
+			if (typeof v === "object") v = JSON.stringify(v);
+			const s = String(v);
+			if (s === "") return "";
+			if (s.length > widths[ci]) widths[ci] = s.length;
+			if (typeof v === "number" || isNumeric(field, s)) return `<c r="${ref}"><v>${esc(s)}</v></c>`;
+			return `<c r="${ref}" t="s"><v>${strIndex(s)}</v></c>`;
+		};
+
+		const body = [];
+		body.push("<row r=\"1\">" + fields.map((f, i) => {
+			const label = String(ReportSpecs.exportLabel(f));
+			if (label.length > widths[i]) widths[i] = label.length;
+			// s="1" is the bold header style from styles.xml.
+			return `<c r="${colName(i)}1" s="1" t="s"><v>${strIndex(label)}</v></c>`;
+		}).join("") + "</row>");
+		rows.forEach((r, ri) => {
+			const n = ri + 2;
+			body.push(`<row r="${n}">` + fields.map((f, i) => cellXml(r[f], f, colName(i) + n, i)).join("") + "</row>");
+		});
+
+		// Without explicit widths every column falls back to the default ~8 chars, so
+		// a location name wraps over five lines and the sheet is unreadable. Size to
+		// the widest value, floored so short columns keep a readable header and capped
+		// so one long description can't push the rest off screen.
+		const cols = "<cols>" + widths.map((w, i) =>
+			`<col min="${i + 1}" max="${i + 1}" width="${Math.min(45, Math.max(10, w + 2))}" customWidth="1"/>`
+		).join("") + "</cols>";
+
+		const sheet = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+			'<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">',
+			cols, "<sheetData>", body.join(""), "</sheetData></worksheet>"];
+
+		const sst = ['<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+			`<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${strRefs}" uniqueCount="${strings.size}">`];
+		strings.forEach((_i, s) => { sst.push(`<si><t xml:space="preserve">${esc(s)}</t></si>`); });
+		sst.push("</sst>");
+
+		const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+
+		// Without a stylesheet each app picks its own default font, and Numbers picks a
+		// large one — so the size is pinned here. Two cell formats: 0 is the body,
+		// 1 is the bold header the row above references as s="1". The empty fills and
+		// borders are required filler; Excel rejects a stylesheet whose fills list
+		// doesn't start with "none" and "gray125".
+		const styles = XML +
+			'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
+			'<fonts count="2">' +
+			'<font><sz val="10"/><name val="Calibri"/><family val="2"/></font>' +
+			'<font><b/><sz val="10"/><name val="Calibri"/><family val="2"/></font>' +
+			"</fonts>" +
+			'<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+			'<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>' +
+			'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+			'<cellXfs count="2">' +
+			'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+			'<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>' +
+			"</cellXfs>" +
+			'<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>' +
+			"</styleSheet>";
+
+		const files = [
+			{ name: "[Content_Types].xml", data: XML +
+				'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
+				'<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
+				'<Default Extension="xml" ContentType="application/xml"/>' +
+				'<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' +
+				'<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' +
+				'<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/>' +
+				'<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' +
+				"</Types>" },
+			{ name: "_rels/.rels", data: XML +
+				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+				'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' +
+				"</Relationships>" },
+			{ name: "xl/workbook.xml", data: XML +
+				'<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+				'<sheets><sheet name="Report" sheetId="1" r:id="rId1"/></sheets></workbook>' },
+			{ name: "xl/_rels/workbook.xml.rels", data: XML +
+				'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+				'<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' +
+				'<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>' +
+				'<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
+				"</Relationships>" },
+			{ name: "xl/worksheets/sheet1.xml", data: sheet.join("") },
+			{ name: "xl/sharedStrings.xml", data: sst.join("") },
+			{ name: "xl/styles.xml", data: styles }
+		];
+		return ReportSpecs._zip(files.map(f => ({ name: f.name, data: ReportSpecs._utf8(f.data) })));
+	},
+
 	exportCsv: async () => {
 		if (ReportSpecs.customerIdSql() === "0") {
 			showAlert("Select a customer before exporting", "warning");
@@ -709,14 +1084,26 @@ export default {
 			return;
 		}
 		const fields = ReportSpecs.exportFields(rows);
-		// A true binary .xlsx needs a working library, and the installed SheetJS's
-		// XLSX.utils is blocked by Appsmith's JS sandbox. The library-free .xls
-		// tricks (HTML table / SpreadsheetML) open as raw markup in Numbers/Sheets.
-		// A UTF-8-BOM CSV opens natively as a spreadsheet in Excel, Numbers and
-		// Sheets — the BOM + CRLF is exactly what Excel expects for clean columns.
-		const csv = ReportSpecs.buildCsv(rows, fields, "\r\n");
-		const filename = `${ReportSpecs.filenameStem()}.csv`;
-		download("\ufeff" + csv, filename, "text/csv;charset=utf-8");
+		const stem = ReportSpecs.filenameStem();
+		// ZIP entries are stored uncompressed, so a very wide/long report can build a
+		// file big enough to hurt the browser tab. Past the ceiling, hand back the CSV
+		// rather than hang: it carries the same data and Excel still opens it.
+		const MAX_BYTES = 64 * 1024 * 1024;
+		let bytes = null;
+		try {
+			bytes = ReportSpecs.buildXlsx(rows, fields);
+		} catch (e) {
+			console.error("XLSX build failed:", e);
+		}
+		if (!bytes || bytes.length > MAX_BYTES) {
+			const why = bytes ? "too large for an Excel file" : "couldn't be written as Excel";
+			showAlert(`This export is ${why} — downloading it as CSV instead.`, "warning");
+			download("﻿" + ReportSpecs.buildCsv(rows, fields, "\r\n"), `${stem}.csv`, "text/csv;charset=utf-8");
+			return;
+		}
+		const filename = `${stem}.xlsx`;
+		const mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+		download(`data:${mime};base64,${ReportSpecs._base64(bytes)}`, filename, mime);
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
@@ -726,6 +1113,7 @@ export default {
 			"FieldsSelect", "StartDate", "EndDate",
 			"LocationName", "StateProvinceSelect", "StateNotIn",
 			"CountrySelect", "LocationStatusSelect",
+			"AccountNumberSelect", "AccountStatusSelect",
 			"VendorSelect", "ServiceTypesSelect", "ServiceNotIn",
 			"LocationAttributesSelect", "AccountAttributesSelect",
 			"AccountAttributeValuesSelect"
