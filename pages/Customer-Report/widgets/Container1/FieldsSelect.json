@@ -59,7 +59,7 @@
   "placeholderText": "Select",
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 48,
+  "rightColumn": 64,
   "serverSideFiltering": false,
   "sourceData": "{{ ReportSpecs.fieldOptions() }}",
   "topRow": 0,
