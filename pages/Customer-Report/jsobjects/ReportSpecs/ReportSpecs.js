@@ -153,6 +153,12 @@ export default {
 	//   "locationNumber"                        a catalog field, by value
 	//   { attr: "^gl\\s*code", label: "…" }     an account attribute, matched by name
 	//
+	// `columns` is what the report loads. `availableExtra` is anything else the
+	// report's Visible Columns picker offers — the workbook's "Visible Fields filter
+	// data items" column, minus the rows marked "used on report", which are `columns`.
+	// Seven of the eight reports list nothing extra, so their picker offers exactly
+	// what they load; only GL Allocations has a longer menu than it uses.
+	//
 	// The attribute form exists because the GL columns are not UBM columns — they are
 	// per-customer account attributes ("GL Code 1", "GL Allocation 1 (%)"), and their
 	// exact names differ between customers. Matching on a pattern at run time means
@@ -196,6 +202,18 @@ export default {
 					{ attr: "^gl\\s*code", label: "Customer GL Number", all: true },
 					{ attr: "gl\\s*desc", label: "GL Description", all: true },
 					{ attr: "gl\\s*alloc", label: "GL % Allocation", all: true }
+				],
+				// The 31 rows the workbook marks "Available fields not used on report".
+				// Nine of them have a UBM equivalent and are offered here; the rest —
+				// vendor and account addresses, Meter #, Service Description / Alias /
+				// Status, Service Point Location, Clean Account #, Misc Information,
+				// Audit Only — have none, and are on the unmapped list rather than
+				// guessed at. Account Status Date and Account Creation Date appearing
+				// in Engie's own list is what confirms those two columns are real.
+				availableExtra: [
+					"locationAddress", "locationCity", "locationState", "locationZip",
+					"locationCountry", "locationStatus", "vendorCode",
+					"accountCreatedDate", "accountActivityDate"
 				],
 				filters: {}
 			},
@@ -289,18 +307,40 @@ export default {
 		return (spec.all ? names : names.slice(0, 1)).map(n => ReportSpecs.ATTR_PREFIX + n);
 	},
 
+	// A list of column specs -> the concrete picks they resolve to, in order.
+	// Catalog values pass through; attribute specs expand against this customer's
+	// attribute names, and drop out entirely when it has none by that name.
+	_resolveSpecs: (specs) => {
+		const out = [];
+		(specs || []).forEach(c => {
+			if (typeof c === "string") { out.push(c); return; }
+			ReportSpecs._resolveAttr(c).forEach(a => out.push(a));
+		});
+		return out;
+	},
+
 	// The active preset's columns, resolved and in report order. Bound to
 	// FieldsSelect's default value, so choosing a report loads its columns and the
 	// user can still add or drop one afterwards.
 	presetColumns: () => {
 		const p = ReportSpecs.activePreset();
 		if (!p || !p.columns) return ReportSpecs.defaultVisibleFields;
-		const out = [];
-		p.columns.forEach(c => {
-			if (typeof c === "string") { out.push(c); return; }
-			ReportSpecs._resolveAttr(c).forEach(a => out.push(a));
-		});
-		return out;
+		return ReportSpecs._resolveSpecs(p.columns);
+	},
+
+	// What the Visible Columns picker offers for the active report: the columns it
+	// loads plus any availableExtra. null means "the whole catalog" — Custom Report,
+	// which is the one report with no field list of its own.
+	//
+	// Scoping the picker is the point of the workbook's "Visible Fields filter data
+	// items" column: Engie's own picker is per-report, not one list of everything.
+	// Note the consequence — for the seven reports that list no extras, the picker
+	// holds exactly the loaded columns, so a user can drop a column but not add one.
+	// Switch back to Custom Report to build against the full catalog.
+	presetAvailable: () => {
+		const p = ReportSpecs.activePreset();
+		if (!p || !p.columns) return null;
+		return p.availableExtra ? p.columns.concat(p.availableExtra) : p.columns;
 	},
 
 	// Preset columns that this customer's data can't supply — attribute patterns that
@@ -462,10 +502,17 @@ export default {
 	// Group prefix, alphabetical within the group, since the widget cannot draw group
 	// headers. Groups keep catalog order so the list runs identity to measures.
 	// Display only: exports and grid headers use the plain label from fieldCatalog().
+	// Scoped to the active report (see presetAvailable) — Custom Report gets the
+	// whole catalog, a preset gets its own field list.
 	fieldOptions: () => {
+		const scope = ReportSpecs.presetAvailable();
+		const allow = scope ? ReportSpecs._resolveSpecs(scope) : null;
+		const inScope = (v) => !allow || allow.indexOf(v) >= 0;
+
 		const order = [];
 		const byGroup = {};
 		ReportSpecs.visibleFieldOptions.forEach(f => {
+			if (!inScope(f.value)) return;
 			const g = f.group || "Other";
 			if (!byGroup[g]) { byGroup[g] = []; order.push(g); }
 			byGroup[g].push({ label: g + " · " + f.label, value: f.value });
@@ -479,6 +526,7 @@ export default {
 		const attrs = (Array.isArray(rows) ? rows : [])
 			.filter(r => r && r.value)
 			.map(r => ({ label: "Account attribute · " + r.value, value: ReportSpecs.ATTR_PREFIX + r.value }))
+			.filter(o => inScope(o.value))
 			.sort((a, b) => a.label.localeCompare(b.label));
 		return catalog.concat(attrs);
 	},
