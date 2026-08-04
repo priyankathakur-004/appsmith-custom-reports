@@ -179,8 +179,12 @@ export default {
 		});
 
 		return [
-			// Nothing preselected: the builder as it was before presets existed.
-			{ value: "custom", label: "Custom — build your own", columns: null, filters: {} },
+			// No preset columns or filters: the builder as it was before presets
+			// existed. Not empty, though — it falls through to defaultVisibleFields,
+			// so it opens on a usable usage-and-cost summary rather than a blank grid.
+			// Kept first, and kept as the fallback for an unset or unrecognised
+			// stored value, so there is always a way back to an open-ended report.
+			{ value: "custom", label: "Custom Report", columns: null, filters: {} },
 
 			// LOCATION NAME | LOCATION # | VENDOR NAME | ACCOUNT # | ACCOUNT STATUS |
 			// SERVICE TYPE | CUSTOMER GL # | GL DESCRIPTION | GL % ALLOCATION
