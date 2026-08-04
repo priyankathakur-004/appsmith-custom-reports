@@ -5,7 +5,7 @@
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
   "bottomRow": 9,
   "boxShadow": "none",
-  "defaultOptionValue": "{{ ReportSpecs.defaultVisibleFields }}",
+  "defaultOptionValue": "{{ ReportSpecs.presetColumns() }}",
   "dynamicBindingPathList": [
     {
       "key": "sourceData"

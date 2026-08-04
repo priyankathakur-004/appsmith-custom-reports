@@ -1,8 +1,9 @@
 export default {
 	// ----- Report Builder -----
-	// Field catalog and base query for the Cost Analysis - Trendline report. That
-	// name is no longer shown in the UI: the client reads this as a generic builder
-	// and needs several reports. All filters apply at the SQL layer.
+	// A generic builder: one field catalog, one base query, every filter applied at
+	// the SQL layer. reportPresets() below layers the client's named reports on top —
+	// picking one loads its columns and filters, and every control stays editable
+	// afterwards, so the builder is still a builder.
 
 	// ----- Field catalog -----
 	// { group, value (SELECT alias + grid column key), label (grid/export header),
@@ -14,6 +15,12 @@ export default {
 		{ group: "Period", value: "startDate", label: "Service Start", description: "Date associated with service start date.", sql: "TO_CHAR(amf.start_date, 'YYYY-MM-DD') AS \"startDate\"" },
 		{ group: "Period", value: "endDate", label: "Service End", description: "Date associated with service end date.", sql: "TO_CHAR(amf.end_date, 'YYYY-MM-DD') AS \"endDate\"" },
 		{ group: "Period", value: "daysOfService", label: "Days of Service", description: "Number of days associated with days of service.", sql: "amf.days_of_service AS \"daysOfService\"" },
+
+		// --- Customer ---
+		// The Simon Final Bill export leads with the customer's own name. It is the
+		// same for every row of a report (one customer per run), but the client's
+		// downstream file expects the column, so it is selectable.
+		{ group: "Customer", value: "customerName", label: "Customer Name", description: "Name of the customer the report is being run for", sql: "(SELECT cs.name FROM bill_management_v2.customers_search cs WHERE cs.id = amf.customer_id) AS \"customerName\"" },
 
 		// --- Location ---
 		{ group: "Location", value: "location", label: "Location", description: "Location name", sql: "l.name AS \"location\"" },
@@ -41,11 +48,25 @@ export default {
 		{ group: "Vendor / Account", value: "vendor", label: "Vendor", description: "Vendor name — the customer's pretty name where one is set, otherwise the global pretty name, otherwise the vendor's plain name", sql: "COALESCE((SELECT NULLIF(btrim(cvpn.pretty_name), '') FROM bill_management_v2.customers_vendors_pretty_name cvpn JOIN bill_management_v2.vendors v ON v.id = cvpn.vendor_id WHERE v.code = amf.vendor_code AND cvpn.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim(v.pretty_name), '') FROM bill_management_v2.vendors v WHERE v.code = amf.vendor_code LIMIT 1), (SELECT NULLIF(btrim(cpv.name), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim(pv.name), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1), amf.vendor_code) AS \"vendor\"" },
 		{ group: "Vendor / Account", value: "vendorNameAp", label: "Vendor Name (AP)", description: "Remittance / accounts-payable name for the vendor — the name an ERP such as JDE is most likely to expect", sql: "COALESCE((SELECT NULLIF(btrim(cpv.remittance_name), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim(pv.remittance_name), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorNameAp\"" },
 		{ group: "Vendor / Account", value: "vendorCode", label: "Vendor Code", description: "Vendor code (stable join key)", sql: "amf.vendor_code AS \"vendorCode\"" },
+		// The client's reports carry a numeric "FIQ Vendor ID" (1636, 1150, 1769 …).
+		// vendors.id is the only numeric vendor key UBM exposes and it is in the right
+		// range, but nobody has confirmed the two are the same number — see the
+		// unmapped-fields list in the commit message before handing this to the client.
+		{ group: "Vendor / Account", value: "vendorId", label: "Vendor ID", description: "UBM's numeric id for the vendor. Believed to be the same number as the client's FIQ Vendor ID, but not yet confirmed against Engie.", sql: "(SELECT v.id FROM bill_management_v2.vendors v WHERE v.code = amf.vendor_code LIMIT 1) AS \"vendorId\"" },
 		// Account # and Account Status: scalar subqueries, not joins. They cost nothing
 		// when unselected, and virtual_accounts_status isn't provably one row per
 		// account, so a join could have multiplied the report's rows.
 		{ group: "Vendor / Account", value: "accountNumber", label: "Account #", description: "Utility account number as it appears on the bill", sql: "(SELECT va.account_code FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id) AS \"accountNumber\"" },
 		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status", sql: "(SELECT vas.account_status FROM bill_management_v2.virtual_accounts_status vas WHERE vas.virtual_account_id = amf.virtual_account_id LIMIT 1) AS \"accountStatus\"" },
+		// Account created / activity dates. The Activation and Account Activity reports
+		// need them and the tables are certain, but the date column's *name* is not:
+		// nothing in this app reads one today. Rather than guess one name and risk a
+		// SQL error that breaks the whole report, the row is turned into JSON and the
+		// plausible keys are tried in turn — a key that doesn't exist yields NULL, not
+		// an error. So the column is blank until someone confirms the real name, and
+		// the rest of the report still runs. Confirm and replace with a plain column.
+		{ group: "Vendor / Account", value: "accountCreatedDate", label: "Account Created Date", description: "Date the account was created in UBM (the client's \"FIQ Account Creation Date\"). Blank until the source column is confirmed with the UBM team.", sql: "(SELECT LEFT(COALESCE(to_jsonb(va) ->> 'created_at', to_jsonb(va) ->> 'created_date', to_jsonb(va) ->> 'creation_date', to_jsonb(va) ->> 'activated_at'), 19) FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id) AS \"accountCreatedDate\"" },
+		{ group: "Vendor / Account", value: "accountActivityDate", label: "Account Activity Date", description: "Date the account's current status took effect — the activation date on an active account, the deactivation date on an inactive one. Blank until the source column is confirmed with the UBM team.", sql: "(SELECT LEFT(COALESCE(to_jsonb(vas) ->> 'status_date', to_jsonb(vas) ->> 'effective_date', to_jsonb(vas) ->> 'updated_at', to_jsonb(vas) ->> 'created_at'), 19) FROM bill_management_v2.virtual_accounts_status vas WHERE vas.virtual_account_id = amf.virtual_account_id LIMIT 1) AS \"accountActivityDate\"" },
 		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
 		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Type or category of utility type.", sql: "amf.utility_type AS \"utilityType\"" },
 
@@ -105,6 +126,233 @@ export default {
 		"month", "location", "locationNumber", "utilityType",
 		"vendor", "totalCharges", "totalConsumption", "uom"
 	],
+
+	// Every widget in the filter panel, including the column picker. Reset clears
+	// these, and so does switching report — both put each one back to its default,
+	// and the defaults are what the active preset drives.
+	FILTER_WIDGETS: [
+		"FieldsSelect", "StartDate", "EndDate",
+		"LocationName", "StateProvinceSelect", "StateNotIn",
+		"CountrySelect", "LocationStatusSelect",
+		"AccountNumberSelect", "AccountStatusSelect",
+		"VendorSelect", "ServiceTypesSelect", "ServiceNotIn",
+		"LocationAttributesSelect", "AccountAttributesSelect",
+		"AccountAttributeValuesSelect"
+	],
+
+	// ----- Preset reports -----
+	// The client's eight named reports, from the Engie "Report Analysis" workbook
+	// (Data Definitions tab). A preset is data, not code: `columns` in the order they
+	// should appear, `filters` keyed by the filter widget they drive.
+	//
+	// Adding a ninth report means adding an entry here and nothing else: the picker
+	// builds its options from this list, and every panel widget's default reads the
+	// active entry.
+	//
+	// Two kinds of column entry:
+	//   "locationNumber"                        a catalog field, by value
+	//   { attr: "^gl\\s*code", label: "…" }     an account attribute, matched by name
+	//
+	// The attribute form exists because the GL columns are not UBM columns — they are
+	// per-customer account attributes ("GL Code 1", "GL Allocation 1 (%)"), and their
+	// exact names differ between customers. Matching on a pattern at run time means
+	// the presets work for the next customer without being rewritten. Patterns are
+	// strings, not literals, so a preset survives being serialised into metadata.
+	//
+	// `all: true` takes every attribute that matches rather than the first. Only GL
+	// Allocations uses it: listing every GL code and percentage is the whole point of
+	// that report, where the others want the one GL column their layout has room for.
+	reportPresets: () => {
+		// Water / Gas / Electric are the same twelve-column report with a different
+		// service filter — the client asked for them to stay that way. One definition,
+		// three service patterns.
+		const dupColumns = [
+			"locationNumber", "vendorId", "vendor", "utilityType", "accountNumber",
+			{ attr: "^gl\\s*code", label: "Customer GL Number" },
+			"locationAddress", "totalCharges", "startDate", "endDate", "totalConsumption"
+		];
+		const dup = (value, label, service) => ({
+			value: value,
+			label: label,
+			columns: dupColumns,
+			filters: { utilityType: { match: service } }
+		});
+
+		return [
+			// Nothing preselected: the builder as it was before presets existed.
+			{ value: "custom", label: "Custom — build your own", columns: null, filters: {} },
+
+			// LOCATION NAME | LOCATION # | VENDOR NAME | ACCOUNT # | ACCOUNT STATUS |
+			// SERVICE TYPE | CUSTOMER GL # | GL DESCRIPTION | GL % ALLOCATION
+			{
+				value: "glAllocations",
+				label: "GL Allocations",
+				columns: [
+					"location", "locationNumber", "vendor", "accountNumber", "accountStatus", "utilityType",
+					{ attr: "^gl\\s*code", label: "Customer GL Number", all: true },
+					{ attr: "gl\\s*desc", label: "GL Description", all: true },
+					{ attr: "gl\\s*alloc", label: "GL % Allocation", all: true }
+				],
+				filters: {}
+			},
+
+			// Vendor Name | FIQ Vendor ID | Site Number | Site Name | Account Number.
+			// Named "…with Active Account Numbers" in the workbook, hence the filter.
+			{
+				value: "vendorBySite",
+				label: "Vendor by Site with Account",
+				columns: ["vendor", "vendorId", "locationNumber", "location", "accountNumber"],
+				filters: { accountStatus: { match: "^\\s*active\\s*$" } }
+			},
+
+			// Site Name | Site Number | Site Status | Vendor Name | Account Number |
+			// Account Creation Date | Customer GL Number | GL Allocation %
+			{
+				value: "accountActivity",
+				label: "Account Activity",
+				columns: [
+					"location", "locationNumber", "locationStatus", "vendor", "accountNumber",
+					"accountCreatedDate",
+					{ attr: "^gl\\s*code", label: "Customer GL Number" },
+					{ attr: "gl\\s*alloc", label: "GL Allocation %" }
+				],
+				filters: {}
+			},
+
+			// Site Name | Vendor Name | Account Number | Activity Date | Account Status.
+			// Filtered to Active accounts because this is the activation half of the
+			// workbook's activation/deactivation pair; clear the Account Status filter
+			// to get deactivations out of the same preset.
+			{
+				value: "activation",
+				label: "Activation",
+				columns: ["location", "vendor", "accountNumber", "accountActivityDate", "accountStatus"],
+				filters: { accountStatus: { match: "^\\s*active\\s*$" } }
+			},
+
+			// CustomerName | Utility_Name | SiteName | SummaryAccount | AccountNumber.
+			// SummaryAccount has no UBM equivalent and is left out — see the unmapped
+			// list. "Last bill" is also not expressible here: this builder reports rows,
+			// not the latest row per account, so set the date filters to the month you want.
+			{
+				value: "simonLastBill",
+				label: "Simon Last Bill",
+				columns: ["customerName", "vendor", "location", "accountNumber"],
+				filters: {}
+			},
+
+			// Service patterns are anchored, and deliberately so: an unanchored
+			// "water" also matches Chilled Water, and "gas" would sweep in Propane.
+			// The workbook's Water tab is exactly Water + Sewer, Gas is Natural Gas
+			// alone, and Electric is Electric alone.
+			dup("water", "Water", "^\\s*(water|sewer)\\s*$"),
+			dup("gas", "Gas", "^\\s*(natural\\s*gas|gas)\\s*$"),
+			dup("electric", "Electric", "^\\s*electric(ity)?\\s*$")
+		];
+	},
+
+	// Options for the report dropdown, straight off the list above — so adding a
+	// report to reportPresets() puts it in the picker with no widget edit.
+	presetOptions: () => ReportSpecs.reportPresets().map(p => ({ label: p.label, value: p.value })),
+
+	// Which report is showing. Held in the store rather than read off the widget that
+	// set it, so the picker can change shape without any of the code below knowing.
+	activePreset: () => {
+		const presets = ReportSpecs.reportPresets();
+		const v = appsmith.store.reportPreset || "custom";
+		return presets.find(p => p.value === v) || presets[0];
+	},
+
+	// Attribute names this customer actually has, from getAccountAttributesList.
+	_attrNames: () => {
+		const rows = (typeof getAccountAttributesList !== "undefined" && getAccountAttributesList.data) || [];
+		return (Array.isArray(rows) ? rows : [])
+			.map(r => r && r.value)
+			.filter(v => v != null && String(v).trim() !== "")
+			.map(String);
+	},
+
+	// One { attr } column spec -> the "attr:Name" picks it resolves to, [] if this
+	// customer has no attribute by that name. Numeric-aware sort so "GL Code 2" comes
+	// before "GL Code 10", and so `all: false` takes GL Code 1 rather than whichever
+	// name happens to sort first.
+	_resolveAttr: (spec) => {
+		const re = new RegExp(spec.attr, "i");
+		const names = ReportSpecs._attrNames()
+			.filter(n => re.test(n))
+			.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+		if (names.length === 0) return [];
+		return (spec.all ? names : names.slice(0, 1)).map(n => ReportSpecs.ATTR_PREFIX + n);
+	},
+
+	// The active preset's columns, resolved and in report order. Bound to
+	// FieldsSelect's default value, so choosing a report loads its columns and the
+	// user can still add or drop one afterwards.
+	presetColumns: () => {
+		const p = ReportSpecs.activePreset();
+		if (!p || !p.columns) return ReportSpecs.defaultVisibleFields;
+		const out = [];
+		p.columns.forEach(c => {
+			if (typeof c === "string") { out.push(c); return; }
+			ReportSpecs._resolveAttr(c).forEach(a => out.push(a));
+		});
+		return out;
+	},
+
+	// Preset columns that this customer's data can't supply — attribute patterns that
+	// matched nothing. Surfaced in the status line rather than failing silently, so a
+	// blank GL column reads as "this customer has no GL attribute", not "it's broken".
+	presetMissing: () => {
+		const p = ReportSpecs.activePreset();
+		if (!p || !p.columns) return [];
+		return p.columns
+			.filter(c => typeof c !== "string" && ReportSpecs._resolveAttr(c).length === 0)
+			.map(c => c.label || c.attr);
+	},
+
+	// ----- Preset filters -----
+	// Each returns the value for one filter widget's default, so a preset's filters
+	// land in the panel where the user can see and change them.
+	//
+	// Values are matched against the live option list rather than written out
+	// literally, for the same reason attribute columns are: only the database knows
+	// how a given customer spells them. A preset asking for "Active" when the column
+	// holds "ACTIVE" would silently select nothing — a multi-select drops values that
+	// aren't in its options — and the report would quietly come back unfiltered.
+	// Matching a pattern against the real values can't fail that way.
+	_presetFilter: (key, rows) => {
+		const p = ReportSpecs.activePreset();
+		const spec = (p && p.filters && p.filters[key]) || null;
+		if (!spec) return [];
+		if (Array.isArray(spec)) return spec;
+		const re = new RegExp(spec.match, "i");
+		return (Array.isArray(rows) ? rows : [])
+			.map(r => r && r.value)
+			.filter(v => v != null && re.test(String(v)));
+	},
+
+	// The Water report covers Water *and* Sewer, which is why this matches a pattern
+	// rather than naming one service.
+	presetServiceTypes: () =>
+		ReportSpecs._presetFilter("utilityType", (typeof getServiceTypes !== "undefined" && getServiceTypes.data) || []),
+
+	presetAccountStatuses: () =>
+		ReportSpecs._presetFilter("accountStatus", (typeof getAccountStatuses !== "undefined" && getAccountStatuses.data) || []),
+
+	// The report picker's onOptionChange. Storing the choice is what loads the report:
+	// every panel widget's default is bound to the active preset, so they re-evaluate
+	// and take the new report's columns and filters. Resetting them afterwards clears
+	// the ones the preset doesn't drive, so the previous report's dates or location
+	// picks don't leak into this one.
+	selectPreset: async (value) => {
+		await storeValue("reportPreset", value);
+		for (const w of ReportSpecs.FILTER_WIDGETS) {
+			try { resetWidget(w, false); } catch (e) { /* widget may not exist yet */ }
+		}
+		await ReportSpecs.refreshGrid();
+		const p = ReportSpecs.activePreset();
+		if (p && p.value !== "custom") showAlert(`Loaded the ${p.label} report`, "success");
+	},
 
 	// ----- Base FROM -----
 	// locations (l) is the parent; location_detail (lt) holds address/status/number.
@@ -626,11 +874,16 @@ export default {
 		const err = ReportSpecs.customerError();
 		if (err) return "⚠️ " + err;
 		if (runReport.isLoading) return "Loading...";
+		// The report name is back, now that it's the one the user picked rather than
+		// the hardcoded "Cost Analysis – Trendline" that made the builder look locked
+		// to a single report. Custom stays unnamed — there's nothing to name.
+		const p = ReportSpecs.activePreset();
+		const name = (p && p.value !== "custom") ? p.label + " · " : "";
+		const missing = ReportSpecs.presetMissing();
+		const warn = missing.length ? ` · ⚠️ this customer has no ${missing.join(" / ")} attribute` : "";
 		const total = ReportSpecs.totalRows();
-		if (total == null) return "Pick a customer and click Run";
-		// No report name: it read "· Cost Analysis – Trendline", which told the client
-		// the builder was locked to one report. Row count alone until there are several.
-		return `${total.toLocaleString()} total rows`;
+		if (total == null) return `${name}Pick a customer and click Run${warn}`;
+		return `${name}${total.toLocaleString()} total rows${warn}`;
 	},
 
 	// ----- Export -----
@@ -638,10 +891,12 @@ export default {
 		const customer = (CustomerSelect && CustomerSelect.selectedOptionLabel || "customer")
 			.toString().replace(/\s+/g, "_");
 		const stamp = moment().format("YYYYMMDD-HHmmss");
-		// Also dropped the report name here — the client sees this on every file he
-		// downloads, so leaving it would have undone half the point of removing it
-		// from the screen.
-		return `${customer}-report-${stamp}`;
+		// The report name is in the filename again for the same reason it's back in the
+		// status line: it names the report the user actually chose. A downloads folder
+		// full of "Simon_Properties-report-*.xlsx" told nobody which was which.
+		const p = ReportSpecs.activePreset();
+		const name = (p && p.value !== "custom") ? p.label.replace(/[^A-Za-z0-9]+/g, "_") : "report";
+		return `${customer}-${name}-${stamp}`;
 	},
 
 	// Export fields honor the user's FieldsSelect picks (column order + which
@@ -1020,21 +1275,15 @@ export default {
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
-	// Reset all filter widgets and re-fetch from page 1.
+	// Reset all filter widgets and re-fetch from page 1. The selected report is left
+	// alone — Reset means "clear what I changed", so it puts the preset's own columns
+	// and filters back rather than dropping you into the empty custom report.
 	reset: async () => {
-		const widgetNames = [
-			"FieldsSelect", "StartDate", "EndDate",
-			"LocationName", "StateProvinceSelect", "StateNotIn",
-			"CountrySelect", "LocationStatusSelect",
-			"AccountNumberSelect", "AccountStatusSelect",
-			"VendorSelect", "ServiceTypesSelect", "ServiceNotIn",
-			"LocationAttributesSelect", "AccountAttributesSelect",
-			"AccountAttributeValuesSelect"
-		];
-		for (const w of widgetNames) {
+		for (const w of ReportSpecs.FILTER_WIDGETS) {
 			try { resetWidget(w, false); } catch (e) { /* widget may not exist yet */ }
 		}
 		await ReportSpecs.refreshGrid();
-		showAlert("Filters reset", "success");
+		const p = ReportSpecs.activePreset();
+		showAlert(p && p.value !== "custom" ? `Reset to the ${p.label} report` : "Filters reset", "success");
 	}
 };
