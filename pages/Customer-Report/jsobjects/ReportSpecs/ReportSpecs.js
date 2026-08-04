@@ -132,10 +132,10 @@ export default {
 	// and the defaults are what the active preset drives.
 	FILTER_WIDGETS: [
 		"FieldsSelect", "StartDate", "EndDate",
-		"LocationName", "StateProvinceSelect", "StateNotIn",
+		"LocationName", "StateProvinceSelect",
 		"CountrySelect", "LocationStatusSelect",
 		"AccountNumberSelect", "AccountStatusSelect",
-		"VendorSelect", "ServiceTypesSelect", "ServiceNotIn",
+		"VendorSelect", "ServiceTypesSelect",
 		"LocationAttributesSelect", "AccountAttributesSelect",
 		"AccountAttributeValuesSelect"
 	],
@@ -667,11 +667,10 @@ export default {
 			parts.push(`AND amf.time_period <= '${d}'`);
 		}
 
-		// State / Province (+ Not In)
+		// State / Province
 		const states = (typeof StateProvinceSelect !== "undefined" && StateProvinceSelect.selectedOptionValues) || [];
 		if (states.length > 0 && !skip("locationState")) {
-			const notIn = (typeof StateNotIn !== "undefined") && StateNotIn.isSwitchedOn;
-			parts.push(ReportSpecs._inList("l.state", states, notIn));
+			parts.push(ReportSpecs._inList("l.state", states));
 		}
 
 		// Country
@@ -717,11 +716,10 @@ export default {
 		// info instead; filter by vendor location once that column is mapped.
 		// (UBM team 2026-06-17.)
 
-		// Service / Utility type (+ Not In)
+		// Service / Utility type
 		const services = (typeof ServiceTypesSelect !== "undefined" && ServiceTypesSelect.selectedOptionValues) || [];
 		if (services.length > 0 && !skip("utilityType")) {
-			const notIn = (typeof ServiceNotIn !== "undefined") && ServiceNotIn.isSwitchedOn;
-			parts.push(ReportSpecs._inList("amf.utility_type", services, notIn));
+			parts.push(ReportSpecs._inList("amf.utility_type", services));
 		}
 
 		// Location - multi-select of location ids (getLocationsForCustomer). The text

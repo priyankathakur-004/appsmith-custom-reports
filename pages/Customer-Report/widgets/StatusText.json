@@ -1,7 +1,7 @@
 {
   "animateLoading": true,
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
-  "bottomRow": 59,
+  "bottomRow": 51,
   "dynamicBindingPathList": [
     {
       "key": "text"
@@ -30,8 +30,8 @@
   "mobileRightColumn": 30,
   "mobileTopRow": 46,
   "needsErrorInfo": false,
-  "originalBottomRow": 59,
-  "originalTopRow": 55,
+  "originalBottomRow": 51,
+  "originalTopRow": 47,
   "overflow": "NONE",
   "parentColumnSpace": 16,
   "parentId": "0",
@@ -43,7 +43,7 @@
   "text": "{{ ReportSpecs.status() }}",
   "textAlign": "LEFT",
   "textColor": "{{ ReportSpecs.customerError() ? '#B91C1C' : '#6B7280' }}",
-  "topRow": 55,
+  "topRow": 47,
   "type": "TEXT_WIDGET",
   "version": 1,
   "widgetId": "g434or27xz",
