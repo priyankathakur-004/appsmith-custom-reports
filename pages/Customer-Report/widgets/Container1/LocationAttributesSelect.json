@@ -4,6 +4,7 @@
   "animateLoading": true,
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
   "bottomRow": 36,
+  "bottomRowBeforeCollapse": 36,
   "boxShadow": "none",
   "defaultOptionValue": [],
   "dynamicBindingPathList": [
@@ -21,6 +22,9 @@
   "dynamicPropertyPathList": [
     {
       "key": "sourceData"
+    },
+    {
+      "key": "isVisible"
     }
   ],
   "dynamicTriggerPathList": [
@@ -40,7 +44,7 @@
   "labelTextColor": "#0F2A47",
   "labelTextSize": "0.875rem",
   "labelWidth": 5,
-  "leftColumn": 43,
+  "leftColumn": 26,
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 4,
   "minWidth": 240,
@@ -60,10 +64,11 @@
   "placeholderText": "Choose up to 10 attributes",
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 64,
+  "rightColumn": 39,
   "serverSideFiltering": false,
   "sourceData": "{{ getLocationAttributesList.data }}",
   "topRow": 27,
+  "topRowBeforeCollapse": 27,
   "type": "MULTI_SELECT_WIDGET_V2",
   "version": 2,
   "widgetId": "hoi3z5n9n1",
