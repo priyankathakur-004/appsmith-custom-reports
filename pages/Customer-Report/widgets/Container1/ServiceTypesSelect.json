@@ -15,9 +15,6 @@
     },
     {
       "key": "defaultOptionValue"
-    },
-    {
-      "key": "isVisible"
     }
   ],
   "dynamicHeight": "FIXED",
@@ -35,7 +32,7 @@
   "isFilterable": true,
   "isLoading": false,
   "isRequired": false,
-  "isVisible": "{{ ReportSpecs.showFilter(\"utilityType\") }}",
+  "isVisible": true,
   "key": "cr_svctype",
   "labelAlignment": "left",
   "labelPosition": "Top",
@@ -63,7 +60,7 @@
   "placeholderText": "All",
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 16,
+  "rightColumn": 13,
   "serverSideFiltering": false,
   "sourceData": "{{ getServiceTypes.data }}",
   "topRow": 18,

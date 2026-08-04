@@ -359,38 +359,33 @@ export default {
 	},
 
 	// ----- Which filters a report shows -----
-	// The workbook's field list covers columns, not filters, so relevance is derived:
-	// each panel filter declares the catalog fields it narrows, and shows when the
-	// active report offers at least one of them. A report that *sets* a filter always
-	// shows it too — Vendor by Site filters to active accounts, and a filter silently
-	// applied is worse than one you didn't need.
+	// Only the attribute row is conditional. Every other filter is always visible.
 	//
-	// The date range is deliberately not in here and never hides. Every report reads
-	// the monthly feed, so From/To always changes the rows; hiding it would quietly
-	// return all history on the reports that have no date column of their own.
-	FILTER_TARGETS: {
-		location: ["location", "locationId", "locationNumber", "locationAddress"],
-		locationState: ["locationState"],
-		locationCountry: ["locationCountry"],
-		locationStatus: ["locationStatus"],
-		accountNumber: ["accountNumber"],
-		accountStatus: ["accountStatus"],
-		vendor: ["vendor", "vendorCode", "vendorId", "vendorNameAp"],
-		utilityType: ["utilityType"]
-	},
-
-	// Bound to each filter widget's Visible property (and its label's).
+	// Filters used to be scoped per report — each declared the catalog fields it
+	// narrowed and hid when the active report offered none of them. It looked right
+	// in theory and wrong on screen: Appsmith's canvas is fixed-position and collapses
+	// invisible widgets *per column*, not per row, so a hidden filter let the widget
+	// beneath it climb into the gap while its neighbours stayed put. Rows came out
+	// ragged, with holes mid-row and single filters stranded on their own line, and no
+	// ordering fixed it — Vendor by Site's only filter was Account Status, Account
+	// Activity's was Location Status, Water's was Service Types, and under column
+	// collapse all three had to occupy the same column to avoid a gap.
+	//
+	// So the five that used to hide now sit on one full-width row and always show. A
+	// complete row of five beats a scoped row with holes in it. The cost is honest:
+	// Service Types appears on Customer Last Bill, which cannot use it.
+	//
+	// The attribute pickers are the exception because all three hide together, which
+	// empties a whole row and collapses cleanly. Their row spans the full width in
+	// thirds, so it is complete whenever it shows.
+	//
+	// Real per-report scoping needs Appsmith Auto Layout, which flows row-major and
+	// wraps. That is an app-wide setting, not something to fake here.
 	showFilter: (name) => {
+		if (name !== "accountAttributes") return true;
 		const avail = ReportSpecs.presetAvailable();
-		if (!avail) return true; // Custom Report: the whole panel
-		const p = ReportSpecs.activePreset();
-		if (p.filters && p.filters[name]) return true;
-		const picks = ReportSpecs._resolveSpecs(avail);
-		// The account-attribute pickers are for GL and the like, so they follow
-		// whether this report offers any attribute column at all.
-		if (name === "accountAttributes") return picks.some(v => ReportSpecs.isAttrPick(v));
-		const targets = ReportSpecs.FILTER_TARGETS[name] || [];
-		return picks.some(v => targets.indexOf(v) >= 0);
+		if (!avail) return true; // Custom Report: everything
+		return ReportSpecs._resolveSpecs(avail).some(v => ReportSpecs.isAttrPick(v));
 	},
 
 	// ----- Preset filters -----

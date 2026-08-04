@@ -3,7 +3,7 @@
   "allowSelectAll": true,
   "animateLoading": true,
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
-  "bottomRow": 36,
+  "bottomRow": 27,
   "boxShadow": "none",
   "defaultOptionValue": "{{ ReportSpecs.presetAccountStatuses() }}",
   "dynamicBindingPathList": [
@@ -15,9 +15,6 @@
     },
     {
       "key": "defaultOptionValue"
-    },
-    {
-      "key": "isVisible"
     }
   ],
   "dynamicHeight": "FIXED",
@@ -35,7 +32,7 @@
   "isFilterable": true,
   "isLoading": false,
   "isRequired": false,
-  "isVisible": "{{ ReportSpecs.showFilter(\"accountStatus\") }}",
+  "isVisible": true,
   "key": "cr_acctstatus",
   "labelAlignment": "left",
   "labelPosition": "Top",
@@ -43,7 +40,7 @@
   "labelTextColor": "#0F2A47",
   "labelTextSize": "0.875rem",
   "labelWidth": 5,
-  "leftColumn": 0,
+  "leftColumn": 13,
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 4,
   "minWidth": 240,
@@ -61,10 +58,10 @@
   "placeholderText": "All",
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 16,
+  "rightColumn": 26,
   "serverSideFiltering": false,
   "sourceData": "{{ getAccountStatuses.data }}",
-  "topRow": 27,
+  "topRow": 18,
   "type": "MULTI_SELECT_WIDGET_V2",
   "version": 2,
   "widgetId": "acctstatussel",
