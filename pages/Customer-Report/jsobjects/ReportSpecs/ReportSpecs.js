@@ -252,13 +252,17 @@ export default {
 				filters: { accountStatus: { match: "^\\s*active\\s*$" } }
 			},
 
+			// The workbook calls this tab "Simon Final Bill", but nothing about it is
+			// Simon-specific — it reports whichever customer is selected, and the
+			// customer's own name is its first column. Named for what it does.
+			//
 			// CustomerName | Utility_Name | SiteName | SummaryAccount | AccountNumber.
 			// SummaryAccount has no UBM equivalent and is left out — see the unmapped
 			// list. "Last bill" is also not expressible here: this builder reports rows,
 			// not the latest row per account, so set the date filters to the month you want.
 			{
-				value: "simonLastBill",
-				label: "Simon Last Bill",
+				value: "customerLastBill",
+				label: "Customer Last Bill",
 				columns: ["customerName", "vendor", "location", "accountNumber"],
 				filters: {}
 			},
