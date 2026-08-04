@@ -3,7 +3,7 @@
   "allowSelectAll": true,
   "animateLoading": true,
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
-  "bottomRow": 40,
+  "bottomRow": 44,
   "boxShadow": "none",
   "defaultOptionValue": [],
   "dynamicBindingPathList": [
@@ -61,7 +61,7 @@
   "rightColumn": 32,
   "serverSideFiltering": false,
   "sourceData": "{{ getLocationStatuses.data }}",
-  "topRow": 31,
+  "topRow": 35,
   "type": "MULTI_SELECT_WIDGET_V2",
   "version": 2,
   "widgetId": "s10dn3ee57",
