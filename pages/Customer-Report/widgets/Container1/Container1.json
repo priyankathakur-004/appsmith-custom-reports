@@ -4,7 +4,7 @@
   "borderColor": "#6b7280",
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
   "borderWidth": "0",
-  "bottomRow": 51,
+  "bottomRow": 55,
   "boxShadow": "none",
   "children": [
     {
@@ -72,7 +72,7 @@
   "mobileRightColumn": 24,
   "mobileTopRow": 5,
   "needsErrorInfo": false,
-  "originalBottomRow": 51,
+  "originalBottomRow": 55,
   "originalTopRow": 5,
   "parentColumnSpace": 16.140625,
   "parentId": "0",
