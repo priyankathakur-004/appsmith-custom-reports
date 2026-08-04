@@ -5,7 +5,11 @@
   "bottomRow": 22,
   "boxShadow": "none",
   "defaultSwitchState": false,
-  "dynamicBindingPathList": [],
+  "dynamicBindingPathList": [
+    {
+      "key": "isVisible"
+    }
+  ],
   "dynamicHeight": "AUTO_HEIGHT",
   "dynamicTriggerPathList": [
     {
@@ -14,7 +18,7 @@
   ],
   "isDisabled": false,
   "isLoading": false,
-  "isVisible": true,
+  "isVisible": "{{ ReportSpecs.showFilter(\"locationState\") }}",
   "key": "cr_statenotin",
   "label": "State Not In",
   "labelPosition": "Left",

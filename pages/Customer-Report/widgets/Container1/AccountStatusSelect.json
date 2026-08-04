@@ -15,6 +15,9 @@
     },
     {
       "key": "defaultOptionValue"
+    },
+    {
+      "key": "isVisible"
     }
   ],
   "dynamicHeight": "FIXED",
@@ -32,7 +35,7 @@
   "isFilterable": true,
   "isLoading": false,
   "isRequired": false,
-  "isVisible": true,
+  "isVisible": "{{ ReportSpecs.showFilter(\"accountStatus\") }}",
   "key": "cr_acctstatus",
   "labelAlignment": "left",
   "labelPosition": "Top",

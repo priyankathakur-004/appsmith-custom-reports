@@ -5,6 +5,9 @@
   "dynamicBindingPathList": [
     {
       "key": "fontFamily"
+    },
+    {
+      "key": "isVisible"
     }
   ],
   "dynamicHeight": "AUTO_HEIGHT",
@@ -13,7 +16,7 @@
   "fontSize": "0.875rem",
   "fontStyle": "",
   "isLoading": false,
-  "isVisible": true,
+  "isVisible": "{{ ReportSpecs.showFilter(\"accountStatus\") }}",
   "key": "acctstatuslbl1",
   "leftColumn": 17,
   "maxDynamicHeight": 9000,

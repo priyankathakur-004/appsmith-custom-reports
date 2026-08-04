@@ -12,6 +12,9 @@
     },
     {
       "key": "borderRadius"
+    },
+    {
+      "key": "isVisible"
     }
   ],
   "dynamicHeight": "FIXED",
@@ -29,7 +32,7 @@
   "isFilterable": true,
   "isLoading": false,
   "isRequired": false,
-  "isVisible": true,
+  "isVisible": "{{ ReportSpecs.showFilter(\"locationCountry\") }}",
   "key": "cr_country",
   "labelAlignment": "left",
   "labelPosition": "Top",
