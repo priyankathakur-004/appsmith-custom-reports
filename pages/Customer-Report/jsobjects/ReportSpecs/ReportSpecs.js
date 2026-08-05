@@ -688,6 +688,18 @@ export default {
 		// match no rows instead of returning every tenant's data.
 		if (cidSql === "0") return "WHERE 1=0";
 		parts.push(`AND amf.customer_id = ${cidSql}`);
+
+		const shown = ReportSpecs.selectedColumns();
+		const varies = shown.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")));
+		if (!varies) {
+			parts.push(
+				"AND amf.time_period = (SELECT MAX(a2.time_period) " +
+				"FROM bill_management_v2.analytics_monthly_feed a2 " +
+				"WHERE a2.virtual_account_id = amf.virtual_account_id " +
+				"AND a2.location_id IS NOT DISTINCT FROM amf.location_id " +
+				"AND a2.utility_type IS NOT DISTINCT FROM amf.utility_type)"
+			);
+		}
 		// True when the column we're listing values for is the one this filter
 		// targets, so we skip it (don't let a column filter constrain its own list).
 		const skip = (aliases) => {
