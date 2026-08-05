@@ -77,7 +77,7 @@ export default {
 		// when unselected, and virtual_accounts_status isn't provably one row per
 		// account, so a join could have multiplied the report's rows.
 		{ group: "Vendor / Account", value: "accountNumber", label: "Account #", description: "Utility account number as it appears on the bill", sql: "(SELECT va.account_code FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id) AS \"accountNumber\"" },
-		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status", sql: "(SELECT vas.account_status FROM bill_management_v2.virtual_accounts_status vas WHERE vas.virtual_account_id = amf.virtual_account_id LIMIT 1) AS \"accountStatus\"" },
+		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status. Engie's reports carry only Active and Inactive, so Closed / Terminated / Cancelled are shown as Inactive. Any other value, including Unknown, is passed through as UBM stores it.", sql: "(SELECT CASE WHEN lower(btrim(vas.account_status)) IN ('active','open') THEN 'Active' WHEN lower(btrim(vas.account_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' ELSE vas.account_status END FROM bill_management_v2.virtual_accounts_status vas WHERE vas.virtual_account_id = amf.virtual_account_id LIMIT 1) AS \"accountStatus\"" },
 		// Account created / activity dates. These used to read the row as JSON and try
 		// plausible key names, because the column names were unknown and a wrong guess
 		// would have been a SQL error that broke the whole report. A schema read on
