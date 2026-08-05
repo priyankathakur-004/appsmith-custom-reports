@@ -1007,7 +1007,61 @@ export default {
 		const warn = missing.length ? ` · ⚠️ this customer has no ${missing.join(" / ")} attribute` : "";
 		const total = ReportSpecs.totalRows();
 		if (total == null) return `${name}Pick a customer and click Run${warn}`;
-		return `${name}${total.toLocaleString()} total rows${warn}`;
+		if (total > 0) return `${name}${total.toLocaleString()} total rows${warn}`;
+
+		// ----- Zero rows: say which kind of zero it is -----
+		// "0 total rows" has meant four different things and looked identical in all
+		// four: no customer resolved, so the WHERE is literally 1=0; a filter that
+		// excludes everything; a column filter with nothing ticked, which is also 1=0;
+		// or a customer that genuinely has no rows in the feed. Only the last is a data
+		// question, and it is the only one worth taking to the UBM team — so the line
+		// now separates them rather than leaving it to be guessed at.
+		//
+		// All of this reads widgets and getCustomers.data, which is fine here: the
+		// status line is a widget binding. It must never be called from a query body.
+		const code = String((CustomerSelect && CustomerSelect.selectedOptionValue) || "").trim();
+		if (code === "") {
+			return `${name}⚠️ 0 rows — no customer selected, so the report matches nothing. Pick a customer.`;
+		}
+		const customers = (typeof getCustomers !== "undefined" && getCustomers.data) || [];
+		const hit = (Array.isArray(customers) ? customers : [])
+			.find(r => String(r.fdg_code || "").toLowerCase().trim() === code.toLowerCase());
+		if (!hit) {
+			// The picker's own options come from getCustomers, so this means the stored
+			// selection outlived the list — or the customer's fdg_code is blank, which
+			// makes the lookup in customerIdSql() resolve to nothing.
+			return `${name}⚠️ 0 rows — the customer code "${code}" doesn't resolve to a customer, so nothing can match it.`;
+		}
+
+		// What is actually narrowing the report. Every filter listed here is one that
+		// filterClauses() applies, so "nothing is filtered" below can be trusted.
+		const on = [];
+		const picked = (w, label) => {
+			const v = (w && w.selectedOptionValues) || [];
+			if (v.length) on.push(`${label} (${v.length})`);
+		};
+		if (typeof StartDate !== "undefined" && StartDate && StartDate.selectedDate) on.push("From month");
+		if (typeof EndDate !== "undefined" && EndDate && EndDate.selectedDate) on.push("To month");
+		picked(typeof LocationName !== "undefined" ? LocationName : null, "Location");
+		picked(typeof StateProvinceSelect !== "undefined" ? StateProvinceSelect : null, "State/Province");
+		picked(typeof CountrySelect !== "undefined" ? CountrySelect : null, "Country");
+		picked(typeof LocationStatusSelect !== "undefined" ? LocationStatusSelect : null, "Location Status");
+		picked(typeof AccountNumberSelect !== "undefined" ? AccountNumberSelect : null, "Account #");
+		picked(typeof AccountStatusSelect !== "undefined" ? AccountStatusSelect : null, "Account Status");
+		picked(typeof VendorSelect !== "undefined" ? VendorSelect : null, "Vendor");
+		picked(typeof ServiceTypesSelect !== "undefined" ? ServiceTypesSelect : null, "Service Type");
+		picked(typeof AccountAttributeValuesSelect !== "undefined" ? AccountAttributeValuesSelect : null, "Account attribute values");
+		let grid = {};
+		try { grid = JSON.parse(appsmith.store.reportsFilterModel || "{}"); } catch (e) { grid = {}; }
+		const gridCols = Object.keys(grid || {});
+		// A set filter with nothing ticked compiles to 1=0, so it empties the report on
+		// its own. Worth naming separately — it is the least visible of the filters.
+		if (gridCols.length) on.push(`column filter on ${gridCols.join(", ")}`);
+
+		if (on.length) {
+			return `${name}0 rows — ${hit.name} has nothing matching: ${on.join(" · ")}. Clear one, or press Reset.`;
+		}
+		return `${name}⚠️ 0 rows — nothing is filtered, so ${hit.name} (customer id ${hit.id}) has no rows in the monthly feed. That is a data question for the UBM team, not a filter one.`;
 	},
 
 	// ----- Export -----
