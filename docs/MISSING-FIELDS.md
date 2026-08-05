@@ -44,6 +44,33 @@ shown as permanently empty columns:
 | Account Address 1 / Address 2 / City / State-Province / Postal Code | `virtual_accounts` has no address columns at all. `analytics_billing_line_items.service_address` exists, but it is bill-line grain — joining it would multiply report rows — and it is the service address, not the account's mailing address. | Whether the account address *is* the service address. If it is, this is buildable the way Late Charges is: aggregated so it can't multiply rows. |
 | Service Description / Service Alias / Service Status / Service Point Location | No services table found in the tables read so far. `analytics_billing_line_items.description` is a line-item description, not a service one. | **Still pending** — the filtered table list returned 33 rows and only the first 11 were readable. A services table may yet exist. |
 
+## The GL columns
+
+Settled on 2026-08-05 against the database, for Simon Properties (customer `94512`):
+
+| Engie Column | Status |
+| --- | --- |
+| CUSTOMER GL # | **Present.** `GL Code 1` … `GL Code 6` exist as account attributes — 11,210 accounts carry GL Code 1. Our `^gl\s*code` pattern matches them. |
+| GL % ALLOCATION | **Present.** `GL Allocation 1 (%)` … `GL Allocation 6 (%)`, 11,199 accounts on the first. Matched by `gl\s*alloc`. |
+| GL DESCRIPTION | **Absent.** There is no GL Description attribute at all — the customer's 13 attributes are the twelve GL ones plus `Constellation Acct ID`. This is the only GL column with no source. |
+
+Two things this corrects:
+
+**"Customer GL Code is a first-class field on GET /accounts" is not a column.**
+`virtual_accounts` has no GL column of any kind — it is `id, created_at, customer_id,
+account_code, meter_serial, commodity, bill_type, client_account, vendor_code,
+account_opened, account_closed, frozen_at, frozen_reasoning_id, account_paused,
+frozen_comment_id, pair_status, virtual_accounts_pairing_id`. The API field the
+client's sheet lists must be the API exposing the attribute. Reading it from
+attributes, as we do, is right.
+
+**"This customer has no GL attribute" was wrong.** Ten of the twelve GL columns
+resolve. Whatever emptied those columns before, it was not a missing attribute.
+
+One consequence worth putting to the client: `all: true` takes every match, so the
+report renders GL Code 1-6 and GL Allocation 1-6 as **twelve columns across**. Engie's
+own report puts one GL code per row. That is the unpivot decision that is still open.
+
 ## Also found
 
 `location_detail` carries `location_division`, `location_top_group`,

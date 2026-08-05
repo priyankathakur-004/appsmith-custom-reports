@@ -1005,8 +1005,16 @@ export default {
 		const name = (p && p.value !== "custom") ? p.label + " · " : "";
 		const missing = ReportSpecs.presetMissing();
 		const warn = missing.length ? ` · ⚠️ this customer has no ${missing.join(" / ")} attribute` : "";
+		// No count yet — the report simply hasn't been fetched. That is not the same as
+		// having no customer, and saying "pick a customer" to someone who has already
+		// picked one reads as though the app didn't notice.
 		const total = ReportSpecs.totalRows();
-		if (total == null) return `${name}Pick a customer and click Run${warn}`;
+		if (total == null) {
+			const chosen = String((CustomerSelect && CustomerSelect.selectedOptionValue) || "").trim();
+			return chosen === ""
+				? `${name}Pick a customer, then click Run${warn}`
+				: `${name}No data loaded — click Run to fetch${warn}`;
+		}
 		if (total > 0) return `${name}${total.toLocaleString()} total rows${warn}`;
 
 		// ----- Zero rows: say which kind of zero it is -----
