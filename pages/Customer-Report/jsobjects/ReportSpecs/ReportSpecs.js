@@ -35,9 +35,12 @@ export default {
 		{ group: "Location", value: "squareFeet", label: "Square Feet", description: "Location floor area (sq ft)", sql: "l.square_feet AS \"squareFeet\"" },
 		{ group: "Location", value: "locationNumber", label: "Location Number", description: "Site number, e.g. 0115 — the number your own reports refer to a location by.", sql: "lt.location_number AS \"locationNumber\"" },
 
-		// --- Hierarchy: removed. UBM has no hierarchy/grouping attributes
-		// (location_division / top / second / third group) — confirmed by
-		// UBM team 2026-06-17. Do not re-add without a real source column.
+		// --- Hierarchy ---
+		// location_detail does carry location_division and location_top_group /
+		// _second_group / _third_group — a schema read on 2026-08-05 lists all four,
+		// which contradicts the "UBM has no hierarchy attributes" answer of 2026-06-17
+		// that had them removed. Not re-added because no report in the client's workbook
+		// asks for them; add them from those columns the day one does.
 
 		// --- Vendor / account identity ---
 		// Vendor name, in the order the platform intends: the customer's own pretty
@@ -53,20 +56,48 @@ export default {
 		// range, but nobody has confirmed the two are the same number — see the
 		// unmapped-fields list in the commit message before handing this to the client.
 		{ group: "Vendor / Account", value: "vendorId", label: "Vendor ID", description: "UBM's numeric id for the vendor. Believed to be the same number as the client's FIQ Vendor ID, but not yet confirmed against Engie.", sql: "(SELECT v.id FROM bill_management_v2.vendors v WHERE v.code = amf.vendor_code LIMIT 1) AS \"vendorId\"" },
+		// --- Vendor address ---
+		// UBM keeps the vendor address as a composite type on remittance_address, not as
+		// flat columns: line_1 … line_4, city, state, post_code, country. That is why it
+		// read as absent when the schema was searched by column name. Engie's report has
+		// room for two address lines, so lines 3 and 4 are not offered — no vendor is
+		// expected to need four, but they are there if one does.
+		//
+		// Customer-specific record first, then the global one, the same priority the
+		// vendor name uses: a customer that maintains its own record for a vendor means
+		// it, and falling through to the global row is what the platform intends.
+		{ group: "Vendor address", value: "vendorAddress1", label: "Vendor Address 1", description: "First line of the vendor's remittance address. Source: (remittance_address).line_1, from the customer's own vendor record where there is one.", sql: "COALESCE((SELECT NULLIF(btrim((cpv.remittance_address).line_1), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim((pv.remittance_address).line_1), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorAddress1\"" },
+		{ group: "Vendor address", value: "vendorAddress2", label: "Vendor Address 2", description: "Second line of the vendor's remittance address. Source: (remittance_address).line_2. Lines 3 and 4 exist in UBM and can be added if a vendor uses them.", sql: "COALESCE((SELECT NULLIF(btrim((cpv.remittance_address).line_2), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim((pv.remittance_address).line_2), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorAddress2\"" },
+		{ group: "Vendor address", value: "vendorCity", label: "Vendor City", description: "Vendor's city. Source: (remittance_address).city.", sql: "COALESCE((SELECT NULLIF(btrim((cpv.remittance_address).city), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim((pv.remittance_address).city), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorCity\"" },
+		{ group: "Vendor address", value: "vendorState", label: "Vendor State/Province", description: "Vendor's state or province. Source: (remittance_address).state.", sql: "COALESCE((SELECT NULLIF(btrim((cpv.remittance_address).state), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim((pv.remittance_address).state), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorState\"" },
+		{ group: "Vendor address", value: "vendorZip", label: "Vendor Postal Code", description: "Vendor's postal / ZIP code. Source: (remittance_address).post_code.", sql: "COALESCE((SELECT NULLIF(btrim((cpv.remittance_address).post_code), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim((pv.remittance_address).post_code), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorZip\"" },
+		{ group: "Vendor address", value: "vendorCountry", label: "Vendor Country", description: "Vendor's country. Source: (remittance_address).country.", sql: "COALESCE((SELECT NULLIF(btrim((cpv.remittance_address).country), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim((pv.remittance_address).country), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorCountry\"" },
+
 		// Account # and Account Status: scalar subqueries, not joins. They cost nothing
 		// when unselected, and virtual_accounts_status isn't provably one row per
 		// account, so a join could have multiplied the report's rows.
 		{ group: "Vendor / Account", value: "accountNumber", label: "Account #", description: "Utility account number as it appears on the bill", sql: "(SELECT va.account_code FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id) AS \"accountNumber\"" },
 		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status", sql: "(SELECT vas.account_status FROM bill_management_v2.virtual_accounts_status vas WHERE vas.virtual_account_id = amf.virtual_account_id LIMIT 1) AS \"accountStatus\"" },
-		// Account created / activity dates. The Activation and Account Activity reports
-		// need them and the tables are certain, but the date column's *name* is not:
-		// nothing in this app reads one today. Rather than guess one name and risk a
-		// SQL error that breaks the whole report, the row is turned into JSON and the
-		// plausible keys are tried in turn — a key that doesn't exist yields NULL, not
-		// an error. So the column is blank until someone confirms the real name, and
-		// the rest of the report still runs. Confirm and replace with a plain column.
-		{ group: "Vendor / Account", value: "accountCreatedDate", label: "Account Created Date", description: "Date the account was created in UBM (the client's \"FIQ Account Creation Date\"). Blank until the source column is confirmed with the UBM team.", sql: "(SELECT LEFT(COALESCE(to_jsonb(va) ->> 'created_at', to_jsonb(va) ->> 'created_date', to_jsonb(va) ->> 'creation_date', to_jsonb(va) ->> 'activated_at'), 19) FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id) AS \"accountCreatedDate\"" },
-		{ group: "Vendor / Account", value: "accountActivityDate", label: "Account Activity Date", description: "Date the account's current status took effect — the activation date on an active account, the deactivation date on an inactive one. Blank until the source column is confirmed with the UBM team.", sql: "(SELECT LEFT(COALESCE(to_jsonb(vas) ->> 'status_date', to_jsonb(vas) ->> 'effective_date', to_jsonb(vas) ->> 'updated_at', to_jsonb(vas) ->> 'created_at'), 19) FROM bill_management_v2.virtual_accounts_status vas WHERE vas.virtual_account_id = amf.virtual_account_id LIMIT 1) AS \"accountActivityDate\"" },
+		// Account created / activity dates. These used to read the row as JSON and try
+		// plausible key names, because the column names were unknown and a wrong guess
+		// would have been a SQL error that broke the whole report. A schema read on
+		// 2026-08-05 settled both, so they are plain columns now and no longer blank.
+		//
+		// created_at is when UBM created the account record — the timestamp Engie's
+		// example shows for FIQ Account Creation Date, down to the minute.
+		// virtual_accounts.account_opened is the other candidate: it is the utility's
+		// own opening date, so switch to it if that is what the client means.
+		{ group: "Vendor / Account", value: "accountCreatedDate", label: "Account Created Date", description: "Date the account record was created in UBM — the client's \"FIQ Account Creation Date\". Source: virtual_accounts.created_at.", sql: "(SELECT TO_CHAR(va.created_at, 'YYYY-MM-DD HH24:MI:SS') FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id) AS \"accountCreatedDate\"" },
+		// The status table has no single status-date column; it has account_opened and
+		// account_closed. So the date the current status took effect is the closing date
+		// where there is one and the opening date otherwise — which is what the client's
+		// Activity Date means on either half of their activation/deactivation pair.
+		{ group: "Vendor / Account", value: "accountActivityDate", label: "Account Activity Date", description: "Date the account's current status took effect — the deactivation date where the account has one, otherwise the activation date. Source: virtual_accounts_status.account_closed / .account_opened.", sql: "(SELECT TO_CHAR(COALESCE(vas.account_closed, vas.account_opened), 'YYYY-MM-DD') FROM bill_management_v2.virtual_accounts_status vas WHERE vas.virtual_account_id = amf.virtual_account_id LIMIT 1) AS \"accountActivityDate\"" },
+		// Clean Account # has no stored column: it is the account number with its
+		// punctuation removed, so it is derived rather than sourced. Called out as
+		// derived wherever it is documented — the rule is written here, not invented.
+		{ group: "Vendor / Account", value: "cleanAccountNumber", label: "Clean Account #", description: "Account number with punctuation removed, for matching against systems that store it unformatted. Derived from Account # — UBM stores no clean account number of its own.", sql: "regexp_replace((SELECT va.account_code FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id), '[^A-Za-z0-9]', '', 'g') AS \"cleanAccountNumber\"" },
+		{ group: "Vendor / Account", value: "meterSerial", label: "Meter #", description: "Meter serial number recorded against the account. Source: virtual_accounts.meter_serial.", sql: "(SELECT va.meter_serial FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id) AS \"meterSerial\"" },
 		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
 		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Type or category of utility type.", sql: "amf.utility_type AS \"utilityType\"" },
 
@@ -203,16 +234,25 @@ export default {
 					{ attr: "gl\\s*desc", label: "GL Description", all: true },
 					{ attr: "gl\\s*alloc", label: "GL % Allocation", all: true }
 				],
-				// The 31 rows the workbook marks "Available fields not used on report".
-				// Nine of them have a UBM equivalent and are offered here; the rest —
-				// vendor and account addresses, Meter #, Service Description / Alias /
-				// Status, Service Point Location, Clean Account #, Misc Information,
-				// Audit Only — have none, and are on the unmapped list rather than
-				// guessed at. Account Status Date and Account Creation Date appearing
-				// in Engie's own list is what confirms those two columns are real.
+				// The rest of the client's Visible Columns list for this report: offered in
+				// the picker, not loaded by default. Their list is 38 entries; 26 are here.
+				//
+				// Nine were mapped already. Eight more came out of the schema read on
+				// 2026-08-05: the whole vendor address block — which had read as absent
+				// because UBM keeps it in a composite type rather than flat columns —
+				// Meter #, and Clean Account #. The two account dates are on this list as
+				// well, and stopped being blank placeholders in the same read.
+				//
+				// The twelve still missing are missing from the database, not from this
+				// list: Location Address 2, Misc Information, Audit Only, the five Account
+				// address fields, and Service Description / Alias / Status / Point
+				// Location. Nothing is guessed at in their place.
 				availableExtra: [
 					"locationAddress", "locationCity", "locationState", "locationZip",
 					"locationCountry", "locationStatus", "vendorCode",
+					"vendorAddress1", "vendorAddress2", "vendorCity", "vendorState",
+					"vendorZip", "vendorCountry",
+					"cleanAccountNumber", "meterSerial",
 					"accountCreatedDate", "accountActivityDate"
 				],
 				filters: {}
@@ -1102,7 +1142,10 @@ export default {
 	// Identifier columns that must stay text: "0115" not 115, "501480.000" not
 	// 501480. Attribute columns are added at build time; everything else is typed
 	// per value so charges and consumption still sum in the sheet.
-	textFields: ["locationNumber", "locationZip", "vendorCode", "accountNumber"],
+	textFields: [
+		"locationNumber", "locationZip", "vendorCode", "accountNumber",
+		"cleanAccountNumber", "meterSerial", "vendorZip"
+	],
 
 	_utf8: (str) => {
 		if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(str);
