@@ -42,7 +42,7 @@ shown as permanently empty columns:
 | Misc Information | Nothing by that name. `locations.payload` is free-form and may carry it. | What Engie's Misc Information holds, then whether `payload` holds the same thing. |
 | Audit Only | No audit flag on `virtual_accounts`. | Which system holds the audit-only flag. |
 | Account Address 1 / Address 2 / City / State-Province / Postal Code | `virtual_accounts` has no address columns at all. `analytics_billing_line_items.service_address` exists, but it is bill-line grain — joining it would multiply report rows — and it is the service address, not the account's mailing address. | Whether the account address *is* the service address. If it is, this is buildable the way Late Charges is: aggregated so it can't multiply rows. |
-| Service Description / Service Alias / Service Status / Service Point Location | No services table found in the tables read so far. `analytics_billing_line_items.description` is a line-item description, not a service one. | **Still pending** — the filtered table list returned 33 rows and only the first 11 were readable. A services table may yet exist. |
+| Service Description / Service Alias / Service Status / Service Point Location | Confirmed absent. There is no services table. `ubm_service_levels`, the only candidate in the schema, is a customer-level billing summary — Customer Tier, Billable Blocks, Avg Accounts per Bill — where "Service Level" is Engie's service tier for the account, not a utility service on a meter. `analytics_billing_line_items.description` is a line-item description, not a service one. | Confirm with Engie which system holds their service records. Nothing in UBM models a service as a thing with a description, alias, status and location. |
 
 ## The GL columns
 
