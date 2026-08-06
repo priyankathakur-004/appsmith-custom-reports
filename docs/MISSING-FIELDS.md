@@ -58,10 +58,19 @@ The last one is what the report showed until now, and it is demonstrably not an
 account creation date: Engie's own export has accounts activating on 2025-10-30,
 which is before UBM's earliest record of any Simon account exists.
 
-What the report shows instead is `MIN(analytics_monthly_feed.time_period)` per
-account — the first month the account was billed. The feed runs 2021-02 → 2026-09
-and covers 11,353 of the 11,377 accounts, so it reaches four years further back
-than the load window and is a real activation signal rather than an artefact.
+What the report shows instead is `MIN(analytics_monthly_feed.time_period)` — the
+first month the account was billed. The feed runs 2021-02 → 2026-09 and covers
+11,353 of the 11,377 accounts, so it reaches four years further back than the load
+window and is a real activation signal rather than an artefact.
+
+It is taken per **account number, site and vendor**, not per `virtual_account_id`.
+An account number is not unique in UBM: 3,033 of this customer's codes repeat, one
+of them 66 times. The repeats are services, not duplicates — `5328202771` is one
+account number the vendor bills for five commodities, and UBM gives each its own
+`virtual_account`. Dated per virtual account, one account renders as several rows
+differing only by date. Dated per account number, they collapse, and the date means
+"when this account was first billed for anything", which is what the client's
+column asks for.
 
 It is a derived value, not a mapping. If the client needs the utility's own
 account-opening date, UBM does not hold it and Engie would have to supply it.

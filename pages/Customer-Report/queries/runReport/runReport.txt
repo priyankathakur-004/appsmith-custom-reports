@@ -27,10 +27,12 @@ rv_one AS (
   GROUP BY customer_id, vendor_code
 ),
 amf_first AS (
-  SELECT virtual_account_id, MIN(time_period) AS first_period
-  FROM bill_management_v2.analytics_monthly_feed
-  WHERE customer_id = {{ ReportSpecs.customerIdSql() }}
-  GROUP BY virtual_account_id
+  SELECT va2.account_code, f.location_id, f.vendor_code,
+         MIN(f.time_period) AS first_period
+  FROM bill_management_v2.analytics_monthly_feed f
+  JOIN bill_management_v2.virtual_accounts va2 ON va2.id = f.virtual_account_id
+  WHERE f.customer_id = {{ ReportSpecs.customerIdSql() }}
+  GROUP BY va2.account_code, f.location_id, f.vendor_code
 )
 SELECT {{ ReportSpecs.selectClause() }}
 FROM {{ ReportSpecs.fromClause }}
