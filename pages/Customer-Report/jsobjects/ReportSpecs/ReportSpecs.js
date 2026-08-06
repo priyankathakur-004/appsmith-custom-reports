@@ -591,7 +591,7 @@ export default {
 		LEFT JOIN pv_one pv ON pv.code = amf.vendor_code
 		LEFT JOIN vas_one vas ON vas.virtual_account_id = amf.virtual_account_id
 		LEFT JOIN rv_one rv ON rv.vendor_code = amf.vendor_code AND rv.customer_id = amf.customer_id
-		LEFT JOIN amf_first af ON af.account_code IS NOT DISTINCT FROM va.account_code AND af.location_id IS NOT DISTINCT FROM amf.location_id AND af.vendor_code IS NOT DISTINCT FROM amf.vendor_code`,
+		LEFT JOIN amf_first af ON COALESCE(af.account_code, '') = COALESCE(va.account_code, '') AND COALESCE(af.location_id, -1) = COALESCE(amf.location_id, -1) AND COALESCE(af.vendor_code, '') = COALESCE(amf.vendor_code, '')`,
 
 	// Default ORDER BY (stable paging key) — also the tiebreaker for orderBy().
 	orderByClause: "l.id, amf.time_period",

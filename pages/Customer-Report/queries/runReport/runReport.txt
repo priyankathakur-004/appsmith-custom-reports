@@ -4,6 +4,7 @@ WITH cpv_one AS (
          MIN(remittance_name) AS remittance_name,
          (ARRAY_AGG(remittance_address))[1] AS remittance_address
   FROM bill_management_v2.customers_providers_vendors
+  WHERE customer_id = {{ ReportSpecs.customerIdSql() }}
   GROUP BY customer_id, code
 ),
 pv_one AS (
@@ -12,18 +13,23 @@ pv_one AS (
          CASE WHEN COUNT(DISTINCT btrim(remittance_name)) = 1 THEN MIN(remittance_name) END AS remittance_name,
          CASE WHEN COUNT(*) = 1 THEN (ARRAY_AGG(remittance_address))[1] END AS remittance_address
   FROM bill_management_v2.providers_vendors
+  WHERE code IN (SELECT vendor_code FROM bill_management_v2.analytics_monthly_feed
+                 WHERE customer_id = {{ ReportSpecs.customerIdSql() }})
   GROUP BY code
 ),
 vas_one AS (
-  SELECT DISTINCT ON (virtual_account_id)
-         virtual_account_id, account_status, account_opened, account_closed
-  FROM bill_management_v2.virtual_accounts_status
-  ORDER BY virtual_account_id, account_closed DESC NULLS LAST
+  SELECT DISTINCT ON (s.virtual_account_id)
+         s.virtual_account_id, s.account_status, s.account_opened, s.account_closed
+  FROM bill_management_v2.virtual_accounts_status s
+  JOIN bill_management_v2.virtual_accounts sva ON sva.id = s.virtual_account_id
+  WHERE sva.customer_id = {{ ReportSpecs.customerIdSql() }}
+  ORDER BY s.virtual_account_id, s.account_closed DESC NULLS LAST
 ),
 rv_one AS (
   SELECT customer_id, vendor_code,
          NULLIF(btrim(MIN(providers_vendors_attributes::jsonb ->> 'Vendor Code')), '') AS fiq_vendor_id
   FROM bill_management_v2.reports_vendors
+  WHERE customer_id = {{ ReportSpecs.customerIdSql() }}
   GROUP BY customer_id, vendor_code
 ),
 amf_first AS (
