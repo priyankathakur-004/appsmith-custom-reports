@@ -128,7 +128,11 @@ export default {
 		// and invites a divide-by-100 that would be wrong. It was added on that reading
 		// once and reverted. Only if we ever write a percent-formatted xlsx cell does the
 		// value need dividing, and that is an export-formatting job, not a column.
-		{ group: "GL", value: "glAllocation", label: "GL Allocation %", description: "Share of the account allocated to this row's GL code, as a percentage — 51.25 means 51.25%, and an account charged to a single GL reads 100. Stored and reported as UBM holds it. Note the client's own exports format these cells as percentages, so Excel shows 51.25% while storing 0.5125 — the same number, not a different scale.", sql: "glr.gl_allocation AS \"glAllocation\"" },
+		// Cast to numeric, not because the scale changes — it doesn't — but because the
+		// attribute is stored as text, and text sorts "100" before "51.25" and exports to
+		// Excel as a string the client cannot total or percent-format. Their column is a
+		// number. A value that isn't numeric reports blank rather than failing the query.
+		{ group: "GL", value: "glAllocation", label: "GL Allocation %", description: "Share of the account allocated to this row's GL code, as a percentage — 51.25 means 51.25%, and an account charged to a single GL reads 100. The scale is UBM's own, unchanged. Note the client's own exports format these cells as percentages, so Excel shows 51.25% while storing 0.5125 — the same number, not a different scale.", sql: "CASE WHEN btrim(glr.gl_allocation) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN btrim(glr.gl_allocation)::numeric END AS \"glAllocation\"" },
 		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
 		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Type or category of utility type.", sql: "amf.utility_type AS \"utilityType\"" },
 
