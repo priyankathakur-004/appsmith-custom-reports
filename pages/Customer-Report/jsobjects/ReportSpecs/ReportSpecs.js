@@ -609,9 +609,19 @@ export default {
 	usesGlRows: () =>
 		ReportSpecs.selectedColumns().some(o => ReportSpecs.GL_ROW_FIELDS.indexOf(o.value) >= 0),
 
-	fromClause: () => ReportSpecs.baseFrom + (ReportSpecs.usesGlRows()
-		? "\n\t\tLEFT JOIN gl_rows glr ON glr.virtual_account_id = amf.virtual_account_id AND glr.gl_code IS NOT NULL"
-		: ""),
+	fromClause: () => {
+		let sql = ReportSpecs.baseFrom;
+		if (ReportSpecs.usesGlRows()) {
+			sql += "\n\t\tLEFT JOIN gl_rows glr ON glr.virtual_account_id = amf.virtual_account_id AND glr.gl_code IS NOT NULL";
+		}
+		// One join per attribute column selected, and none when there are none.
+		ReportSpecs.accountAttrColumns().forEach(o => {
+			if (!o.joinAlias) return;
+			sql += `\n\t\tLEFT JOIN attr_vals ${o.joinAlias} ON ${o.joinAlias}.virtual_account_id = amf.virtual_account_id`
+				+ ` AND ${o.joinAlias}.attribute_name = ${ReportSpecs._quote(o.attrName)}`;
+		});
+		return sql;
+	},
 
 	baseFrom:
 		`feed_scoped amf
@@ -763,6 +773,11 @@ export default {
 	// alias and the grid's column key, so it must be safe whatever the attribute is
 	// named. Values are aggregated with " | " (a VA can carry one more than once);
 	// this is a correlated subquery per attribute.
+	// This used to be a correlated subquery per attribute: with six GL slots selected,
+	// six scans of the mapping and metadata tables for every row of the report. It now
+	// reads attr_vals, which aggregates the same thing once per (account, attribute),
+	// and joins one alias per attribute picked. Same value, same " | " join for an
+	// attribute a virtual account carries twice, same column alias.
 	accountAttrColumn: (pick) => {
 		const name = String(pick).slice(ReportSpecs.ATTR_PREFIX.length).trim();
 		let alias = "attr_" + name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -771,15 +786,9 @@ export default {
 			value: alias,
 			label: name,
 			description: "Account attribute: " + name,
-			sql:
-				"(SELECT string_agg(DISTINCT vam.attribute_value, ' | ' ORDER BY vam.attribute_value) " +
-				"FROM bill_management_v2.virtual_accounts_attributes_mapping vam " +
-				"JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta " +
-				"ON vmeta.id = vam.virtual_accounts_attributes_metadata_id " +
-				"WHERE vam.virtual_account_id = amf.virtual_account_id " +
-				"AND vmeta.customer_id = amf.customer_id " +
-				"AND vmeta.deleted_at IS NULL " +
-				`AND vmeta.attribute_name = ${ReportSpecs._quote(name)}) AS "${alias}"`
+			attrName: name,
+			joinAlias: "av_" + alias,
+			sql: `av_${alias}.val AS "${alias}"`
 		};
 	},
 

@@ -32,6 +32,17 @@ rv_one AS (
   WHERE customer_id = {{ ReportSpecs.customerIdSql() }}
   GROUP BY customer_id, vendor_code
 ),
+attr_vals AS (
+  SELECT vam.virtual_account_id,
+         vmeta.attribute_name,
+         string_agg(DISTINCT vam.attribute_value, ' | ' ORDER BY vam.attribute_value) AS val
+  FROM bill_management_v2.virtual_accounts_attributes_mapping vam
+  JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta
+    ON vmeta.id = vam.virtual_accounts_attributes_metadata_id
+  WHERE vmeta.customer_id = {{ ReportSpecs.customerIdSql() }}
+    AND vmeta.deleted_at IS NULL
+  GROUP BY vam.virtual_account_id, vmeta.attribute_name
+),
 feed_scoped AS (
   {{ ReportSpecs.feedCte() }}
 ),
