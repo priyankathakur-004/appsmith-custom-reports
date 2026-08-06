@@ -55,7 +55,7 @@ export default {
 		// vendors.id is the only numeric vendor key UBM exposes and it is in the right
 		// range, but nobody has confirmed the two are the same number — see the
 		// unmapped-fields list in the commit message before handing this to the client.
-		{ group: "Vendor / Account", value: "vendorId", label: "Vendor ID", description: "UBM's numeric id for the vendor. Believed to be the same number as the client's FIQ Vendor ID, but not yet confirmed against Engie.", sql: "(SELECT v.id FROM bill_management_v2.vendors v WHERE v.code = amf.vendor_code LIMIT 1) AS \"vendorId\"" },
+		{ group: "Vendor / Account", value: "vendorId", label: "Vendor ID", description: "UBM's own numeric id for the vendor. NOT the client's FIQ Vendor ID — that number is not in UBM. Checked on 2026-08-06 against vendors.id, providers_vendors.id / .vendor_id / .provider_id and the customer-scoped records: Engie has Chugach at 1769, UBM at 40119.", sql: "(SELECT v.id FROM bill_management_v2.vendors v WHERE v.code = amf.vendor_code LIMIT 1) AS \"vendorId\"" },
 		// --- Vendor address ---
 		// UBM keeps the vendor address as a composite type on remittance_address, not as
 		// flat columns: line_1 … line_4, city, state, post_code, country. That is why it
@@ -204,7 +204,7 @@ export default {
 		// service filter — the client asked for them to stay that way. One definition,
 		// three service patterns.
 		const dupColumns = [
-			"locationNumber", "vendorId", "vendor", "utilityType", "accountNumber",
+			"locationNumber", "vendor", "utilityType", "accountNumber",
 			{ attr: "^gl\\s*code", label: "Customer GL Number" },
 			"locationAddress", "totalCharges", "startDate", "endDate", "totalConsumption"
 		];
@@ -212,6 +212,7 @@ export default {
 			value: value,
 			label: label,
 			columns: dupColumns,
+			availableExtra: ["vendorId", "vendorCode"],
 			filters: { utilityType: { match: service } }
 		});
 
@@ -263,7 +264,8 @@ export default {
 			{
 				value: "vendorBySite",
 				label: "Vendor by Site with Account",
-				columns: ["vendor", "vendorId", "locationNumber", "location", "accountNumber"],
+				columns: ["vendor", "locationNumber", "location", "accountNumber"],
+				availableExtra: ["vendorId", "vendorCode", "accountStatus"],
 				filters: { accountStatus: { match: "^\\s*active\\s*$" } }
 			},
 
@@ -491,12 +493,21 @@ export default {
 		const known = ReportSpecs.allFieldOptions().map(o => o.value);
 		let model = [];
 		try { model = JSON.parse(appsmith.store.reportsSortModel || "[]"); } catch (e) { model = []; }
-		const terms = (Array.isArray(model) ? model : [])
-			.filter(s => s && known.indexOf(s.colId) >= 0)
-			.map(s => `"${s.colId}" ${s.sort === "desc" ? "DESC" : "ASC"}`);
-		return terms.length > 0
-			? `${terms.join(", ")}, ${ReportSpecs.orderByClause}`
-			: ReportSpecs.orderByClause;
+		const picked = (Array.isArray(model) ? model : []).filter(s => s && known.indexOf(s.colId) >= 0);
+		const terms = picked.map(s => `"${s.colId}" ${s.sort === "desc" ? "DESC" : "ASC"}`);
+		const cols = ReportSpecs.selectedColumns();
+		const varies = cols.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")));
+		if (varies) {
+			return terms.length > 0
+				? `${terms.join(", ")}, ${ReportSpecs.orderByClause}`
+				: ReportSpecs.orderByClause;
+		}
+		const seen = {};
+		picked.forEach(s => { seen[s.colId] = true; });
+		cols.forEach(o => {
+			if (!seen[o.value]) { seen[o.value] = true; terms.push(`"${o.value}"`); }
+		});
+		return terms.length > 0 ? terms.join(", ") : "1";
 	},
 
 	// ----- ISO state/country code → pretty name maps -----
@@ -659,8 +670,11 @@ export default {
 
 	// ----- SELECT builder -----
 	selectClause: () => {
-		const exprs = ReportSpecs.selectedColumns().map(o => o.sql);
-		return exprs.length > 0 ? exprs.join(", ") : "1 AS placeholder";
+		const cols = ReportSpecs.selectedColumns();
+		const varies = cols.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")));
+		const exprs = cols.map(o => o.sql);
+		const sql = exprs.length > 0 ? exprs.join(", ") : "1 AS placeholder";
+		return varies ? sql : `DISTINCT ${sql}`;
 	},
 
 	// ----- WHERE builder (every filter is SQL-side) -----
