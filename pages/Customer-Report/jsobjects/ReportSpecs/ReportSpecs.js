@@ -692,12 +692,16 @@ export default {
 		const shown = ReportSpecs.selectedColumns();
 		const varies = shown.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")));
 		if (!varies) {
+			const keys = ["a2.virtual_account_id = amf.virtual_account_id"];
+			if (shown.some(o => o.group === "Location")) {
+				keys.push("a2.location_id IS NOT DISTINCT FROM amf.location_id");
+			}
+			if (shown.some(o => o.value === "utilityType")) {
+				keys.push("a2.utility_type IS NOT DISTINCT FROM amf.utility_type");
+			}
 			parts.push(
 				"AND amf.time_period = (SELECT MAX(a2.time_period) " +
-				"FROM bill_management_v2.analytics_monthly_feed a2 " +
-				"WHERE a2.virtual_account_id = amf.virtual_account_id " +
-				"AND a2.location_id IS NOT DISTINCT FROM amf.location_id " +
-				"AND a2.utility_type IS NOT DISTINCT FROM amf.utility_type)"
+				"FROM bill_management_v2.analytics_monthly_feed a2 WHERE " + keys.join(" AND ") + ")"
 			);
 		}
 		// True when the column we're listing values for is the one this filter
