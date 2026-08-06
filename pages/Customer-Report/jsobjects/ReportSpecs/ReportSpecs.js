@@ -370,15 +370,34 @@ export default {
 				filters: {}
 			},
 
-			// Site Name | Vendor Name | Account Number | Activity Date | Account Status.
-			// Filtered to Active accounts because this is the activation half of the
-			// workbook's activation/deactivation pair; clear the Account Status filter
-			// to get deactivations out of the same preset.
+			// The workbook's Deactivation Rpt: Row | Bill Details.Site Name | Bill Details.
+			// Vendor Information.Vendor Name | Bill Details.Account Number | FIQ Account
+			// Inactive Date | FIQ Account Status. Row is their row counter, so the five
+			// data columns are the ones below, and their visible-fields list holds exactly
+			// those — no extras, hence no availableExtra here.
+			//
+			// This was the Activation preset: the same five columns filtered the other
+			// way. There is no Activation tab in the workbook — its activation half is the
+			// Account Activity report above, which has a different column set entirely.
+			//
+			// Filtered to Closed, which every row of their tab carries and which is the
+			// only status UBM records positively. Not-closed was the old filter and it is
+			// not the complement it looks like: UBM's other value is Unknown, and 44 of
+			// the 111 accounts on their tab that exist in UBM still read Unknown, so
+			// "not closed" admits accounts the client has already deactivated.
+			//
+			// dateColumn points the pickers at the closing date, so a date range means
+			// "deactivated in this window" rather than "billed in it". Two things to send
+			// with the output: account_closed is when UBM processed the closure rather
+			// than when it happened — around 81 days late on average against their tab,
+			// with no exact matches — and the report can only reach the closures UBM has,
+			// which was 67 of their 192 rows when last measured.
 			{
-				value: "activation",
-				label: "Activation",
+				value: "deactivation",
+				label: "Deactivation",
 				columns: ["location", "vendor", "accountNumber", "accountActivityDate", "accountStatus"],
-				filters: { accountStatus: { not: "^\\s*closed\\s*$" } }
+				dateColumn: "vas.account_closed",
+				filters: { accountStatus: { match: "^\\s*closed\\s*$" } }
 			},
 
 			// The workbook calls this tab "Simon Final Bill", but nothing about it is
