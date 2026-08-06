@@ -33,9 +33,22 @@ amf_first AS (
   JOIN bill_management_v2.virtual_accounts va2 ON va2.id = f.virtual_account_id
   WHERE f.customer_id = {{ ReportSpecs.customerIdSql() }}
   GROUP BY va2.account_code, f.location_id, f.vendor_code
+),
+gl_rows AS (
+  SELECT vam.virtual_account_id,
+         (substring(vmeta.attribute_name from '([0-9]+)'))::int AS gl_slot,
+         MAX(NULLIF(btrim(vam.attribute_value), '')) FILTER (WHERE vmeta.attribute_name ~* '^gl\s*code')  AS gl_code,
+         MAX(NULLIF(btrim(vam.attribute_value), '')) FILTER (WHERE vmeta.attribute_name ~* '^gl\s*alloc') AS gl_allocation
+  FROM bill_management_v2.virtual_accounts_attributes_mapping vam
+  JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta
+    ON vmeta.id = vam.virtual_accounts_attributes_metadata_id
+  WHERE vmeta.customer_id = {{ ReportSpecs.customerIdSql() }}
+    AND vmeta.deleted_at IS NULL
+    AND vmeta.attribute_name ~* '^gl\s*(code|alloc)'
+  GROUP BY 1, 2
 )
 SELECT {{ ReportSpecs.selectClause() }}
-FROM {{ ReportSpecs.fromClause }}
+FROM {{ ReportSpecs.fromClause() }}
 {{ ReportSpecs.filterClauses() }}
 ORDER BY {{ ReportSpecs.orderBy() }}
 LIMIT {{ Math.max(1, Number(appsmith.store.reportsExportLimit) || 5000) }}

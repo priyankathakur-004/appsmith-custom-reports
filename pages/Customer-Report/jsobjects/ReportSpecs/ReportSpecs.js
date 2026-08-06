@@ -30,7 +30,13 @@ export default {
 		{ group: "Location", value: "locationState", label: "State/Province", description: "Location state or province", sql: "l.state AS \"locationState\"" },
 		{ group: "Location", value: "locationCountry", label: "Country", description: "Location country", sql: "l.country AS \"locationCountry\"" },
 		{ group: "Location", value: "locationZip", label: "Location Zip", description: "Location postal / ZIP code", sql: "l.postcode AS \"locationZip\"" },
-		{ group: "Location", value: "locationStatus", label: "Location Status", description: "Current status of status.", sql: "lt.location_status AS \"locationStatus\"" },
+		// UBM's word for an open site is "Operational"; the client's reports say "Active".
+		// Checked for this customer: every location reads Operational apart from a couple
+		// with no status at all — the whole Site Status disagreement was vocabulary, not
+		// missing data, and no site carried a third value. Mapped the
+		// same way Account Status is, and anything unrecognised passes through as stored
+		// rather than being forced into one of the two buckets.
+		{ group: "Location", value: "locationStatus", label: "Location Status", description: "Status of the site. UBM records an open site as Operational; this is reported as Active to match the client's reports. Closed / Inactive / Terminated report as Inactive, and any other value passes through as UBM stores it.", sql: "CASE WHEN lower(btrim(lt.location_status)) IN ('operational','active','open') THEN 'Active' WHEN lower(btrim(lt.location_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' ELSE lt.location_status END AS \"locationStatus\"" },
 		{ group: "Location", value: "buildingType", label: "Building Type", description: "Type or category of location building type.", sql: "l.building_type AS \"buildingType\"" },
 		{ group: "Location", value: "squareFeet", label: "Square Feet", description: "Location floor area (sq ft)", sql: "l.square_feet AS \"squareFeet\"" },
 		{ group: "Location", value: "locationNumber", label: "Location Number", description: "Site number, e.g. 0115 — the number your own reports refer to a location by.", sql: "lt.location_number AS \"locationNumber\"" },
@@ -98,6 +104,22 @@ export default {
 		// derived wherever it is documented — the rule is written here, not invented.
 		{ group: "Vendor / Account", value: "cleanAccountNumber", label: "Clean Account #", description: "Account number with punctuation removed, for matching against systems that store it unformatted. Derived from Account # — UBM stores no clean account number of its own.", sql: "regexp_replace(va.account_code, '[^A-Za-z0-9]', '', 'g') AS \"cleanAccountNumber\"" },
 		{ group: "Vendor / Account", value: "meterSerial", label: "Meter #", description: "Meter serial number recorded against the account. Source: virtual_accounts.meter_serial.", sql: "va.meter_serial AS \"meterSerial\"" },
+
+		// --- GL, one row per code ---
+		// UBM stores GL as wide attributes — GL Code 1…6 and GL Allocation 1…6 (%) —
+		// but the client's reports put each GL code on its own line, so an account split
+		// three ways is three rows. These two read the gl_rows CTE, which unpivots the
+		// pairs back to rows; selecting either adds the join (see fromClause).
+		//
+		// Use these, not the "Account attribute · GL Code 1" picks, when the row layout
+		// matters. The attribute picks are still there and still one column per slot.
+		// The trailing .000 is trimmed. UBM stores the plain codes as 501530.000 and the
+		// client's report writes 501530; measured against their Activations tab, that
+		// suffix was the only difference on every GL code that otherwise agreed. Codes
+		// carrying a real sub-account — 501440.901.E010 — already match and are untouched,
+		// and only an exact ".000" at the end is removed, so a meaningful .001 survives.
+		{ group: "GL", value: "glCode", label: "Customer GL Number", description: "GL code charged for this account, one row per code. Source: the GL Code 1–6 account attributes, unpivoted so an account split across several GL codes reports as several rows. A trailing .000 is trimmed so codes read as the client's reports write them (501530, not 501530.000).", sql: "regexp_replace(glr.gl_code, '\\.000$', '') AS \"glCode\"" },
+		{ group: "GL", value: "glAllocation", label: "GL Allocation %", description: "Share of the account allocated to this row's GL code. Source: the matching GL Allocation 1–6 (%) attribute, passed through exactly as UBM stores it — confirm the scale (1 vs 100) against the client's own export before relying on it.", sql: "glr.gl_allocation AS \"glAllocation\"" },
 		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
 		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Type or category of utility type.", sql: "amf.utility_type AS \"utilityType\"" },
 
@@ -252,6 +274,10 @@ export default {
 					"vendorZip", "vendorCountry",
 					"cleanAccountNumber", "meterSerial",
 					"accountCreatedDate", "accountActivityDate",
+					// One row per GL code, the layout the client's report uses. Offered
+					// alongside the wide attribute columns below, which stay one column
+					// per slot — pick one style or the other, not both.
+					"glCode", "glAllocation",
 					{ attr: "^gl\\s*code", label: "Customer GL Number", all: true },
 					{ attr: "gl\\s*desc", label: "GL Description", all: true },
 					{ attr: "gl\\s*alloc", label: "GL % Allocation", all: true }
@@ -270,15 +296,28 @@ export default {
 
 			// Site Name | Site Number | Site Status | Vendor Name | Account Number |
 			// Account Creation Date | Customer GL Number | GL Allocation %
+			//
+			// Matched against the workbook's "Acct Activity Rpt Activations" tab, which
+			// runs one row per GL code, not one per account — hence glCode/glAllocation
+			// rather than the wide attribute picks this used to carry (they only ever
+			// read GL Code 1, so an account split across several codes lost all but one).
+			//
+			// dateColumn points the Start/End pickers at the creation date instead of the
+			// billing month, because that tab is a window on activations: accounts
+			// created Oct–Dec 2025, not accounts billed in those months.
 			{
 				value: "accountActivity",
 				label: "Account Activity",
 				columns: [
 					"location", "locationNumber", "locationStatus", "vendor", "accountNumber",
-					"accountCreatedDate",
-					{ attr: "^gl\\s*code", label: "Customer GL Number" },
-					{ attr: "gl\\s*alloc", label: "GL Allocation %" }
+					"accountCreatedDate", "glCode", "glAllocation"
 				],
+				dateColumn: "af.first_period",
+				// Clean Account # is offered because the client's own export punctuates
+				// account numbers differently from UBM — matching their tab on the raw
+				// code finds less than half of what the punctuation-stripped code finds.
+				// Reconcile on this column, not on Account #.
+				availableExtra: ["cleanAccountNumber"],
 				filters: {}
 			},
 
@@ -480,7 +519,19 @@ export default {
 	// locations (l) is the parent; location_detail (lt) holds address/status/number.
 	// Vendor name is a scalar subquery rather than a join: the pretty-name view held
 	// the raw code for 209 of 377 vendors, and a code can repeat within a customer.
-	fromClause:
+	// The GL row columns, and whether this report is using either. The gl_rows join
+	// multiplies an account by its GL count, so it is only added when asked for —
+	// every other report keeps one row per account.
+	GL_ROW_FIELDS: ["glCode", "glAllocation"],
+
+	usesGlRows: () =>
+		ReportSpecs.selectedColumns().some(o => ReportSpecs.GL_ROW_FIELDS.indexOf(o.value) >= 0),
+
+	fromClause: () => ReportSpecs.baseFrom + (ReportSpecs.usesGlRows()
+		? "\n\t\tLEFT JOIN gl_rows glr ON glr.virtual_account_id = amf.virtual_account_id AND glr.gl_code IS NOT NULL"
+		: ""),
+
+	baseFrom:
 		`bill_management_v2.analytics_monthly_feed amf
 		LEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id
 		LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id
@@ -741,13 +792,20 @@ export default {
 
 		// Date range (always applied if provided). amf.time_period is the canonical
 		// month bucket — start of month for monthly feed.
+		//
+		// A preset can redirect the pickers with dateColumn. Account Activity does:
+		// "activations in October" means accounts created that month, and filtering the
+		// billing month instead would return every account that happened to be billed
+		// then. Whitelisted against the presets, never taken from user input.
+		const datePreset = ReportSpecs.activePreset();
+		const dateCol = (datePreset && datePreset.dateColumn) || "amf.time_period";
 		if (StartDate && StartDate.selectedDate) {
 			const d = moment(StartDate.selectedDate).startOf("month").format("YYYY-MM-DD");
-			parts.push(`AND amf.time_period >= '${d}'`);
+			parts.push(`AND ${dateCol} >= '${d}'`);
 		}
 		if (EndDate && EndDate.selectedDate) {
 			const d = moment(EndDate.selectedDate).endOf("month").format("YYYY-MM-DD");
-			parts.push(`AND amf.time_period <= '${d}'`);
+			parts.push(`AND ${dateCol} <= '${d}'`);
 		}
 
 		// State / Province
@@ -971,7 +1029,7 @@ export default {
 
 	// Minimal FROM for the value query: only the joins the column and active filters
 	// actually reference, so a distinct on an amf-only column skips them entirely.
-	distinctFrom: () => ReportSpecs.fromClause,
+	distinctFrom: () => ReportSpecs.fromClause(),
 
 	// onFetchDistinct handler: the grid asks for a column's checkbox values.
 	// Persist the requested field, run the distinct query, then bump the ts the
