@@ -229,10 +229,7 @@ export default {
 				value: "glAllocations",
 				label: "GL Allocations",
 				columns: [
-					"location", "locationNumber", "vendor", "accountNumber", "accountStatus", "utilityType",
-					{ attr: "^gl\\s*code", label: "Customer GL Number", all: true },
-					{ attr: "gl\\s*desc", label: "GL Description", all: true },
-					{ attr: "gl\\s*alloc", label: "GL % Allocation", all: true }
+					"location", "locationNumber", "vendor", "accountNumber", "accountStatus", "utilityType"
 				],
 				// The rest of the client's Visible Columns list for this report: offered in
 				// the picker, not loaded by default. Their list is 38 entries; 26 are here.
@@ -253,7 +250,10 @@ export default {
 					"vendorAddress1", "vendorAddress2", "vendorCity", "vendorState",
 					"vendorZip", "vendorCountry",
 					"cleanAccountNumber", "meterSerial",
-					"accountCreatedDate", "accountActivityDate"
+					"accountCreatedDate", "accountActivityDate",
+					{ attr: "^gl\\s*code", label: "Customer GL Number", all: true },
+					{ attr: "gl\\s*desc", label: "GL Description", all: true },
+					{ attr: "gl\\s*alloc", label: "GL % Allocation", all: true }
 				],
 				filters: {}
 			},

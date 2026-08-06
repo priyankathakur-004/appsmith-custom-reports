@@ -67,9 +67,12 @@ attributes, as we do, is right.
 **"This customer has no GL attribute" was wrong.** Ten of the twelve GL columns
 resolve. Whatever emptied those columns before, it was not a missing attribute.
 
-One consequence worth putting to the client: `all: true` takes every match, so the
-report renders GL Code 1-6 and GL Allocation 1-6 as **twelve columns across**. Engie's
-own report puts one GL code per row. That is the unpivot decision that is still open.
+The GL columns are offered in the picker rather than loaded, on the client's
+instruction of 2026-08-06. `all: true` takes every match, so ticking Customer GL Number
+adds GL Code 1-6 and ticking GL % Allocation adds all six percentages — twelve columns
+across if both are picked, where Engie's report puts one GL code per row. That is the
+unpivot decision, still open. Leaving them unticked also keeps the report's default
+query cheap: each attribute column is a correlated subquery.
 
 ## Also found
 
