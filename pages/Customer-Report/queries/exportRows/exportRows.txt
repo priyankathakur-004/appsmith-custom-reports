@@ -32,6 +32,9 @@ rv_one AS (
   WHERE customer_id = {{ ReportSpecs.customerIdSql() }}
   GROUP BY customer_id, vendor_code
 ),
+feed_scoped AS (
+  {{ ReportSpecs.feedCte() }}
+),
 amf_first AS (
   SELECT va2.account_code, f.location_id, f.vendor_code,
          MIN(f.time_period) AS first_period

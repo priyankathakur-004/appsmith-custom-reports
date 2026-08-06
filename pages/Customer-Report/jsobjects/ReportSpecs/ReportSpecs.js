@@ -568,6 +568,39 @@ export default {
 	// locations (l) is the parent; location_detail (lt) holds address/status/number.
 	// Vendor name is a scalar subquery rather than a join: the pretty-name view held
 	// the raw code for 209 of 377 vendors, and a code can repeat within a customer.
+	// ----- The feed the report reads -----
+	// Reports that carry no per-month column want one row per account (per site, and
+	// per service type when that column is shown) at its most recent month. Reports
+	// that do carry one — anything in Period / Usage / Charges / Weather — want every
+	// month, so the feed passes through customer-filtered and otherwise whole.
+	//
+	// Returns the key list for the collapse, or null when the report varies by month.
+	feedKeys: () => {
+		const shown = ReportSpecs.selectedColumns();
+		if (shown.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")))) return null;
+		const keys = ["virtual_account_id"];
+		if (shown.some(o => o.group === "Location")) keys.push("location_id");
+		if (shown.some(o => o.value === "utilityType")) keys.push("utility_type");
+		return keys;
+	},
+
+	// Body of the feed_scoped CTE. Filtering the feed here rather than in the outer
+	// WHERE is the point: the largest table in the query is cut to one customer before
+	// anything joins to it.
+	//
+	// NULLS LAST matters. MAX() ignores nulls, so an account whose latest row has no
+	// time_period used to fall back to its newest dated row; a bare DESC would sort
+	// that null first and pick it. DISTINCT ON groups nulls in the key columns
+	// together, which is what IS NOT DISTINCT FROM did before.
+	feedCte: () => {
+		const cid = ReportSpecs.customerIdSql();
+		const src = `FROM bill_management_v2.analytics_monthly_feed WHERE customer_id = ${cid}`;
+		const keys = ReportSpecs.feedKeys();
+		if (!keys) return `SELECT * ${src}`;
+		const k = keys.join(", ");
+		return `SELECT DISTINCT ON (${k}) * ${src} ORDER BY ${k}, time_period DESC NULLS LAST`;
+	},
+
 	// The GL row columns, and whether this report is using either. The gl_rows join
 	// multiplies an account by its GL count, so it is only added when asked for —
 	// every other report keeps one row per account.
@@ -581,7 +614,7 @@ export default {
 		: ""),
 
 	baseFrom:
-		`bill_management_v2.analytics_monthly_feed amf
+		`feed_scoped amf
 		LEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id
 		LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id
 		LEFT JOIN bill_management_v2.virtual_accounts va ON va.id = amf.virtual_account_id
@@ -817,21 +850,11 @@ export default {
 		if (cidSql === "0") return "WHERE 1=0";
 		parts.push(`AND amf.customer_id = ${cidSql}`);
 
-		const shown = ReportSpecs.selectedColumns();
-		const varies = shown.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")));
-		if (!varies) {
-			const keys = ["a2.virtual_account_id = amf.virtual_account_id"];
-			if (shown.some(o => o.group === "Location")) {
-				keys.push("a2.location_id IS NOT DISTINCT FROM amf.location_id");
-			}
-			if (shown.some(o => o.value === "utilityType")) {
-				keys.push("a2.utility_type IS NOT DISTINCT FROM amf.utility_type");
-			}
-			parts.push(
-				"AND amf.time_period = (SELECT MAX(a2.time_period) " +
-				"FROM bill_management_v2.analytics_monthly_feed a2 WHERE " + keys.join(" AND ") + ")"
-			);
-		}
+		// The "latest month per account" collapse used to live here as
+		//   AND amf.time_period = (SELECT MAX(a2.time_period) FROM ... WHERE a2.x = amf.x)
+		// which is a correlated subquery re-executed for every candidate row — the feed
+		// scanned once per row of the report. It now happens once, in the feed_scoped
+		// CTE, as a DISTINCT ON over the same keys. See feedKeys/feedCte.
 		// True when the column we're listing values for is the one this filter
 		// targets, so we skip it (don't let a column filter constrain its own list).
 		const skip = (aliases) => {
