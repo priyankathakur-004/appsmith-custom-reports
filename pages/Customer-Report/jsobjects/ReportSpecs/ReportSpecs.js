@@ -119,7 +119,14 @@ export default {
 		// carrying a real sub-account — 501440.901.E010 — already match and are untouched,
 		// and only an exact ".000" at the end is removed, so a meaningful .001 survives.
 		{ group: "GL", value: "glCode", label: "Customer GL Number", description: "GL code charged for this account, one row per code. Source: the GL Code 1–6 account attributes, unpivoted so an account split across several GL codes reports as several rows. A trailing .000 is trimmed so codes read as the client's reports write them (501530, not 501530.000).", sql: "regexp_replace(glr.gl_code, '\\.000$', '') AS \"glCode\"" },
-		{ group: "GL", value: "glAllocation", label: "GL Allocation %", description: "Share of the account allocated to this row's GL code. Source: the matching GL Allocation 1–6 (%) attribute, passed through exactly as UBM stores it — confirm the scale (1 vs 100) against the client's own export before relying on it.", sql: "glr.gl_allocation AS \"glAllocation\"" },
+		// Two scales, because the client's own reports use two. Their GL Allocations
+		// report writes 51.25 / 0.14 / 48.61 — percent, which is how UBM stores it. Their
+		// Account Activity tab writes the same split as 0.5125 / 0.0014 / 0.4861, summing
+		// to 1. Same number, so rather than a mode flag both are offered and each report
+		// picks its own. The guard means a non-numeric attribute value reports blank
+		// instead of failing the whole query on a cast.
+		{ group: "GL", value: "glAllocation", label: "GL Allocation %", description: "Share of the account allocated to this row's GL code, as a percentage — 51.25 means 51.25%. This is how UBM stores it, and it matches the client's GL Allocations report. For the fraction form their Account Activity report uses, pick GL Allocation (fraction).", sql: "glr.gl_allocation AS \"glAllocation\"" },
+		{ group: "GL", value: "glAllocationFraction", label: "GL Allocation (fraction)", description: "The same allocation expressed as a fraction of 1 — 0.5125 rather than 51.25 — which is the form the client's Account Activity report uses, where a whole account reads 1 rather than 100. Derived by dividing the stored percentage by 100.", sql: "CASE WHEN btrim(glr.gl_allocation) ~ '^[0-9]+(\\.[0-9]+)?$' THEN ROUND(btrim(glr.gl_allocation)::numeric / 100, 6) END AS \"glAllocationFraction\"" },
 		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
 		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Type or category of utility type.", sql: "amf.utility_type AS \"utilityType\"" },
 
@@ -277,7 +284,7 @@ export default {
 					// One row per GL code, the layout the client's report uses. Offered
 					// alongside the wide attribute columns below, which stay one column
 					// per slot — pick one style or the other, not both.
-					"glCode", "glAllocation",
+					"glCode", "glAllocation", "glAllocationFraction",
 					{ attr: "^gl\\s*code", label: "Customer GL Number", all: true },
 					{ attr: "gl\\s*desc", label: "GL Description", all: true },
 					{ attr: "gl\\s*alloc", label: "GL % Allocation", all: true }
@@ -310,14 +317,14 @@ export default {
 				label: "Account Activity",
 				columns: [
 					"location", "locationNumber", "locationStatus", "vendor", "accountNumber",
-					"accountCreatedDate", "glCode", "glAllocation"
+					"accountCreatedDate", "glCode", "glAllocationFraction"
 				],
 				dateColumn: "af.first_period",
 				// Clean Account # is offered because the client's own export punctuates
 				// account numbers differently from UBM — matching their tab on the raw
 				// code finds less than half of what the punctuation-stripped code finds.
 				// Reconcile on this column, not on Account #.
-				availableExtra: ["cleanAccountNumber"],
+				availableExtra: ["cleanAccountNumber", "glAllocation"],
 				filters: {}
 			},
 
@@ -522,7 +529,7 @@ export default {
 	// The GL row columns, and whether this report is using either. The gl_rows join
 	// multiplies an account by its GL count, so it is only added when asked for —
 	// every other report keeps one row per account.
-	GL_ROW_FIELDS: ["glCode", "glAllocation"],
+	GL_ROW_FIELDS: ["glCode", "glAllocation", "glAllocationFraction"],
 
 	usesGlRows: () =>
 		ReportSpecs.selectedColumns().some(o => ReportSpecs.GL_ROW_FIELDS.indexOf(o.value) >= 0),
