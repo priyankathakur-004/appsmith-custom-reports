@@ -55,7 +55,7 @@ export default {
 		// vendors.id is the only numeric vendor key UBM exposes and it is in the right
 		// range, but nobody has confirmed the two are the same number — see the
 		// unmapped-fields list in the commit message before handing this to the client.
-		{ group: "Vendor / Account", value: "vendorId", label: "Vendor ID", description: "UBM's own numeric id for the vendor. NOT the client's FIQ Vendor ID — that number is not in UBM. Checked on 2026-08-06 against vendors.id, providers_vendors.id / .vendor_id / .provider_id and the customer-scoped records: Engie has Chugach at 1769, UBM at 40119.", sql: "v.id AS \"vendorId\"" },
+		{ group: "Vendor / Account", value: "vendorId", label: "Vendor ID", description: "UBM's id for the vendor, from the vendors table, joined on the vendor code. Engie's own FIQ Vendor ID is a different number in a different range — Chugach is 1769 to them and 40119 here — and is not stored in UBM.", sql: "v.id AS \"vendorId\"" },
 		// --- Vendor address ---
 		// UBM keeps the vendor address as a composite type on remittance_address, not as
 		// flat columns: line_1 … line_4, city, state, post_code, country. That is why it
@@ -204,7 +204,7 @@ export default {
 		// service filter — the client asked for them to stay that way. One definition,
 		// three service patterns.
 		const dupColumns = [
-			"locationNumber", "vendor", "utilityType", "accountNumber",
+			"locationNumber", "vendorId", "vendor", "utilityType", "accountNumber",
 			{ attr: "^gl\\s*code", label: "Customer GL Number" },
 			"locationAddress", "totalCharges", "startDate", "endDate", "totalConsumption"
 		];
@@ -212,7 +212,7 @@ export default {
 			value: value,
 			label: label,
 			columns: dupColumns,
-			availableExtra: ["vendorId", "vendorCode"],
+			availableExtra: ["vendorCode"],
 			filters: { utilityType: { match: service } }
 		});
 
@@ -264,8 +264,8 @@ export default {
 			{
 				value: "vendorBySite",
 				label: "Vendor by Site with Account",
-				columns: ["vendor", "locationNumber", "location", "accountNumber"],
-				availableExtra: ["vendorId", "vendorCode", "accountStatus"],
+				columns: ["vendor", "vendorId", "locationNumber", "location", "accountNumber"],
+				availableExtra: ["vendorCode", "accountStatus"],
 				filters: { accountStatus: { match: "^\\s*active\\s*$" } }
 			},
 
