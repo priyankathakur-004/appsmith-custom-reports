@@ -113,12 +113,16 @@ export default {
 		//
 		// Use these, not the "Account attribute · GL Code 1" picks, when the row layout
 		// matters. The attribute picks are still there and still one column per slot.
-		// The trailing .000 is trimmed. UBM stores the plain codes as 501530.000 and the
-		// client's report writes 501530; measured against their Activations tab, that
-		// suffix was the only difference on every GL code that otherwise agreed. Codes
-		// carrying a real sub-account — 501440.901.E010 — already match and are untouched,
-		// and only an exact ".000" at the end is removed, so a meaningful .001 survives.
-		{ group: "GL", value: "glCode", label: "Customer GL Number", description: "GL code charged for this account, one row per code. Source: the GL Code 1–6 account attributes, unpivoted so an account split across several GL codes reports as several rows. A trailing .000 is trimmed so codes read as the client's reports write them (501530, not 501530.000).", sql: "regexp_replace(glr.gl_code, '\\.000$', '') AS \"glCode\"" },
+		// Passed through exactly as UBM stores it, .000 suffix and all — that is what the
+		// client's own reports contain. Their GL Allocations export holds 501480.000 as
+		// text on every row.
+		//
+		// Their Activations tab looks like it drops the suffix and does not: two thirds of
+		// that column is numeric cells, and Excel cannot render trailing decimal zeros in
+		// General format, so a stored 501480.000 shows as 501480. The codes carrying a
+		// sub-account (501420.901.D54B) are text in the same column and keep their form.
+		// A trim was added on that misreading once and reverted — don't add it back.
+		{ group: "GL", value: "glCode", label: "Customer GL Number", description: "GL code charged for this account, one row per code. Source: the GL Code 1–6 account attributes, unpivoted so an account split across several GL codes reports as several rows. Reported exactly as UBM stores it, including any trailing .000 — the client's exports carry the same suffix, even where Excel's number formatting hides it.", sql: "glr.gl_code AS \"glCode\"" },
 		// Percent, matching every one of the client's reports — 51.25 means 51.25%, and a
 		// whole account reads 100. Passed through as UBM stores it, no scaling.
 		//
@@ -264,8 +268,20 @@ export default {
 			{
 				value: "glAllocations",
 				label: "GL Allocations",
+				// LOCATION NAME | LOCATION # | VENDOR NAME | ACCOUNT # | ACCOUNT STATUS |
+				// SERVICE TYPE | CUSTOMER GL # | GL DESCRIPTION | GL % ALLOCATION.
+				//
+				// The two GL columns are the row-based pair, so an account split across
+				// several GL codes reports as several rows — which is what the client's
+				// export does. The wide GL Code 1–6 attribute picks stay in availableExtra
+				// for anyone who wants one column per slot, but they are no longer what
+				// this report loads.
+				//
+				// GL DESCRIPTION sits between them in their export and is not here: it is
+				// the one GL column with no source in UBM at all.
 				columns: [
-					"location", "locationNumber", "vendor", "accountNumber", "accountStatus", "utilityType"
+					"location", "locationNumber", "vendor", "accountNumber", "accountStatus",
+					"utilityType", "glCode", "glAllocation"
 				],
 				// The rest of the client's Visible Columns list for this report: offered in
 				// the picker, not loaded by default. Their list is 38 entries; 26 are here.
