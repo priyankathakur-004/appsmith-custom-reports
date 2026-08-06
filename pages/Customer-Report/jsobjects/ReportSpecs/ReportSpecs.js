@@ -340,7 +340,7 @@ export default {
 				value: "vendorBySite",
 				label: "Vendor by Site with Account",
 				columns: ["vendor", "vendorId", "locationNumber", "location", "accountNumber"],
-				filters: { accountStatus: { not: "^\\s*closed\\s*$" } }
+				filters: { accountStatus: { neq: ["Closed"] } }
 			},
 
 			// Site Name | Site Number | Site Status | Vendor Name | Account Number |
@@ -397,7 +397,7 @@ export default {
 				label: "Deactivation",
 				columns: ["location", "vendor", "accountNumber", "accountActivityDate", "accountStatus"],
 				dateColumn: "vas.account_closed",
-				filters: { accountStatus: { match: "^\\s*closed\\s*$" } }
+				filters: { accountStatus: { eq: ["Closed"] } }
 			},
 
 			// The workbook calls this tab "Simon Final Bill", but nothing about it is
@@ -552,6 +552,19 @@ export default {
 		if (!spec) return [];
 		if (Array.isArray(spec)) return spec;
 		const values = (Array.isArray(rows) ? rows : []).map(r => r && r.value).filter(v => v != null);
+		// eq / neq name the values outright. Prefer them over match / not wherever the
+		// set of values is known and small: a pattern has to survive the trip into SQL as
+		// a POSIX regex, and a broken one fails silently — it excludes every row under
+		// match, and nothing at all under not, which is how one went unnoticed.
+		const norm = v => String(v).trim().toLowerCase();
+		if (spec.eq) {
+			const want = spec.eq.map(norm);
+			return values.filter(v => want.indexOf(norm(v)) >= 0);
+		}
+		if (spec.neq) {
+			const skip = spec.neq.map(norm);
+			return values.filter(v => skip.indexOf(norm(v)) < 0);
+		}
 		if (spec.not) {
 			const skip = new RegExp(spec.not, "i");
 			return values.filter(v => !skip.test(String(v)));
@@ -944,7 +957,12 @@ export default {
 			} else {
 				const p = ReportSpecs.activePreset();
 				const rule = (p && p.filters && p.filters.accountStatus) || null;
-				if (rule && rule.not) {
+				const list = vs => vs.map(v => ReportSpecs._quote(String(v).trim().toLowerCase())).join(",");
+				if (rule && rule.eq) {
+					parts.push(`AND lower(btrim(vas.account_status)) IN (${list(rule.eq)})`);
+				} else if (rule && rule.neq) {
+					parts.push(`AND (vas.account_status IS NULL OR lower(btrim(vas.account_status)) NOT IN (${list(rule.neq)}))`);
+				} else if (rule && rule.not) {
 					parts.push(`AND (vas.account_status IS NULL OR vas.account_status !~* ${ReportSpecs._quote(rule.not)})`);
 				} else if (rule && rule.match) {
 					parts.push(`AND vas.account_status ~* ${ReportSpecs._quote(rule.match)}`);
