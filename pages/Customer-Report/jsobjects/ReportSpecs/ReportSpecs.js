@@ -55,7 +55,7 @@ export default {
 		// vendors.id is the only numeric vendor key UBM exposes and it is in the right
 		// range, but nobody has confirmed the two are the same number — see the
 		// unmapped-fields list in the commit message before handing this to the client.
-		{ group: "Vendor / Account", value: "vendorId", label: "Vendor ID", description: "UBM's id for the vendor, from the vendors table, joined on the vendor code. Engie's own FIQ Vendor ID is a different number in a different range — Chugach is 1769 to them and 40119 here — and is not stored in UBM.", sql: "v.id AS \"vendorId\"" },
+		{ group: "Vendor / Account", value: "vendorId", label: "Vendor ID", description: "Engie's FIQ Vendor ID, held as a vendor attribute in reports_vendors under the key Vendor Code — 45910 for Access Gas Services, which is the number their report shows. Not vendors.id, which is UBM's own key and a different number entirely.", sql: "rv.fiq_vendor_id AS \"vendorId\"" },
 		// --- Vendor address ---
 		// UBM keeps the vendor address as a composite type on remittance_address, not as
 		// flat columns: line_1 … line_4, city, state, post_code, country. That is why it
@@ -486,7 +486,8 @@ export default {
 		LEFT JOIN bill_management_v2.customers_vendors_pretty_name cvpn ON cvpn.vendor_id = v.id AND cvpn.customer_id = amf.customer_id
 		LEFT JOIN cpv_one cpv ON cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id
 		LEFT JOIN pv_one pv ON pv.code = amf.vendor_code
-		LEFT JOIN vas_one vas ON vas.virtual_account_id = amf.virtual_account_id`,
+		LEFT JOIN vas_one vas ON vas.virtual_account_id = amf.virtual_account_id
+		LEFT JOIN rv_one rv ON rv.vendor_code = amf.vendor_code AND rv.customer_id = amf.customer_id`,
 
 	// Default ORDER BY (stable paging key) — also the tiebreaker for orderBy().
 	orderByClause: "l.id, amf.time_period",

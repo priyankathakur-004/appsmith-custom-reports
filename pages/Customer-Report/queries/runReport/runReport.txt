@@ -19,6 +19,12 @@ vas_one AS (
          virtual_account_id, account_status, account_opened, account_closed
   FROM bill_management_v2.virtual_accounts_status
   ORDER BY virtual_account_id, account_closed DESC NULLS LAST
+),
+rv_one AS (
+  SELECT customer_id, vendor_code,
+         MIN(providers_vendors_attributes::jsonb ->> 'Vendor Code') AS fiq_vendor_id
+  FROM bill_management_v2.reports_vendors
+  GROUP BY customer_id, vendor_code
 )
 SELECT {{ ReportSpecs.selectClause() }}
 FROM {{ ReportSpecs.fromClause }}
