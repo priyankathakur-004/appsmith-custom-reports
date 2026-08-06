@@ -774,9 +774,19 @@ export default {
 		// Account status - the account's own status, not the location's. EXISTS so the
 		// status table's index on virtual_account_id can be used.
 		const acctStatuses = (typeof AccountStatusSelect !== "undefined" && AccountStatusSelect.selectedOptionValues) || [];
-		if (acctStatuses.length > 0 && !skip("accountStatus")) {
-			const list = acctStatuses.map(v => ReportSpecs._quote(v)).join(",");
-			parts.push(`AND vas.account_status IN (${list})`);
+		if (!skip("accountStatus")) {
+			if (acctStatuses.length > 0) {
+				const list = acctStatuses.map(v => ReportSpecs._quote(v)).join(",");
+				parts.push(`AND vas.account_status IN (${list})`);
+			} else {
+				const p = ReportSpecs.activePreset();
+				const rule = (p && p.filters && p.filters.accountStatus) || null;
+				if (rule && rule.not) {
+					parts.push(`AND (vas.account_status IS NULL OR vas.account_status !~* ${ReportSpecs._quote(rule.not)})`);
+				} else if (rule && rule.match) {
+					parts.push(`AND vas.account_status ~* ${ReportSpecs._quote(rule.match)}`);
+				}
+			}
 		}
 
 		// Vendor — selecting by vendor code (the stable join key).
