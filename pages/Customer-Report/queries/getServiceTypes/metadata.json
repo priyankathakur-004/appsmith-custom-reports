@@ -5,7 +5,7 @@
   "pluginType": "DB",
   "unpublishedAction": {
     "actionConfiguration": {
-      "body": "SELECT DISTINCT utility_type AS value, utility_type AS label\nFROM bill_management_v2.analytics_monthly_feed\nWHERE customer_id = {{ ReportSpecs.customerIdSql() }}\n  AND utility_type IS NOT NULL AND utility_type <> ''\nORDER BY utility_type;\n",
+      "body": "SELECT DISTINCT utility_type AS value,\n       CASE upper(btrim(utility_type))\n         WHEN 'ELECTRIC' THEN 'Electric'\n         WHEN 'WATER' THEN 'Water'\n         WHEN 'SEWER' THEN 'Sewer'\n         WHEN 'NATURALGAS' THEN 'Natural Gas'\n         WHEN 'FIREPROTECTION' THEN 'Fire Protection'\n         WHEN 'STORMWATER' THEN 'Storm Water'\n         WHEN 'IRRIGATION' THEN 'Irrigation'\n         WHEN 'LIGHTING' THEN 'Lighting'\n         WHEN 'REFUSE' THEN 'Refuse'\n         WHEN 'SOLARPV' THEN 'Solar PV'\n         WHEN 'CHILLEDWATER' THEN 'Chilled Water'\n         WHEN 'PROPANE' THEN 'Propane'\n         ELSE utility_type\n       END AS label\nFROM bill_management_v2.analytics_monthly_feed\nWHERE customer_id = {{ ReportSpecs.customerIdSql() }}\n  AND utility_type IS NOT NULL AND utility_type <> ''\nORDER BY 1;\n",
       "encodeParamsToggle": true,
       "paginationType": "NONE",
       "pluginSpecifiedTemplates": [

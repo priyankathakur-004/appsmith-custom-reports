@@ -1,5 +1,20 @@
-SELECT DISTINCT utility_type AS value, utility_type AS label
+SELECT DISTINCT utility_type AS value,
+       CASE upper(btrim(utility_type))
+         WHEN 'ELECTRIC' THEN 'Electric'
+         WHEN 'WATER' THEN 'Water'
+         WHEN 'SEWER' THEN 'Sewer'
+         WHEN 'NATURALGAS' THEN 'Natural Gas'
+         WHEN 'FIREPROTECTION' THEN 'Fire Protection'
+         WHEN 'STORMWATER' THEN 'Storm Water'
+         WHEN 'IRRIGATION' THEN 'Irrigation'
+         WHEN 'LIGHTING' THEN 'Lighting'
+         WHEN 'REFUSE' THEN 'Refuse'
+         WHEN 'SOLARPV' THEN 'Solar PV'
+         WHEN 'CHILLEDWATER' THEN 'Chilled Water'
+         WHEN 'PROPANE' THEN 'Propane'
+         ELSE utility_type
+       END AS label
 FROM bill_management_v2.analytics_monthly_feed
 WHERE customer_id = {{ ReportSpecs.customerIdSql() }}
   AND utility_type IS NOT NULL AND utility_type <> ''
-ORDER BY utility_type;
+ORDER BY 1;
