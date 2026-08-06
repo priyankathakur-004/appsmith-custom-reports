@@ -84,6 +84,34 @@ Two consequences worth stating to the client:
   `COALESCE(account_closed, account_opened)` — closed is null for open accounts and
   opened is null for all of them. It now falls back to the first billed month.
 
+## Deactivation cannot be built
+
+Checked 2026-08-06 against all 192 rows of the client's `Deactivation Rpt` tab
+(deactivations between 2025-10-01 and 2025-12-29):
+
+| | |
+| --- | --- |
+| Their rows | 192 |
+| Account numbers absent from `virtual_accounts` | 83 (43%) |
+| Present but with no `account_closed` | 43 of the 109 present |
+| Close dates matching theirs | 0 |
+| Average lag where a date exists | 81 days late, range 14–164 |
+
+`virtual_accounts_status.account_closed` records when UBM **processed** a closure,
+not when the account closed — 41 of this customer's closures land in a four-day
+cluster in December 2025. The lag is not a constant, so it cannot be corrected for.
+The feed's last billed month runs the other way, months *before* the deactivation.
+Neither field reproduces `FIQ Account Inactive Date` and no combination of them does.
+
+The `Activation` preset is left as it stands rather than pointed at deactivations:
+a report that is wrong by an unpredictable 14–164 days is worse than no report.
+
+**The 43% is not a deactivation problem.** Those account numbers are missing from
+`virtual_accounts` outright, so they are absent from every report in this app.
+Account `2579822` — the client's only Account Activity row for site 0115 — is the
+same condition. Row counts cannot reconcile against any Engie export until this is
+understood, which makes it the first question for the UBM team.
+
 ## The GL columns
 
 Settled on 2026-08-05 against the database, for Simon Properties (customer `94512`):
