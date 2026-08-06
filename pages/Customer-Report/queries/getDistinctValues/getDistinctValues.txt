@@ -22,7 +22,7 @@ vas_one AS (
 ),
 rv_one AS (
   SELECT customer_id, vendor_code,
-         MIN(providers_vendors_attributes::jsonb ->> 'Vendor Code') AS fiq_vendor_id
+         NULLIF(btrim(MIN(providers_vendors_attributes::jsonb ->> 'Vendor Code')), '') AS fiq_vendor_id
   FROM bill_management_v2.reports_vendors
   GROUP BY customer_id, vendor_code
 )
