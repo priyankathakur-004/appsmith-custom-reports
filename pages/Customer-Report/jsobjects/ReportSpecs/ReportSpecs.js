@@ -83,7 +83,16 @@ export default {
 		// when unselected, and virtual_accounts_status isn't provably one row per
 		// account, so a join could have multiplied the report's rows.
 		{ group: "Vendor / Account", value: "accountNumber", label: "Account #", description: "Utility account number as it appears on the bill", sql: "va.account_code AS \"accountNumber\"" },
-		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status. Engie's reports carry only Active and Inactive, so Closed / Terminated / Cancelled are shown as Inactive. Any other value, including Unknown, is passed through as UBM stores it.", sql: "CASE WHEN lower(btrim(vas.account_status)) IN ('active','open') THEN 'Active' WHEN lower(btrim(vas.account_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' ELSE vas.account_status END AS \"accountStatus\"" },
+		// UBM records exactly two states for this customer: Closed, and Unknown for
+		// everything else — one status row per account, no nulls and no "Active". Unknown
+		// is not a third state, it is the absence of a closure, so it reports as Active.
+		// Without that the column read Unknown on six of every seven rows while the
+		// client's own export carries only Active and Inactive.
+		//
+		// Worth confirming with the client that a never-closed account is what they call
+		// Active: UBM does not assert it, and this is the one place the column infers
+		// rather than reports. Anything outside the two known values still passes through.
+		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status. UBM records only Closed and Unknown, where Unknown means no closure has been recorded; Closed reports as Inactive and Unknown as Active, which is the Active / Inactive pair the client's reports use. Any other value is passed through as UBM stores it.", sql: "CASE WHEN lower(btrim(vas.account_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' WHEN lower(btrim(vas.account_status)) IN ('active','open','unknown') THEN 'Active' ELSE vas.account_status END AS \"accountStatus\"" },
 		// Account created / activity dates. These used to read the row as JSON and try
 		// plausible key names, because the column names were unknown and a wrong guess
 		// would have been a SQL error that broke the whole report. A schema read on
@@ -138,7 +147,15 @@ export default {
 		// number. A value that isn't numeric reports blank rather than failing the query.
 		{ group: "GL", value: "glAllocation", label: "GL Allocation %", description: "Share of the account allocated to this row's GL code, as a percentage — 51.25 means 51.25%, and an account charged to a single GL reads 100. The scale is UBM's own, unchanged. Note the client's own exports format these cells as percentages, so Excel shows 51.25% while storing 0.5125 — the same number, not a different scale.", sql: "CASE WHEN btrim(glr.gl_allocation) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN btrim(glr.gl_allocation)::numeric END AS \"glAllocation\"" },
 		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
-		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Type or category of utility type.", sql: "amf.utility_type AS \"utilityType\"" },
+		// UBM stores these as unspaced upper case (NATURALGAS); the client's reports spell
+		// them out (Natural Gas). Display only — the filters and the service-type picker
+		// still work off amf.utility_type raw, so nothing downstream changes.
+		//
+		// Six of the twelve match their vocabulary exactly once spelled out. Fire
+		// Protection, Storm Water, Lighting, Refuse, Solar PV and Chilled Water have no
+		// counterpart in their list at all and most likely sit under their Other Services.
+		// Anything UBM adds later passes through unmapped rather than being guessed at.
+		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Commodity the account is billed for, spelled out the way the client's reports write it — UBM stores NATURALGAS, this reports Natural Gas. Note their reports also use this column for charge categories (Tax, Late Charges, Misc Charges), which UBM does not model as service types at all.", sql: "CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 'Electric' WHEN 'WATER' THEN 'Water' WHEN 'SEWER' THEN 'Sewer' WHEN 'NATURALGAS' THEN 'Natural Gas' WHEN 'FIREPROTECTION' THEN 'Fire Protection' WHEN 'STORMWATER' THEN 'Storm Water' WHEN 'IRRIGATION' THEN 'Irrigation' WHEN 'LIGHTING' THEN 'Lighting' WHEN 'REFUSE' THEN 'Refuse' WHEN 'SOLARPV' THEN 'Solar PV' WHEN 'CHILLEDWATER' THEN 'Chilled Water' WHEN 'PROPANE' THEN 'Propane' ELSE amf.utility_type END AS \"utilityType\"" },
 
 		// --- Usage / consumption ---
 		{ group: "Usage", value: "uom", label: "Unit of Measure", description: "Unit of measure for consumption (e.g. CCF, KWH)", sql: "amf.total_consumption_uom AS \"uom\"" },
