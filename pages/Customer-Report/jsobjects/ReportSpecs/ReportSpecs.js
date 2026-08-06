@@ -265,7 +265,6 @@ export default {
 				value: "vendorBySite",
 				label: "Vendor by Site with Account",
 				columns: ["vendor", "vendorId", "locationNumber", "location", "accountNumber"],
-				availableExtra: ["vendorCode", "accountStatus"],
 				filters: { accountStatus: { match: "^\\s*active\\s*$" } }
 			},
 
