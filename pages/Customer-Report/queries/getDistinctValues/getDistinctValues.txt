@@ -1,3 +1,25 @@
+WITH cpv_one AS (
+  SELECT customer_id, code,
+         MIN(name) AS name,
+         MIN(remittance_name) AS remittance_name,
+         (ARRAY_AGG(remittance_address))[1] AS remittance_address
+  FROM bill_management_v2.customers_providers_vendors
+  GROUP BY customer_id, code
+),
+pv_one AS (
+  SELECT code,
+         CASE WHEN COUNT(DISTINCT btrim(name)) = 1 THEN MIN(name) END AS name,
+         CASE WHEN COUNT(DISTINCT btrim(remittance_name)) = 1 THEN MIN(remittance_name) END AS remittance_name,
+         CASE WHEN COUNT(*) = 1 THEN (ARRAY_AGG(remittance_address))[1] END AS remittance_address
+  FROM bill_management_v2.providers_vendors
+  GROUP BY code
+),
+vas_one AS (
+  SELECT DISTINCT ON (virtual_account_id)
+         virtual_account_id, account_status, account_opened, account_closed
+  FROM bill_management_v2.virtual_accounts_status
+  ORDER BY virtual_account_id, account_closed DESC NULLS LAST
+)
 SELECT DISTINCT {{ ReportSpecs.distinctExpr() }} AS value
 FROM {{ ReportSpecs.distinctFrom() }}
 {{ ReportSpecs.distinctWhere() }}

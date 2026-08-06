@@ -48,14 +48,14 @@ export default {
 		// COALESCE short-circuits, so later lookups only run when earlier ones are
 		// empty — and they often are: ANCHORAGEWATERWW has no pretty name at either
 		// level, which is why this used to display the raw code.
-		{ group: "Vendor / Account", value: "vendor", label: "Vendor", description: "Vendor name — the customer's pretty name where one is set, otherwise the global pretty name, otherwise the vendor's plain name. A vendor code that maps to more than one name in providers_vendors resolves to no name rather than an arbitrary one, and the code is shown instead.", sql: "COALESCE((SELECT NULLIF(btrim(cvpn.pretty_name), '') FROM bill_management_v2.customers_vendors_pretty_name cvpn JOIN bill_management_v2.vendors v ON v.id = cvpn.vendor_id WHERE v.code = amf.vendor_code AND cvpn.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim(v.pretty_name), '') FROM bill_management_v2.vendors v WHERE v.code = amf.vendor_code), (SELECT NULLIF(btrim(cpv.name), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim(MIN(pv.name)), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code HAVING COUNT(DISTINCT btrim(pv.name)) = 1), amf.vendor_code) AS \"vendor\"" },
-		{ group: "Vendor / Account", value: "vendorNameAp", label: "Vendor Name (AP)", description: "Remittance / accounts-payable name for the vendor — the name an ERP such as JDE is most likely to expect", sql: "COALESCE((SELECT NULLIF(btrim(cpv.remittance_name), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim(MIN(pv.remittance_name)), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code HAVING COUNT(DISTINCT btrim(pv.remittance_name)) = 1)) AS \"vendorNameAp\"" },
+		{ group: "Vendor / Account", value: "vendor", label: "Vendor", description: "Vendor name — the customer's pretty name where one is set, otherwise the global pretty name, otherwise the vendor's plain name. A vendor code that maps to more than one name in providers_vendors resolves to no name rather than an arbitrary one, and the code is shown instead.", sql: "COALESCE(NULLIF(btrim(cvpn.pretty_name), ''), NULLIF(btrim(v.pretty_name), ''), NULLIF(btrim(cpv.name), ''), NULLIF(btrim(pv.name), ''), amf.vendor_code) AS \"vendor\"" },
+		{ group: "Vendor / Account", value: "vendorNameAp", label: "Vendor Name (AP)", description: "Remittance / accounts-payable name for the vendor — the name an ERP such as JDE is most likely to expect", sql: "COALESCE(NULLIF(btrim(cpv.remittance_name), ''), NULLIF(btrim(pv.remittance_name), '')) AS \"vendorNameAp\"" },
 		{ group: "Vendor / Account", value: "vendorCode", label: "Vendor Code", description: "Vendor code (stable join key)", sql: "amf.vendor_code AS \"vendorCode\"" },
 		// The client's reports carry a numeric "FIQ Vendor ID" (1636, 1150, 1769 …).
 		// vendors.id is the only numeric vendor key UBM exposes and it is in the right
 		// range, but nobody has confirmed the two are the same number — see the
 		// unmapped-fields list in the commit message before handing this to the client.
-		{ group: "Vendor / Account", value: "vendorId", label: "Vendor ID", description: "UBM's own numeric id for the vendor. NOT the client's FIQ Vendor ID — that number is not in UBM. Checked on 2026-08-06 against vendors.id, providers_vendors.id / .vendor_id / .provider_id and the customer-scoped records: Engie has Chugach at 1769, UBM at 40119.", sql: "(SELECT v.id FROM bill_management_v2.vendors v WHERE v.code = amf.vendor_code LIMIT 1) AS \"vendorId\"" },
+		{ group: "Vendor / Account", value: "vendorId", label: "Vendor ID", description: "UBM's own numeric id for the vendor. NOT the client's FIQ Vendor ID — that number is not in UBM. Checked on 2026-08-06 against vendors.id, providers_vendors.id / .vendor_id / .provider_id and the customer-scoped records: Engie has Chugach at 1769, UBM at 40119.", sql: "v.id AS \"vendorId\"" },
 		// --- Vendor address ---
 		// UBM keeps the vendor address as a composite type on remittance_address, not as
 		// flat columns: line_1 … line_4, city, state, post_code, country. That is why it
@@ -66,18 +66,18 @@ export default {
 		// Customer-specific record first, then the global one, the same priority the
 		// vendor name uses: a customer that maintains its own record for a vendor means
 		// it, and falling through to the global row is what the platform intends.
-		{ group: "Vendor address", value: "vendorAddress1", label: "Vendor Address 1", description: "First line of the vendor's remittance address. Source: (remittance_address).line_1, from the customer's own vendor record where there is one.", sql: "COALESCE((SELECT NULLIF(btrim((cpv.remittance_address).line_1), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim((pv.remittance_address).line_1), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorAddress1\"" },
-		{ group: "Vendor address", value: "vendorAddress2", label: "Vendor Address 2", description: "Second line of the vendor's remittance address. Source: (remittance_address).line_2. Lines 3 and 4 exist in UBM and can be added if a vendor uses them.", sql: "COALESCE((SELECT NULLIF(btrim((cpv.remittance_address).line_2), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim((pv.remittance_address).line_2), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorAddress2\"" },
-		{ group: "Vendor address", value: "vendorCity", label: "Vendor City", description: "Vendor's city. Source: (remittance_address).city.", sql: "COALESCE((SELECT NULLIF(btrim((cpv.remittance_address).city), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim((pv.remittance_address).city), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorCity\"" },
-		{ group: "Vendor address", value: "vendorState", label: "Vendor State/Province", description: "Vendor's state or province. Source: (remittance_address).state.", sql: "COALESCE((SELECT NULLIF(btrim((cpv.remittance_address).state), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim((pv.remittance_address).state), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorState\"" },
-		{ group: "Vendor address", value: "vendorZip", label: "Vendor Postal Code", description: "Vendor's postal / ZIP code. Source: (remittance_address).post_code.", sql: "COALESCE((SELECT NULLIF(btrim((cpv.remittance_address).post_code), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim((pv.remittance_address).post_code), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorZip\"" },
-		{ group: "Vendor address", value: "vendorCountry", label: "Vendor Country", description: "Vendor's country. Source: (remittance_address).country.", sql: "COALESCE((SELECT NULLIF(btrim((cpv.remittance_address).country), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim((pv.remittance_address).country), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorCountry\"" },
+		{ group: "Vendor address", value: "vendorAddress1", label: "Vendor Address 1", description: "First line of the vendor's remittance address. Source: (remittance_address).line_1, from the customer's own vendor record where there is one.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).line_1), ''), NULLIF(btrim((pv.remittance_address).line_1), '')) AS \"vendorAddress1\"" },
+		{ group: "Vendor address", value: "vendorAddress2", label: "Vendor Address 2", description: "Second line of the vendor's remittance address. Source: (remittance_address).line_2. Lines 3 and 4 exist in UBM and can be added if a vendor uses them.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).line_2), ''), NULLIF(btrim((pv.remittance_address).line_2), '')) AS \"vendorAddress2\"" },
+		{ group: "Vendor address", value: "vendorCity", label: "Vendor City", description: "Vendor's city. Source: (remittance_address).city.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).city), ''), NULLIF(btrim((pv.remittance_address).city), '')) AS \"vendorCity\"" },
+		{ group: "Vendor address", value: "vendorState", label: "Vendor State/Province", description: "Vendor's state or province. Source: (remittance_address).state.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).state), ''), NULLIF(btrim((pv.remittance_address).state), '')) AS \"vendorState\"" },
+		{ group: "Vendor address", value: "vendorZip", label: "Vendor Postal Code", description: "Vendor's postal / ZIP code. Source: (remittance_address).post_code.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).post_code), ''), NULLIF(btrim((pv.remittance_address).post_code), '')) AS \"vendorZip\"" },
+		{ group: "Vendor address", value: "vendorCountry", label: "Vendor Country", description: "Vendor's country. Source: (remittance_address).country.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).country), ''), NULLIF(btrim((pv.remittance_address).country), '')) AS \"vendorCountry\"" },
 
 		// Account # and Account Status: scalar subqueries, not joins. They cost nothing
 		// when unselected, and virtual_accounts_status isn't provably one row per
 		// account, so a join could have multiplied the report's rows.
-		{ group: "Vendor / Account", value: "accountNumber", label: "Account #", description: "Utility account number as it appears on the bill", sql: "(SELECT va.account_code FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id) AS \"accountNumber\"" },
-		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status. Engie's reports carry only Active and Inactive, so Closed / Terminated / Cancelled are shown as Inactive. Any other value, including Unknown, is passed through as UBM stores it.", sql: "(SELECT CASE WHEN lower(btrim(vas.account_status)) IN ('active','open') THEN 'Active' WHEN lower(btrim(vas.account_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' ELSE vas.account_status END FROM bill_management_v2.virtual_accounts_status vas WHERE vas.virtual_account_id = amf.virtual_account_id LIMIT 1) AS \"accountStatus\"" },
+		{ group: "Vendor / Account", value: "accountNumber", label: "Account #", description: "Utility account number as it appears on the bill", sql: "va.account_code AS \"accountNumber\"" },
+		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status. Engie's reports carry only Active and Inactive, so Closed / Terminated / Cancelled are shown as Inactive. Any other value, including Unknown, is passed through as UBM stores it.", sql: "CASE WHEN lower(btrim(vas.account_status)) IN ('active','open') THEN 'Active' WHEN lower(btrim(vas.account_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' ELSE vas.account_status END AS \"accountStatus\"" },
 		// Account created / activity dates. These used to read the row as JSON and try
 		// plausible key names, because the column names were unknown and a wrong guess
 		// would have been a SQL error that broke the whole report. A schema read on
@@ -87,17 +87,17 @@ export default {
 		// example shows for FIQ Account Creation Date, down to the minute.
 		// virtual_accounts.account_opened is the other candidate: it is the utility's
 		// own opening date, so switch to it if that is what the client means.
-		{ group: "Vendor / Account", value: "accountCreatedDate", label: "Account Created Date", description: "Date the account record was created in UBM — the client's \"FIQ Account Creation Date\". Source: virtual_accounts.created_at.", sql: "(SELECT TO_CHAR(va.created_at, 'YYYY-MM-DD HH24:MI:SS') FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id) AS \"accountCreatedDate\"" },
+		{ group: "Vendor / Account", value: "accountCreatedDate", label: "Account Created Date", description: "Date the account record was created in UBM — the client's \"FIQ Account Creation Date\". Source: virtual_accounts.created_at.", sql: "TO_CHAR(va.created_at, 'YYYY-MM-DD HH24:MI:SS') AS \"accountCreatedDate\"" },
 		// The status table has no single status-date column; it has account_opened and
 		// account_closed. So the date the current status took effect is the closing date
 		// where there is one and the opening date otherwise — which is what the client's
 		// Activity Date means on either half of their activation/deactivation pair.
-		{ group: "Vendor / Account", value: "accountActivityDate", label: "Account Activity Date", description: "Date the account's current status took effect — the deactivation date where the account has one, otherwise the activation date. Source: virtual_accounts_status.account_closed / .account_opened.", sql: "(SELECT TO_CHAR(COALESCE(vas.account_closed, vas.account_opened), 'YYYY-MM-DD') FROM bill_management_v2.virtual_accounts_status vas WHERE vas.virtual_account_id = amf.virtual_account_id LIMIT 1) AS \"accountActivityDate\"" },
+		{ group: "Vendor / Account", value: "accountActivityDate", label: "Account Activity Date", description: "Date the account's current status took effect — the deactivation date where the account has one, otherwise the activation date. Source: virtual_accounts_status.account_closed / .account_opened.", sql: "TO_CHAR(COALESCE(vas.account_closed, vas.account_opened), 'YYYY-MM-DD') AS \"accountActivityDate\"" },
 		// Clean Account # has no stored column: it is the account number with its
 		// punctuation removed, so it is derived rather than sourced. Called out as
 		// derived wherever it is documented — the rule is written here, not invented.
-		{ group: "Vendor / Account", value: "cleanAccountNumber", label: "Clean Account #", description: "Account number with punctuation removed, for matching against systems that store it unformatted. Derived from Account # — UBM stores no clean account number of its own.", sql: "regexp_replace((SELECT va.account_code FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id), '[^A-Za-z0-9]', '', 'g') AS \"cleanAccountNumber\"" },
-		{ group: "Vendor / Account", value: "meterSerial", label: "Meter #", description: "Meter serial number recorded against the account. Source: virtual_accounts.meter_serial.", sql: "(SELECT va.meter_serial FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id) AS \"meterSerial\"" },
+		{ group: "Vendor / Account", value: "cleanAccountNumber", label: "Clean Account #", description: "Account number with punctuation removed, for matching against systems that store it unformatted. Derived from Account # — UBM stores no clean account number of its own.", sql: "regexp_replace(va.account_code, '[^A-Za-z0-9]', '', 'g') AS \"cleanAccountNumber\"" },
+		{ group: "Vendor / Account", value: "meterSerial", label: "Meter #", description: "Meter serial number recorded against the account. Source: virtual_accounts.meter_serial.", sql: "va.meter_serial AS \"meterSerial\"" },
 		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
 		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Type or category of utility type.", sql: "amf.utility_type AS \"utilityType\"" },
 
@@ -481,7 +481,13 @@ export default {
 	fromClause:
 		`bill_management_v2.analytics_monthly_feed amf
 		LEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id
-		LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id`,
+		LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id
+		LEFT JOIN bill_management_v2.virtual_accounts va ON va.id = amf.virtual_account_id
+		LEFT JOIN bill_management_v2.vendors v ON v.code = amf.vendor_code
+		LEFT JOIN bill_management_v2.customers_vendors_pretty_name cvpn ON cvpn.vendor_id = v.id AND cvpn.customer_id = amf.customer_id
+		LEFT JOIN cpv_one cpv ON cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id
+		LEFT JOIN pv_one pv ON pv.code = amf.vendor_code
+		LEFT JOIN vas_one vas ON vas.virtual_account_id = amf.virtual_account_id`,
 
 	// Default ORDER BY (stable paging key) — also the tiebreaker for orderBy().
 	orderByClause: "l.id, amf.time_period",
@@ -759,10 +765,7 @@ export default {
 		const accounts = (typeof AccountNumberSelect !== "undefined" && AccountNumberSelect.selectedOptionValues) || [];
 		if (accounts.length > 0 && !skip("accountNumber")) {
 			const list = accounts.map(v => ReportSpecs._quote(v)).join(",");
-			parts.push(
-				"AND EXISTS (SELECT 1 FROM bill_management_v2.virtual_accounts va " +
-				`WHERE va.id = amf.virtual_account_id AND va.account_code IN (${list}))`
-			);
+			parts.push(`AND va.account_code IN (${list})`);
 		}
 
 		// Account status - the account's own status, not the location's. EXISTS so the
@@ -770,10 +773,7 @@ export default {
 		const acctStatuses = (typeof AccountStatusSelect !== "undefined" && AccountStatusSelect.selectedOptionValues) || [];
 		if (acctStatuses.length > 0 && !skip("accountStatus")) {
 			const list = acctStatuses.map(v => ReportSpecs._quote(v)).join(",");
-			parts.push(
-				"AND EXISTS (SELECT 1 FROM bill_management_v2.virtual_accounts_status vas " +
-				`WHERE vas.virtual_account_id = amf.virtual_account_id AND vas.account_status IN (${list}))`
-			);
+			parts.push(`AND vas.account_status IN (${list})`);
 		}
 
 		// Vendor — selecting by vendor code (the stable join key).
@@ -953,15 +953,7 @@ export default {
 
 	// Minimal FROM for the value query: only the joins the column and active filters
 	// actually reference, so a distinct on an amf-only column skips them entirely.
-	distinctFrom: () => {
-		const sql = ReportSpecs.distinctExpr() + " " + ReportSpecs.distinctWhere();
-		const parts = ["bill_management_v2.analytics_monthly_feed amf"];
-		if (/\bl\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id");
-		if (/\blt\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = amf.location_id");
-		// Vendor and account columns are scalar subqueries off amf, so they need no
-		// join here — they carry their own FROM.
-		return parts.join("\n");
-	},
+	distinctFrom: () => ReportSpecs.fromClause,
 
 	// onFetchDistinct handler: the grid asks for a column's checkbox values.
 	// Persist the requested field, run the distinct query, then bump the ts the
