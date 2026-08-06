@@ -1,7 +1,7 @@
 SELECT DISTINCT vas.account_status AS value,
        CASE
          WHEN lower(btrim(vas.account_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive'
-         WHEN lower(btrim(vas.account_status)) IN ('active','open','unknown') THEN 'Active'
+         WHEN lower(btrim(vas.account_status)) IN ('active','open') THEN 'Active'
          ELSE vas.account_status
        END AS label
 FROM bill_management_v2.virtual_accounts_status vas

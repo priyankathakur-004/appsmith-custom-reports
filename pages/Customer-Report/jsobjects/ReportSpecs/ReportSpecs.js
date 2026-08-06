@@ -84,15 +84,18 @@ export default {
 		// account, so a join could have multiplied the report's rows.
 		{ group: "Vendor / Account", value: "accountNumber", label: "Account #", description: "Utility account number as it appears on the bill", sql: "va.account_code AS \"accountNumber\"" },
 		// UBM records exactly two states for this customer: Closed, and Unknown for
-		// everything else — one status row per account, no nulls and no "Active". Unknown
-		// is not a third state, it is the absence of a closure, so it reports as Active.
-		// Without that the column read Unknown on six of every seven rows while the
-		// client's own export carries only Active and Inactive.
+		// everything else. Unknown is tempting to read as "still open" — it was mapped to
+		// Active once — but it means "no closure recorded", which is not the same thing.
 		//
-		// Worth confirming with the client that a never-closed account is what they call
-		// Active: UBM does not assert it, and this is the one place the column infers
-		// rather than reports. Anything outside the two known values still passes through.
-		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status. UBM records only Closed and Unknown, where Unknown means no closure has been recorded; Closed reports as Inactive and Unknown as Active, which is the Active / Inactive pair the client's reports use. Any other value is passed through as UBM stores it.", sql: "CASE WHEN lower(btrim(vas.account_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' WHEN lower(btrim(vas.account_status)) IN ('active','open','unknown') THEN 'Active' ELSE vas.account_status END AS \"accountStatus\"" },
+		// Measured against the client's own deactivation list: of their deactivated
+		// accounts that exist in UBM, only about three fifths are Closed here. The rest
+		// are Unknown. Reading Unknown as Active would therefore report two of every five
+		// accounts the client has deactivated as active, on a finance-facing report.
+		//
+		// So Unknown passes through as Unknown. It matches neither of the client's two
+		// values, and that is the honest outcome: UBM does not record what they need. The
+		// fix belongs upstream, in whatever should be setting account status.
+		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status. Closed / Inactive / Terminated report as Inactive. UBM's other value is Unknown, meaning no closure has been recorded, and it is passed through rather than read as Active: measured against the client's deactivation list, a large share of the accounts they have deactivated still read Unknown here. Treat Unknown as unreported, not as active.", sql: "CASE WHEN lower(btrim(vas.account_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' WHEN lower(btrim(vas.account_status)) IN ('active','open') THEN 'Active' ELSE vas.account_status END AS \"accountStatus\"" },
 		// Account created / activity dates. These used to read the row as JSON and try
 		// plausible key names, because the column names were unknown and a wrong guess
 		// would have been a SQL error that broke the whole report. A schema read on
