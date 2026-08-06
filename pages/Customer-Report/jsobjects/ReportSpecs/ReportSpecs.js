@@ -265,7 +265,7 @@ export default {
 				value: "vendorBySite",
 				label: "Vendor by Site with Account",
 				columns: ["vendor", "vendorId", "locationNumber", "location", "accountNumber"],
-				filters: { accountStatus: { match: "^\\s*active\\s*$" } }
+				filters: { accountStatus: { not: "^\\s*closed\\s*$" } }
 			},
 
 			// Site Name | Site Number | Site Status | Vendor Name | Account Number |
@@ -290,7 +290,7 @@ export default {
 				value: "activation",
 				label: "Activation",
 				columns: ["location", "vendor", "accountNumber", "accountActivityDate", "accountStatus"],
-				filters: { accountStatus: { match: "^\\s*active\\s*$" } }
+				filters: { accountStatus: { not: "^\\s*closed\\s*$" } }
 			},
 
 			// The workbook calls this tab "Simon Final Bill", but nothing about it is
@@ -444,10 +444,13 @@ export default {
 		const spec = (p && p.filters && p.filters[key]) || null;
 		if (!spec) return [];
 		if (Array.isArray(spec)) return spec;
+		const values = (Array.isArray(rows) ? rows : []).map(r => r && r.value).filter(v => v != null);
+		if (spec.not) {
+			const skip = new RegExp(spec.not, "i");
+			return values.filter(v => !skip.test(String(v)));
+		}
 		const re = new RegExp(spec.match, "i");
-		return (Array.isArray(rows) ? rows : [])
-			.map(r => r && r.value)
-			.filter(v => v != null && re.test(String(v)));
+		return values.filter(v => re.test(String(v)));
 	},
 
 	// The Water report covers Water *and* Sewer, which is why this matches a pattern
