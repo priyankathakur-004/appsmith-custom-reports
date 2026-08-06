@@ -654,7 +654,11 @@ export default {
 	// Single source for the SELECT, the grid, exports and header labels.
 	selectedColumns: () => {
 		const picked = (FieldsSelect && FieldsSelect.selectedOptionValues) || [];
-		const fields = (Array.isArray(picked) && picked.length > 0) ? picked : ReportSpecs.defaultVisibleFields;
+		const preset = ReportSpecs.activePreset();
+		const fallback = (preset && preset.columns)
+			? preset.columns.filter(c => typeof c === "string")
+			: ReportSpecs.defaultVisibleFields;
+		const fields = (Array.isArray(picked) && picked.length > 0) ? picked : fallback;
 		const used = {};
 		const out = [];
 		fields.forEach(f => {
