@@ -25,6 +25,12 @@ rv_one AS (
          NULLIF(btrim(MIN(providers_vendors_attributes::jsonb ->> 'Vendor Code')), '') AS fiq_vendor_id
   FROM bill_management_v2.reports_vendors
   GROUP BY customer_id, vendor_code
+),
+amf_first AS (
+  SELECT virtual_account_id, MIN(time_period) AS first_period
+  FROM bill_management_v2.analytics_monthly_feed
+  WHERE customer_id = {{ ReportSpecs.customerIdSql() }}
+  GROUP BY virtual_account_id
 )
 SELECT DISTINCT {{ ReportSpecs.distinctExpr() }} AS value
 FROM {{ ReportSpecs.distinctFrom() }}

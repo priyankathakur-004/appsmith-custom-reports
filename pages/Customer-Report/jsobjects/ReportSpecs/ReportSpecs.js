@@ -87,12 +87,12 @@ export default {
 		// example shows for FIQ Account Creation Date, down to the minute.
 		// virtual_accounts.account_opened is the other candidate: it is the utility's
 		// own opening date, so switch to it if that is what the client means.
-		{ group: "Vendor / Account", value: "accountCreatedDate", label: "Account Created Date", description: "Date the account record was created in UBM — the client's \"FIQ Account Creation Date\". Source: virtual_accounts.created_at.", sql: "TO_CHAR(va.created_at, 'YYYY-MM-DD HH24:MI:SS') AS \"accountCreatedDate\"" },
+		{ group: "Vendor / Account", value: "accountCreatedDate", label: "Account Created Date", description: "First month the account was billed — UBM's closest equivalent to the client's FIQ Account Creation Date. UBM holds no account opening date: virtual_accounts.account_opened and virtual_accounts_status.account_opened are both empty, and created_at is the date UBM loaded the record, not the date the account opened.", sql: "TO_CHAR(af.first_period, 'YYYY-MM-DD') AS \"accountCreatedDate\"" },
 		// The status table has no single status-date column; it has account_opened and
 		// account_closed. So the date the current status took effect is the closing date
 		// where there is one and the opening date otherwise — which is what the client's
 		// Activity Date means on either half of their activation/deactivation pair.
-		{ group: "Vendor / Account", value: "accountActivityDate", label: "Account Activity Date", description: "Date the account's current status took effect — the deactivation date where the account has one, otherwise the activation date. Source: virtual_accounts_status.account_closed / .account_opened.", sql: "TO_CHAR(COALESCE(vas.account_closed, vas.account_opened), 'YYYY-MM-DD') AS \"accountActivityDate\"" },
+		{ group: "Vendor / Account", value: "accountActivityDate", label: "Account Activity Date", description: "Date the account's current status took effect — the deactivation date where the account has one, otherwise the first month it was billed. Source: virtual_accounts_status.account_closed, falling back to the feed because no opening date is recorded.", sql: "TO_CHAR(COALESCE(vas.account_closed, af.first_period), 'YYYY-MM-DD') AS \"accountActivityDate\"" },
 		// Clean Account # has no stored column: it is the account number with its
 		// punctuation removed, so it is derived rather than sourced. Called out as
 		// derived wherever it is documented — the rule is written here, not invented.
@@ -490,7 +490,8 @@ export default {
 		LEFT JOIN cpv_one cpv ON cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id
 		LEFT JOIN pv_one pv ON pv.code = amf.vendor_code
 		LEFT JOIN vas_one vas ON vas.virtual_account_id = amf.virtual_account_id
-		LEFT JOIN rv_one rv ON rv.vendor_code = amf.vendor_code AND rv.customer_id = amf.customer_id`,
+		LEFT JOIN rv_one rv ON rv.vendor_code = amf.vendor_code AND rv.customer_id = amf.customer_id
+		LEFT JOIN amf_first af ON af.virtual_account_id = amf.virtual_account_id`,
 
 	// Default ORDER BY (stable paging key) — also the tiebreaker for orderBy().
 	orderByClause: "l.id, amf.time_period",

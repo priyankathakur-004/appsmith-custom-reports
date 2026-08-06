@@ -28,8 +28,8 @@ Two more stopped being blank placeholders in the same read:
 
 | Engie Column | UBM Source | Note |
 | --- | --- | --- |
-| Account Creation Date | `virtual_accounts.created_at` | When UBM created the account record — matches the timestamp in Engie's example, down to the minute. `account_opened` is the alternative if the client means the utility's own opening date. |
-| Account Status Date | `COALESCE(virtual_accounts_status.account_closed, .account_opened)` | There is no single status-date column. The date the current status took effect is the closing date where there is one, the opening date otherwise. |
+| Account Creation Date | *derived* — first month the account was billed | See below. UBM records no account opening date, so this is the closest real signal. |
+| Account Status Date | `COALESCE(virtual_accounts_status.account_closed, first billed month)` | There is no single status-date column. The date the current status took effect is the closing date where there is one, the first billed month otherwise. |
 
 ## Not in the database
 
@@ -43,6 +43,37 @@ shown as permanently empty columns:
 | Audit Only | No audit flag on `virtual_accounts`. | Which system holds the audit-only flag. |
 | Account Address 1 / Address 2 / City / State-Province / Postal Code | `virtual_accounts` has no address columns at all. `analytics_billing_line_items.service_address` exists, but it is bill-line grain — joining it would multiply report rows — and it is the service address, not the account's mailing address. | Whether the account address *is* the service address. If it is, this is buildable the way Late Charges is: aggregated so it can't multiply rows. |
 | Service Description / Service Alias / Service Status / Service Point Location | Confirmed absent. There is no services table. `ubm_service_levels`, the only candidate in the schema, is a customer-level billing summary — Customer Tier, Billable Blocks, Avg Accounts per Bill — where "Service Level" is Engie's service tier for the account, not a utility service on a meter. `analytics_billing_line_items.description` is a line-item description, not a service one. | Confirm with Engie which system holds their service records. Nothing in UBM models a service as a thing with a description, alias, status and location. |
+
+## Account Creation Date has no source
+
+Checked against the database on 2026-08-06, for Simon Properties (customer `94512`):
+
+| Candidate | Result |
+| --- | --- |
+| `virtual_accounts.account_opened` | **Empty.** 0 of 11,377 accounts populated. |
+| `virtual_accounts_status.account_opened` | **Empty.** 0 of 11,377 rows. Only `account_closed` carries data, on the 1,588 closed accounts. |
+| `virtual_accounts.created_at` | **Populated but wrong.** Its entire range is 2025-12-02 → 2026-06-26 — the window in which UBM loaded this customer. Timestamps cluster seconds apart across unrelated accounts. |
+
+The last one is what the report showed until now, and it is demonstrably not an
+account creation date: Engie's own export has accounts activating on 2025-10-30,
+which is before UBM's earliest record of any Simon account exists.
+
+What the report shows instead is `MIN(analytics_monthly_feed.time_period)` per
+account — the first month the account was billed. The feed runs 2021-02 → 2026-09
+and covers 11,353 of the 11,377 accounts, so it reaches four years further back
+than the load window and is a real activation signal rather than an artefact.
+
+It is a derived value, not a mapping. If the client needs the utility's own
+account-opening date, UBM does not hold it and Engie would have to supply it.
+
+Two consequences worth stating to the client:
+
+- **Account Activity cannot be filtered to a period of activations** off UBM's own
+  dates. Scoped by first-billed month it can.
+- **The Activation report's Activity Date was blank for every row it returned.** That
+  preset filters to accounts that are not closed, and the column read
+  `COALESCE(account_closed, account_opened)` — closed is null for open accounts and
+  opened is null for all of them. It now falls back to the first billed month.
 
 ## The GL columns
 
