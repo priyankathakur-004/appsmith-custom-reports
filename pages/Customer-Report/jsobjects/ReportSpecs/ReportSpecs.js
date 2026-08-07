@@ -204,7 +204,7 @@ export default {
 
 	activePreset: () => {
 		const presets = ReportSpecs.reportPresets();
-		const v = appsmith.store.reportPreset || "custom";
+		const v = (typeof ReportSelect !== "undefined" && ReportSelect.selectedOptionValue) || "custom";
 		return presets.find(p => p.value === v) || presets[0];
 	},
 
@@ -292,9 +292,11 @@ export default {
 		ReportSpecs._presetFilter("accountStatus", (typeof getAccountStatuses !== "undefined" && getAccountStatuses.data) || []),
 
 	selectPreset: async (value) => {
-		// Session-only: storeValue persists to the browser by default, which made the
-		// last report picked reopen days later. The page should always start on Custom.
-		await storeValue("reportPreset", value, false);
+		// The selected report is not stored anywhere — ReportSelect holds it, and a
+		// reload takes the widget back to its Custom default. This clears the value
+		// earlier versions persisted to the browser, which outlived the session and
+		// reopened days later on a page whose filters had been reset around it.
+		try { removeValue("reportPreset"); } catch (e) {  }
 		for (const w of ReportSpecs.FILTER_WIDGETS) {
 			try { resetWidget(w, false); } catch (e) {  }
 		}

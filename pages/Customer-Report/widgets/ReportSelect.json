@@ -5,16 +5,13 @@
   "bottomRow": 4,
   "bottomRowBeforeCollapse": 5,
   "boxShadow": "none",
-  "defaultOptionValue": "{{ appsmith.store.reportPreset || \"custom\" }}",
+  "defaultOptionValue": "custom",
   "dynamicBindingPathList": [
     {
       "key": "sourceData"
     },
     {
       "key": "borderRadius"
-    },
-    {
-      "key": "defaultOptionValue"
     }
   ],
   "dynamicHeight": "FIXED",
