@@ -85,4 +85,5 @@ FROM {{ ReportSpecs.distinctFrom() }}
 {{ ReportSpecs.distinctWhere() }}
   AND {{ ReportSpecs.distinctExpr() }} IS NOT NULL
 ORDER BY 1
-LIMIT 50000;
+LIMIT {{ ReportSpecs.distinctLimit() }}
+OFFSET {{ ReportSpecs.distinctOffset() }};

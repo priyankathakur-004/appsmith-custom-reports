@@ -771,11 +771,60 @@ export default {
 
 	distinctFrom: () => ReportSpecs.fromClause(),
 
+	DISTINCT_CHUNK: () => 5000,
+
+	DISTINCT_MAX: () => 20000,
+
+	distinctLimit: () => {
+		const n = Number(appsmith.store.reportsDistinctLimit);
+		return (n > 0) ? n : ReportSpecs.DISTINCT_CHUNK();
+	},
+
+	distinctOffset: () => Math.max(0, Number(appsmith.store.reportsDistinctOffset) || 0),
+
+	// A column with tens of thousands of distinct values used to come back as one
+	// response and get cut off mid-row, which left the checkbox list empty. Page it
+	// the way the export does — silently, since this runs while a filter is opening
+	// and an alert per chunk would be noise on top of a UI interaction.
 	fetchDistinct: async () => {
+		const MIN_CHUNK = 250;
+
 		const m = (typeof GridWidget !== "undefined") ? GridWidget.model : null;
 		const field = (m && m.reqDistinctField) || "";
 		await storeValue("reportsDistinctField", field);
-		await getDistinctValues.run();
+		await storeValue("reportsDistinctRows", [], false);
+		if (!field) {
+			await storeValue("reportsDistinctTs", Date.now());
+			return;
+		}
+
+		const all = [];
+		let limit = ReportSpecs.DISTINCT_CHUNK();
+		let offset = 0;
+		let truncated = false;
+		for (;;) {
+			await storeValue("reportsDistinctLimit", limit, false);
+			await storeValue("reportsDistinctOffset", offset, false);
+			let batch;
+			try {
+				const res = await getDistinctValues.run();
+				batch = Array.isArray(res) ? res : (getDistinctValues.data || []);
+			} catch (e) {
+
+				if (limit > MIN_CHUNK) { limit = Math.max(MIN_CHUNK, Math.floor(limit / 2)); continue; }
+
+				break;
+			}
+			for (const r of batch) all.push(r);
+
+			if (batch.length < limit) break;
+			offset += batch.length;
+			if (all.length >= ReportSpecs.DISTINCT_MAX()) { truncated = true; break; }
+		}
+
+		await storeValue("reportsDistinctOffset", 0, false);
+		await storeValue("reportsDistinctRows", all, false);
+		await storeValue("reportsDistinctTruncated", truncated, false);
 		await storeValue("reportsDistinctTs", Date.now());
 	},
 
