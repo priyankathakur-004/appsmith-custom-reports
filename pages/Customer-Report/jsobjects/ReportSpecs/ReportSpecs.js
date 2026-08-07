@@ -45,6 +45,7 @@ export default {
 		{ group: "Vendor / Account", value: "accountActivityDate", label: "Account Activity Date", description: "Date the account's current status took effect — the deactivation date where the account has one, otherwise the first month it was billed. Source: virtual_accounts_status.account_closed, falling back to the feed because no opening date is recorded.", sql: "TO_CHAR(COALESCE(vas.account_closed, af.first_period), 'YYYY-MM-DD') AS \"accountActivityDate\"" },
 
 		{ group: "Vendor / Account", value: "cleanAccountNumber", label: "Clean Account #", description: "Account number with punctuation removed, for matching against systems that store it unformatted. Derived from Account # — UBM stores no clean account number of its own.", sql: "regexp_replace(va.account_code, '[^A-Za-z0-9]', '', 'g') AS \"cleanAccountNumber\"" },
+		{ group: "Vendor / Account", value: "summaryAccount", label: "Summary Account", description: "Account this one rolls up to, where it is billed under a parent. Source: virtual_accounts.client_account, shown only where it differs from the account's own number — an account billed in its own right leaves this blank, which is most of them.", sql: "NULLIF(va.client_account, va.account_code) AS \"summaryAccount\"" },
 		{ group: "Vendor / Account", value: "meterSerial", label: "Meter #", description: "Meter serial number recorded against the account. Source: virtual_accounts.meter_serial.", sql: "va.meter_serial AS \"meterSerial\"" },
 
 		{ group: "GL", value: "glCode", label: "Customer GL Number", description: "GL code charged for this account, one row per code. Source: the GL Code 1–6 account attributes, unpivoted so an account split across several GL codes reports as several rows. Reported exactly as UBM stores it, including any trailing .000 — the client's exports carry the same suffix, even where Excel's number formatting hides it.", sql: "glr.gl_code AS \"glCode\"" },
@@ -181,9 +182,10 @@ export default {
 			},
 
 			{
-				value: "customerLastBill",
-				label: "Customer Last Bill",
-				columns: ["customerName", "vendor", "location", "accountNumber"],
+				value: "customerFinalBill",
+				label: "Customer Final Bill",
+				columns: ["vendor", "location", "summaryAccount", "accountNumber"],
+				availableExtra: ["customerName"],
 				filters: {}
 			},
 
