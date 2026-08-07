@@ -53,6 +53,11 @@ export default {
 		{ group: "GL", value: "glAllocation", label: "GL Allocation %", description: "Share of the account allocated to this row's GL code, as a percentage — 51.25 means 51.25%, and an account charged to a single GL reads 100. The scale is UBM's own, unchanged. Note the client's own exports format these cells as percentages, so Excel shows 51.25% while storing 0.5125 — the same number, not a different scale.", sql: "CASE WHEN btrim(glr.gl_allocation) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN btrim(glr.gl_allocation)::numeric END AS \"glAllocation\"" },
 		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
 
+		{ group: "Bill", value: "billBeginDate", label: "Begin Date", description: "First day of the bill's service period, as billed. Source: account_history.start_date, which is bill-level — the monthly feed's Service Start is the start of a month's slice of that bill, not the bill itself.", sql: "TO_CHAR(ah.start_date, 'YYYY-MM-DD') AS \"billBeginDate\"" },
+		{ group: "Bill", value: "billEndDate", label: "End Date", description: "Last day of the bill's service period, as billed. Source: account_history.end_date. A bill spanning a month end is one row here and two in the monthly feed.", sql: "TO_CHAR(ah.end_date, 'YYYY-MM-DD') AS \"billEndDate\"" },
+		{ group: "Bill", value: "billServiceCost", label: "Service Cost", description: "Charges for the bill as billed, not spread across the months it covers. Source: account_history.subcharges — UBM's Subcharges family is per bill block, where the Charges family on the monthly feed is pro-rated.", sql: "ah.subcharges AS \"billServiceCost\"" },
+		{ group: "Bill", value: "billQuantity", label: "Quantity (Billed)", description: "Consumption for the bill as billed. Source: account_history.consumption. The monthly feed's Total Consumption is the same quantity pro-rated across months, which is why it reads in fractions where the bill reads whole units.", sql: "ah.consumption AS \"billQuantity\"" },
+
 		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Commodity the account is billed for, spelled out the way the client's reports write it — UBM stores NATURALGAS, this reports Natural Gas. Note their reports also use this column for charge categories (Tax, Late Charges, Misc Charges), which UBM does not model as service types at all.", sql: "CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 'Electric' WHEN 'WATER' THEN 'Water' WHEN 'SEWER' THEN 'Sewer' WHEN 'NATURALGAS' THEN 'Natural Gas' WHEN 'FIREPROTECTION' THEN 'Fire Protection' WHEN 'STORMWATER' THEN 'Storm Water' WHEN 'IRRIGATION' THEN 'Irrigation' WHEN 'LIGHTING' THEN 'Lighting' WHEN 'REFUSE' THEN 'Refuse' WHEN 'SOLARPV' THEN 'Solar PV' WHEN 'CHILLEDWATER' THEN 'Chilled Water' WHEN 'PROPANE' THEN 'Propane' ELSE amf.utility_type END AS \"utilityType\"" },
 
 		{ group: "Usage", value: "uom", label: "Unit of Measure", description: "Unit of measure for consumption (e.g. CCF, KWH)", sql: "amf.total_consumption_uom AS \"uom\"" },
@@ -114,13 +119,12 @@ export default {
 		const dupColumns = [
 			"locationNumber", "vendorId", "vendor", "utilityType", "accountNumber",
 			{ attr: "^gl\\s*code", label: "Customer GL Number" },
-			"locationAddress", "totalCharges", "startDate", "endDate", "totalConsumption"
+			"locationAddress", "billServiceCost", "billBeginDate", "billEndDate", "billQuantity"
 		];
 		const dup = (value, label, service) => ({
 			value: value,
 			label: label,
 			columns: dupColumns,
-			availableExtra: ["vendorCode"],
 			filters: { utilityType: { match: service } }
 		});
 
@@ -296,8 +300,16 @@ export default {
 		if (p && p.value !== "custom") showAlert(`Loaded the ${p.label} report`, "success");
 	},
 
+	BILL_FIELDS: ["billBeginDate", "billEndDate", "billServiceCost", "billQuantity"],
+
+	usesBillLevel: () =>
+		ReportSpecs.selectedColumns().some(o => ReportSpecs.BILL_FIELDS.indexOf(o.value) >= 0),
+
 	feedKeys: () => {
 		const shown = ReportSpecs.selectedColumns();
+		if (ReportSpecs.usesBillLevel()) {
+			return ["bill_id", "virtual_account_id", "utility_type"];
+		}
 		if (shown.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")))) return null;
 		const keys = ["virtual_account_id"];
 		if (shown.some(o => o.group === "Location")) keys.push("location_id");
@@ -323,6 +335,10 @@ export default {
 		let sql = ReportSpecs.baseFrom;
 		if (ReportSpecs.usesGlRows()) {
 			sql += "\n\t\tLEFT JOIN gl_rows glr ON glr.virtual_account_id = amf.virtual_account_id AND glr.gl_code IS NOT NULL";
+		}
+		if (ReportSpecs.usesBillLevel()) {
+			sql += "\n\t\tLEFT JOIN bill_history ah ON ah.bill_id = amf.bill_id AND ah.virtual_account_id = amf.virtual_account_id"
+				+ " AND upper(btrim(ah.commodity)) = upper(btrim(amf.utility_type))";
 		}
 
 		ReportSpecs.accountAttrColumns().forEach(o => {

@@ -54,6 +54,19 @@ amf_first AS (
   WHERE f.customer_id = {{ ReportSpecs.customerIdSql() }}
   GROUP BY va2.account_code, f.location_id, f.vendor_code
 ),
+bill_history AS (
+  SELECT ah.bill_id,
+         ah.virtual_account_id,
+         upper(btrim(ah.commodity)) AS commodity,
+         MIN(ah.start_date)  AS start_date,
+         MAX(ah.end_date)    AS end_date,
+         SUM(ah.subcharges)  AS subcharges,
+         SUM(ah.consumption) AS consumption
+  FROM bill_management_v2.account_history ah
+  JOIN bill_management_v2.virtual_accounts bva ON bva.id = ah.virtual_account_id
+  WHERE bva.customer_id = {{ ReportSpecs.customerIdSql() }}
+  GROUP BY ah.bill_id, ah.virtual_account_id, upper(btrim(ah.commodity))
+),
 gl_rows AS (
   SELECT vam.virtual_account_id,
          (substring(vmeta.attribute_name from '([0-9]+)'))::int AS gl_slot,
