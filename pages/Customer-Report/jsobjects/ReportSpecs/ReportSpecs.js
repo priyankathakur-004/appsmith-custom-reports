@@ -793,9 +793,7 @@ export default {
 		const field = (m && m.reqDistinctField) || "";
 		await storeValue("reportsDistinctField", field);
 		await storeValue("reportsDistinctRows", [], false);
-		await storeValue("reportsDistinctDone", false, false);
 		if (!field) {
-			await storeValue("reportsDistinctDone", true, false);
 			await storeValue("reportsDistinctTs", Date.now());
 			return;
 		}
@@ -804,6 +802,7 @@ export default {
 		let limit = ReportSpecs.DISTINCT_CHUNK();
 		let offset = 0;
 		let truncated = false;
+		let failed = null;
 		for (;;) {
 			await storeValue("reportsDistinctLimit", limit, false);
 			await storeValue("reportsDistinctOffset", offset, false);
@@ -815,6 +814,10 @@ export default {
 
 				if (limit > MIN_CHUNK) { limit = Math.max(MIN_CHUNK, Math.floor(limit / 2)); continue; }
 
+				// Out of retries. Say so — silence here is indistinguishable from a
+				// column that genuinely has no values, which is what an empty
+				// checkbox list looks like.
+				failed = (e && e.message) ? String(e.message) : "the query failed";
 				break;
 			}
 			for (const r of batch) all.push(r);
@@ -823,7 +826,6 @@ export default {
 			// in instead of sitting on Loading until the last chunk. slice() because
 			// the store compares by reference and would ignore the same array again.
 			await storeValue("reportsDistinctRows", all.slice(), false);
-			await storeValue("reportsDistinctDone", false, false);
 			await storeValue("reportsDistinctTs", Date.now());
 
 			if (batch.length < limit) break;
@@ -833,8 +835,17 @@ export default {
 
 		await storeValue("reportsDistinctOffset", 0, false);
 		await storeValue("reportsDistinctTruncated", truncated, false);
-		await storeValue("reportsDistinctDone", true, false);
+		await storeValue("reportsDistinctFailed", failed != null && all.length === 0, false);
 		await storeValue("reportsDistinctTs", Date.now());
+
+		if (failed != null) {
+			showAlert(
+				all.length > 0
+					? `Only part of the filter list loaded for this column (${all.length.toLocaleString()} values) — ${failed}`
+					: `Couldn't load the filter list for this column — ${failed}`,
+				"error"
+			);
+		}
 	},
 
 	totalRows: () => {
