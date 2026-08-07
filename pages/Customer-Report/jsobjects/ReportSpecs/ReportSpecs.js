@@ -292,7 +292,9 @@ export default {
 		ReportSpecs._presetFilter("accountStatus", (typeof getAccountStatuses !== "undefined" && getAccountStatuses.data) || []),
 
 	selectPreset: async (value) => {
-		await storeValue("reportPreset", value);
+		// Session-only: storeValue persists to the browser by default, which made the
+		// last report picked reopen days later. The page should always start on Custom.
+		await storeValue("reportPreset", value, false);
 		for (const w of ReportSpecs.FILTER_WIDGETS) {
 			try { resetWidget(w, false); } catch (e) {  }
 		}
