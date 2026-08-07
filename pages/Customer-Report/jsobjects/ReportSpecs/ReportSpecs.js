@@ -487,14 +487,10 @@ export default {
 
 	presetAttrLabels: () => {
 		const p = ReportSpecs.activePreset();
-		const map = {};
-		((p && p.columns) || []).forEach(c => {
-			if (typeof c === "string" || !c.label) return;
 
-			const picks = ReportSpecs._resolveAttr(c);
-			if (picks.length === 1) map[picks[0]] = c.label;
-		});
-		return map;
+		return ((p && p.columns) || [])
+			.filter(c => typeof c !== "string" && c.label && !c.all)
+			.map(c => ({ re: new RegExp(c.attr, "i"), label: c.label }));
 	},
 
 	accountAttrColumn: (pick) => {
@@ -503,7 +499,7 @@ export default {
 		if (alias === "attr_") alias = "attr_unnamed";
 		return {
 			value: alias,
-			label: ReportSpecs.presetAttrLabels()[pick] || name,
+			label: (ReportSpecs.presetAttrLabels().find(s => s.re.test(name)) || {}).label || name,
 			description: "Account attribute: " + name,
 			attrName: name,
 			joinAlias: "av_" + alias,
