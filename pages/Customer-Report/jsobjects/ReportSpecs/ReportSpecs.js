@@ -793,7 +793,9 @@ export default {
 		const field = (m && m.reqDistinctField) || "";
 		await storeValue("reportsDistinctField", field);
 		await storeValue("reportsDistinctRows", [], false);
+		await storeValue("reportsDistinctDone", false, false);
 		if (!field) {
+			await storeValue("reportsDistinctDone", true, false);
 			await storeValue("reportsDistinctTs", Date.now());
 			return;
 		}
@@ -817,14 +819,21 @@ export default {
 			}
 			for (const r of batch) all.push(r);
 
+			// Hand the filter what we have before fetching the rest, so the list fills
+			// in instead of sitting on Loading until the last chunk. slice() because
+			// the store compares by reference and would ignore the same array again.
+			await storeValue("reportsDistinctRows", all.slice(), false);
+			await storeValue("reportsDistinctDone", false, false);
+			await storeValue("reportsDistinctTs", Date.now());
+
 			if (batch.length < limit) break;
 			offset += batch.length;
 			if (all.length >= ReportSpecs.DISTINCT_MAX()) { truncated = true; break; }
 		}
 
 		await storeValue("reportsDistinctOffset", 0, false);
-		await storeValue("reportsDistinctRows", all, false);
 		await storeValue("reportsDistinctTruncated", truncated, false);
+		await storeValue("reportsDistinctDone", true, false);
 		await storeValue("reportsDistinctTs", Date.now());
 	},
 
