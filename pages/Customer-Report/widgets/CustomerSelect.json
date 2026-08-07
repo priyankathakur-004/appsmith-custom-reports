@@ -61,7 +61,7 @@
   "placeholderText": "Select customer",
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 16,
+  "rightColumn": 14,
   "serverSideFiltering": false,
   "sourceData": "{{ getCustomers.data }}",
   "topRow": 0,

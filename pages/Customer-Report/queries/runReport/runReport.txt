@@ -1,5 +1,87 @@
+WITH cpv_one AS (
+  SELECT customer_id, code,
+         MIN(name) AS name,
+         MIN(remittance_name) AS remittance_name,
+         (ARRAY_AGG(remittance_address))[1] AS remittance_address
+  FROM bill_management_v2.customers_providers_vendors
+  WHERE customer_id = {{ ReportSpecs.customerIdSql() }}
+  GROUP BY customer_id, code
+),
+pv_one AS (
+  SELECT code,
+         CASE WHEN COUNT(DISTINCT btrim(name)) = 1 THEN MIN(name) END AS name,
+         CASE WHEN COUNT(DISTINCT btrim(remittance_name)) = 1 THEN MIN(remittance_name) END AS remittance_name,
+         CASE WHEN COUNT(*) = 1 THEN (ARRAY_AGG(remittance_address))[1] END AS remittance_address
+  FROM bill_management_v2.providers_vendors
+  WHERE code IN (SELECT vendor_code FROM bill_management_v2.analytics_monthly_feed
+                 WHERE customer_id = {{ ReportSpecs.customerIdSql() }})
+  GROUP BY code
+),
+vas_one AS (
+  SELECT DISTINCT ON (s.virtual_account_id)
+         s.virtual_account_id, s.account_status, s.account_opened, s.account_closed
+  FROM bill_management_v2.virtual_accounts_status s
+  JOIN bill_management_v2.virtual_accounts sva ON sva.id = s.virtual_account_id
+  WHERE sva.customer_id = {{ ReportSpecs.customerIdSql() }}
+  ORDER BY s.virtual_account_id, s.account_closed DESC NULLS LAST
+),
+rv_one AS (
+  SELECT customer_id, vendor_code,
+         NULLIF(btrim(MIN(providers_vendors_attributes::jsonb ->> 'Vendor Code')), '') AS fiq_vendor_id
+  FROM bill_management_v2.reports_vendors
+  WHERE customer_id = {{ ReportSpecs.customerIdSql() }}
+  GROUP BY customer_id, vendor_code
+),
+attr_vals AS (
+  SELECT vam.virtual_account_id,
+         vmeta.attribute_name,
+         string_agg(DISTINCT vam.attribute_value, ' | ' ORDER BY vam.attribute_value) AS val
+  FROM bill_management_v2.virtual_accounts_attributes_mapping vam
+  JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta
+    ON vmeta.id = vam.virtual_accounts_attributes_metadata_id
+  WHERE vmeta.customer_id = {{ ReportSpecs.customerIdSql() }}
+    AND vmeta.deleted_at IS NULL
+  GROUP BY vam.virtual_account_id, vmeta.attribute_name
+),
+feed_scoped AS (
+  {{ ReportSpecs.feedCte() }}
+),
+amf_first AS (
+  SELECT va2.account_code, f.location_id, f.vendor_code,
+         MIN(f.time_period) AS first_period
+  FROM bill_management_v2.analytics_monthly_feed f
+  JOIN bill_management_v2.virtual_accounts va2 ON va2.id = f.virtual_account_id
+  WHERE f.customer_id = {{ ReportSpecs.customerIdSql() }}
+  GROUP BY va2.account_code, f.location_id, f.vendor_code
+),
+bill_history AS (
+  SELECT ah.bill_id,
+         ah.virtual_account_id,
+         upper(btrim(ah.commodity)) AS commodity,
+         MIN(ah.start_date)  AS start_date,
+         MAX(ah.end_date)    AS end_date,
+         SUM(ah.subcharges)  AS subcharges,
+         SUM(ah.consumption) AS consumption
+  FROM bill_management_v2.account_history ah
+  JOIN bill_management_v2.virtual_accounts bva ON bva.id = ah.virtual_account_id
+  WHERE bva.customer_id = {{ ReportSpecs.customerIdSql() }}
+  GROUP BY ah.bill_id, ah.virtual_account_id, upper(btrim(ah.commodity))
+),
+gl_rows AS (
+  SELECT vam.virtual_account_id,
+         (substring(vmeta.attribute_name from '([0-9]+)'))::int AS gl_slot,
+         MAX(NULLIF(btrim(vam.attribute_value), '')) FILTER (WHERE vmeta.attribute_name ~* '^gl\s*code')  AS gl_code,
+         MAX(NULLIF(btrim(vam.attribute_value), '')) FILTER (WHERE vmeta.attribute_name ~* '^gl\s*alloc') AS gl_allocation
+  FROM bill_management_v2.virtual_accounts_attributes_mapping vam
+  JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta
+    ON vmeta.id = vam.virtual_accounts_attributes_metadata_id
+  WHERE vmeta.customer_id = {{ ReportSpecs.customerIdSql() }}
+    AND vmeta.deleted_at IS NULL
+    AND vmeta.attribute_name ~* '^gl\s*(code|alloc)'
+  GROUP BY 1, 2
+)
 SELECT {{ ReportSpecs.selectClause() }}
-FROM {{ ReportSpecs.fromClause }}
+FROM {{ ReportSpecs.fromClause() }}
 {{ ReportSpecs.filterClauses() }}
 ORDER BY {{ ReportSpecs.orderBy() }}
 LIMIT {{ Math.max(1, (appsmith.store.reportsPageEnd || 100) - (appsmith.store.reportsPageStart || 0)) }}

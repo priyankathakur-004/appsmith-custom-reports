@@ -1,21 +1,15 @@
 export default {
-	// ----- Report Builder -----
-	// Field catalog and base query for the Cost Analysis - Trendline report. That
-	// name is no longer shown in the UI: the client reads this as a generic builder
-	// and needs several reports. All filters apply at the SQL layer.
 
-	// ----- Field catalog -----
-	// { group, value (SELECT alias + grid column key), label (grid/export header),
-	//   description (shown as the column's info tooltip), sql (SELECT expression) }
 	visibleFieldOptions: [
-		// --- Time / period ---
+
 		{ group: "Period", value: "month", label: "Month", description: "Billing month bucket (YYYY-MM)", sql: "TO_CHAR(amf.time_period, 'YYYY-MM') AS \"month\"" },
 		{ group: "Period", value: "statementDate", label: "Statement Date", description: "Date associated with invoice date.", sql: "TO_CHAR(amf.statement_date, 'YYYY-MM-DD') AS \"statementDate\"" },
 		{ group: "Period", value: "startDate", label: "Service Start", description: "Date associated with service start date.", sql: "TO_CHAR(amf.start_date, 'YYYY-MM-DD') AS \"startDate\"" },
 		{ group: "Period", value: "endDate", label: "Service End", description: "Date associated with service end date.", sql: "TO_CHAR(amf.end_date, 'YYYY-MM-DD') AS \"endDate\"" },
 		{ group: "Period", value: "daysOfService", label: "Days of Service", description: "Number of days associated with days of service.", sql: "amf.days_of_service AS \"daysOfService\"" },
 
-		// --- Location ---
+		{ group: "Customer", value: "customerName", label: "Customer Name", description: "Name of the customer the report is being run for", sql: "(SELECT cs.name FROM bill_management_v2.customers_search cs WHERE cs.id = amf.customer_id) AS \"customerName\"" },
+
 		{ group: "Location", value: "location", label: "Location", description: "Location name", sql: "l.name AS \"location\"" },
 		{ group: "Location", value: "locationId", label: "Location ID (internal)", description: "UBM's own database id for the location, e.g. 113614. For the site number that appears on your reports, use Location Number.", sql: "l.id AS \"locationId\"" },
 		{ group: "Location", value: "locationAddress", label: "Location Address", description: "Street address of the location", sql: "l.address AS \"locationAddress\"" },
@@ -23,40 +17,55 @@ export default {
 		{ group: "Location", value: "locationState", label: "State/Province", description: "Location state or province", sql: "l.state AS \"locationState\"" },
 		{ group: "Location", value: "locationCountry", label: "Country", description: "Location country", sql: "l.country AS \"locationCountry\"" },
 		{ group: "Location", value: "locationZip", label: "Location Zip", description: "Location postal / ZIP code", sql: "l.postcode AS \"locationZip\"" },
-		{ group: "Location", value: "locationStatus", label: "Location Status", description: "Current status of status.", sql: "lt.location_status AS \"locationStatus\"" },
+
+		{ group: "Location", value: "locationStatus", label: "Location Status", description: "Status of the site. UBM records an open site as Operational; this is reported as Active to match the client's reports. Closed / Inactive / Terminated report as Inactive, and any other value passes through as UBM stores it.", sql: "CASE WHEN lower(btrim(lt.location_status)) IN ('operational','active','open') THEN 'Active' WHEN lower(btrim(lt.location_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' ELSE lt.location_status END AS \"locationStatus\"" },
 		{ group: "Location", value: "buildingType", label: "Building Type", description: "Type or category of location building type.", sql: "l.building_type AS \"buildingType\"" },
 		{ group: "Location", value: "squareFeet", label: "Square Feet", description: "Location floor area (sq ft)", sql: "l.square_feet AS \"squareFeet\"" },
 		{ group: "Location", value: "locationNumber", label: "Location Number", description: "Site number, e.g. 0115 — the number your own reports refer to a location by.", sql: "lt.location_number AS \"locationNumber\"" },
 
-		// --- Hierarchy: removed. UBM has no hierarchy/grouping attributes
-		// (location_division / top / second / third group) — confirmed by
-		// UBM team 2026-06-17. Do not re-add without a real source column.
-
-		// --- Vendor / account identity ---
-		// Vendor name, in the order the platform intends: the customer's own pretty
-		// name, then the global one, then the vendor's plain name, then the code.
-		// COALESCE short-circuits, so later lookups only run when earlier ones are
-		// empty — and they often are: ANCHORAGEWATERWW has no pretty name at either
-		// level, which is why this used to display the raw code.
-		{ group: "Vendor / Account", value: "vendor", label: "Vendor", description: "Vendor name — the customer's pretty name where one is set, otherwise the global pretty name, otherwise the vendor's plain name", sql: "COALESCE((SELECT NULLIF(btrim(cvpn.pretty_name), '') FROM bill_management_v2.customers_vendors_pretty_name cvpn JOIN bill_management_v2.vendors v ON v.id = cvpn.vendor_id WHERE v.code = amf.vendor_code AND cvpn.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim(v.pretty_name), '') FROM bill_management_v2.vendors v WHERE v.code = amf.vendor_code LIMIT 1), (SELECT NULLIF(btrim(cpv.name), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim(pv.name), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1), amf.vendor_code) AS \"vendor\"" },
-		{ group: "Vendor / Account", value: "vendorNameAp", label: "Vendor Name (AP)", description: "Remittance / accounts-payable name for the vendor — the name an ERP such as JDE is most likely to expect", sql: "COALESCE((SELECT NULLIF(btrim(cpv.remittance_name), '') FROM bill_management_v2.customers_providers_vendors cpv WHERE cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id LIMIT 1), (SELECT NULLIF(btrim(pv.remittance_name), '') FROM bill_management_v2.providers_vendors pv WHERE pv.code = amf.vendor_code LIMIT 1)) AS \"vendorNameAp\"" },
+		{ group: "Vendor / Account", value: "vendor", label: "Vendor", description: "Vendor name — the customer's pretty name where one is set, otherwise the global pretty name, otherwise the vendor's plain name. A pretty name that is only the vendor code respelled — Adaya for ADAYA — is skipped, so the real name wins. A vendor code that maps to more than one name in providers_vendors resolves to no name rather than an arbitrary one, and the code is shown instead.", sql: "COALESCE(NULLIF(btrim(cvpn.pretty_name), ''), CASE WHEN lower(regexp_replace(btrim(v.pretty_name), '[^A-Za-z0-9]', '', 'g')) <> lower(regexp_replace(amf.vendor_code, '[^A-Za-z0-9]', '', 'g')) THEN NULLIF(btrim(v.pretty_name), '') END, NULLIF(btrim(cpv.name), ''), NULLIF(btrim(pv.name), ''), amf.vendor_code) AS \"vendor\"" },
+		{ group: "Vendor / Account", value: "vendorNameAp", label: "Vendor Name (AP)", description: "Remittance / accounts-payable name for the vendor — the name an ERP such as JDE is most likely to expect", sql: "COALESCE(NULLIF(btrim(cpv.remittance_name), ''), NULLIF(btrim(pv.remittance_name), '')) AS \"vendorNameAp\"" },
 		{ group: "Vendor / Account", value: "vendorCode", label: "Vendor Code", description: "Vendor code (stable join key)", sql: "amf.vendor_code AS \"vendorCode\"" },
-		// Account # and Account Status: scalar subqueries, not joins. They cost nothing
-		// when unselected, and virtual_accounts_status isn't provably one row per
-		// account, so a join could have multiplied the report's rows.
-		{ group: "Vendor / Account", value: "accountNumber", label: "Account #", description: "Utility account number as it appears on the bill", sql: "(SELECT va.account_code FROM bill_management_v2.virtual_accounts va WHERE va.id = amf.virtual_account_id) AS \"accountNumber\"" },
-		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status", sql: "(SELECT vas.account_status FROM bill_management_v2.virtual_accounts_status vas WHERE vas.virtual_account_id = amf.virtual_account_id LIMIT 1) AS \"accountStatus\"" },
-		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
-		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Type or category of utility type.", sql: "amf.utility_type AS \"utilityType\"" },
 
-		// --- Usage / consumption ---
+		{ group: "Vendor / Account", value: "vendorId", label: "Vendor ID", description: "Engie's FIQ Vendor ID, held as a vendor attribute in reports_vendors under the key Vendor Code — 45910 for Access Gas Services, which is the number their report shows. Not vendors.id, which is UBM's own key and a different number entirely.", sql: "rv.fiq_vendor_id AS \"vendorId\"" },
+
+		{ group: "Vendor address", value: "vendorAddress1", label: "Vendor Address 1", description: "First line of the vendor's remittance address. Source: (remittance_address).line_1, from the customer's own vendor record where there is one.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).line_1), ''), NULLIF(btrim((pv.remittance_address).line_1), '')) AS \"vendorAddress1\"" },
+		{ group: "Vendor address", value: "vendorAddress2", label: "Vendor Address 2", description: "Second line of the vendor's remittance address. Source: (remittance_address).line_2. Lines 3 and 4 exist in UBM and can be added if a vendor uses them.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).line_2), ''), NULLIF(btrim((pv.remittance_address).line_2), '')) AS \"vendorAddress2\"" },
+		{ group: "Vendor address", value: "vendorCity", label: "Vendor City", description: "Vendor's city. Source: (remittance_address).city.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).city), ''), NULLIF(btrim((pv.remittance_address).city), '')) AS \"vendorCity\"" },
+		{ group: "Vendor address", value: "vendorState", label: "Vendor State/Province", description: "Vendor's state or province. Source: (remittance_address).state.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).state), ''), NULLIF(btrim((pv.remittance_address).state), '')) AS \"vendorState\"" },
+		{ group: "Vendor address", value: "vendorZip", label: "Vendor Postal Code", description: "Vendor's postal / ZIP code. Source: (remittance_address).post_code.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).post_code), ''), NULLIF(btrim((pv.remittance_address).post_code), '')) AS \"vendorZip\"" },
+		{ group: "Vendor address", value: "vendorCountry", label: "Vendor Country", description: "Vendor's country. Source: (remittance_address).country.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).country), ''), NULLIF(btrim((pv.remittance_address).country), '')) AS \"vendorCountry\"" },
+
+		{ group: "Vendor / Account", value: "accountNumber", label: "Account #", description: "Utility account number as it appears on the bill", sql: "va.account_code AS \"accountNumber\"" },
+
+		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status. Closed / Inactive / Terminated report as Inactive. UBM's other value is Unknown, meaning no closure has been recorded, and it is passed through rather than read as Active: measured against the client's deactivation list, a large share of the accounts they have deactivated still read Unknown here. Treat Unknown as unreported, not as active.", sql: "CASE WHEN lower(btrim(vas.account_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' WHEN lower(btrim(vas.account_status)) IN ('active','open') THEN 'Active' ELSE vas.account_status END AS \"accountStatus\"" },
+
+		{ group: "Vendor / Account", value: "accountCreatedDate", label: "Account Created Date", description: "First month the account was billed — UBM's closest equivalent to the client's FIQ Account Creation Date. UBM holds no account opening date: virtual_accounts.account_opened and virtual_accounts_status.account_opened are both empty, and created_at is the date UBM loaded the record, not the date the account opened.", sql: "TO_CHAR(af.first_period, 'YYYY-MM-DD') AS \"accountCreatedDate\"" },
+
+		{ group: "Vendor / Account", value: "accountActivityDate", label: "Account Activity Date", description: "Date the account's current status took effect — the deactivation date where the account has one, otherwise the first month it was billed. Source: virtual_accounts_status.account_closed, falling back to the feed because no opening date is recorded.", sql: "TO_CHAR(COALESCE(vas.account_closed, af.first_period), 'YYYY-MM-DD') AS \"accountActivityDate\"" },
+
+		{ group: "Vendor / Account", value: "cleanAccountNumber", label: "Clean Account #", description: "Account number with punctuation removed, for matching against systems that store it unformatted. Derived from Account # — UBM stores no clean account number of its own.", sql: "regexp_replace(va.account_code, '[^A-Za-z0-9]', '', 'g') AS \"cleanAccountNumber\"" },
+		{ group: "Vendor / Account", value: "summaryAccount", label: "Summary Account", description: "Account this one rolls up to, where it is billed under a parent. Source: virtual_accounts.client_account, shown only where it differs from the account's own number — an account billed in its own right leaves this blank, which is most of them.", sql: "NULLIF(va.client_account, va.account_code) AS \"summaryAccount\"" },
+		{ group: "Vendor / Account", value: "meterSerial", label: "Meter #", description: "Meter serial number recorded against the account. Source: virtual_accounts.meter_serial.", sql: "va.meter_serial AS \"meterSerial\"" },
+
+		{ group: "GL", value: "glCode", label: "Customer GL Number", description: "GL code charged for this account, one row per code. Source: the GL Code 1–6 account attributes, unpivoted so an account split across several GL codes reports as several rows. Reported exactly as UBM stores it, including any trailing .000 — the client's exports carry the same suffix, even where Excel's number formatting hides it.", sql: "glr.gl_code AS \"glCode\"" },
+
+		{ group: "GL", value: "glAllocation", label: "GL Allocation %", description: "Share of the account allocated to this row's GL code, as a percentage — 51.25 means 51.25%, and an account charged to a single GL reads 100. The scale is UBM's own, unchanged. Note the client's own exports format these cells as percentages, so Excel shows 51.25% while storing 0.5125 — the same number, not a different scale.", sql: "CASE WHEN btrim(glr.gl_allocation) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN btrim(glr.gl_allocation)::numeric END AS \"glAllocation\"" },
+		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
+
+		{ group: "Bill", value: "billBeginDate", label: "Begin Date", description: "First day of the bill's service period, as billed. Source: account_history.start_date, which is bill-level — the monthly feed's Service Start is the start of a month's slice of that bill, not the bill itself.", sql: "TO_CHAR(ah.start_date, 'YYYY-MM-DD') AS \"billBeginDate\"" },
+		{ group: "Bill", value: "billEndDate", label: "End Date", description: "Last day of the bill's service period, as billed. Source: account_history.end_date. A bill spanning a month end is one row here and two in the monthly feed.", sql: "TO_CHAR(ah.end_date, 'YYYY-MM-DD') AS \"billEndDate\"" },
+		{ group: "Bill", value: "billServiceCost", label: "Service Cost", description: "Charges for the bill as billed, not spread across the months it covers. Source: account_history.subcharges — UBM's Subcharges family is per bill block, where the Charges family on the monthly feed is pro-rated.", sql: "ah.subcharges AS \"billServiceCost\"" },
+		{ group: "Bill", value: "billQuantity", label: "Quantity (Billed)", description: "Consumption for the bill as billed. Source: account_history.consumption. The monthly feed's Total Consumption is the same quantity pro-rated across months, which is why it reads in fractions where the bill reads whole units.", sql: "CASE WHEN ah.bill_id IS NOT NULL THEN COALESCE(ah.consumption, 0) END AS \"billQuantity\"" },
+
+		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Commodity the account is billed for, spelled out the way the client's reports write it — UBM stores NATURALGAS, this reports Natural Gas. Note their reports also use this column for charge categories (Tax, Late Charges, Misc Charges), which UBM does not model as service types at all.", sql: "CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 'Electric' WHEN 'WATER' THEN 'Water' WHEN 'SEWER' THEN 'Sewer' WHEN 'NATURALGAS' THEN 'Natural Gas' WHEN 'FIREPROTECTION' THEN 'Fire Protection' WHEN 'STORMWATER' THEN 'Storm Water' WHEN 'IRRIGATION' THEN 'Irrigation' WHEN 'LIGHTING' THEN 'Lighting' WHEN 'REFUSE' THEN 'Refuse' WHEN 'SOLARPV' THEN 'Solar PV' WHEN 'CHILLEDWATER' THEN 'Chilled Water' WHEN 'PROPANE' THEN 'Propane' ELSE amf.utility_type END AS \"utilityType\"" },
+
 		{ group: "Usage", value: "uom", label: "Unit of Measure", description: "Unit of measure for consumption (e.g. CCF, KWH)", sql: "amf.total_consumption_uom AS \"uom\"" },
 		{ group: "Usage", value: "totalConsumption", label: "Total Consumption", description: "Total metered consumption", sql: "amf.total_consumption AS \"totalConsumption\"" },
 		{ group: "Usage", value: "totalGenConsumption", label: "Generation Consumption", description: "On-site generation consumption", sql: "amf.total_gen_consumption AS \"totalGenConsumption\"" },
 		{ group: "Usage", value: "demand", label: "Max Demand", description: "Maximum demand (kW)", sql: "amf.max_demand AS \"demand\"" },
 		{ group: "Usage", value: "cogenConsumption", label: "Cogeneration Consumption", description: "Cogeneration consumption", sql: "amf.total_cogen_consumption AS \"cogenConsumption\"" },
 
-		// --- Consumption by time-of-use tier ---
 		{ group: "Usage (time of use)", value: "consumptionOnpeak", label: "Consumption (On-Peak)", description: "Consumption during on-peak hours", sql: "amf.total_consumption_onpeak AS \"consumptionOnpeak\"" },
 		{ group: "Usage (time of use)", value: "consumptionMidpeak", label: "Consumption (Mid-Peak)", description: "Consumption during mid-peak hours", sql: "amf.total_consumption_midpeak AS \"consumptionMidpeak\"" },
 		{ group: "Usage (time of use)", value: "consumptionOffpeak", label: "Consumption (Off-Peak)", description: "Consumption during off-peak hours", sql: "amf.total_consumption_offpeak AS \"consumptionOffpeak\"" },
@@ -64,17 +73,12 @@ export default {
 		{ group: "Usage (time of use)", value: "consumptionSuperpeak", label: "Consumption (Super-Peak)", description: "Consumption during super-peak hours", sql: "amf.total_consumption_superpeak AS \"consumptionSuperpeak\"" },
 		{ group: "Usage (time of use)", value: "consumptionSuperoffpeak", label: "Consumption (Super-Off-Peak)", description: "Consumption during super-off-peak hours", sql: "amf.total_consumption_superoffpeak AS \"consumptionSuperoffpeak\"" },
 
-		// --- Charges (granular) ---
-		// Every charge column the feed has. Late fees are not among them; see below.
 		{ group: "Charges", value: "totalCharges", label: "Total Charges", description: "Monetary value for total charges.", sql: "amf.total_charges AS \"totalCharges\"" },
 		{ group: "Charges", value: "totalChargesUsage", label: "Usage Charges", description: "Monetary value for usage charges.", sql: "amf.total_charges_usage AS \"totalChargesUsage\"" },
 		{ group: "Charges", value: "totalChargesConsumption", label: "Consumption Charges", description: "Monetary value for consumption charges.", sql: "amf.total_charges_consumption AS \"totalChargesConsumption\"" },
 		{ group: "Charges", value: "totalChargesDemand", label: "Demand Charges", description: "Monetary value for demand charges.", sql: "amf.total_charges_demand AS \"totalChargesDemand\"" },
 		{ group: "Charges", value: "totalChargesTaxes", label: "Tax Charges", description: "Tax portion of the bill's charges — the column to use for the client's Tax line.", sql: "amf.total_charges_taxes AS \"totalChargesTaxes\"" },
-		// Late fees live in analytics_billing_line_items (code = 'LATEFEE', bill_type =
-		// 'live') at bill grain, and one bill spans several feed rows (25,374 rows from
-		// 7,098 bills). Keying on bill_id or block_id would multiply the fee, so it is
-		// divided across the bill's rows: a row shows a share, the column totals right.
+
 		{ group: "Charges", value: "lateCharges", label: "Late Charges", description: "Late fees on the bill behind this row, net of any recouped fees. A bill covers several report rows, so each row shows its share of the fee rather than the whole amount — the column still adds up correctly.", sql: "((SELECT COALESCE(SUM(li.charge), 0) FROM bill_management_v2.analytics_billing_line_items li WHERE li.bill_id = amf.bill_id AND li.code = 'LATEFEE' AND li.bill_type = 'live') / NULLIF((SELECT COUNT(*) FROM bill_management_v2.analytics_monthly_feed a2 WHERE a2.bill_id = amf.bill_id), 0)) AS \"lateCharges\"" },
 		{ group: "Charges", value: "totalChargesCustomer", label: "Customer Charges", description: "Monetary value for customer charges.", sql: "amf.total_charges_customer AS \"totalChargesCustomer\"" },
 		{ group: "Charges", value: "totalChargesOther", label: "Other Charges", description: "Charges outside the usage, consumption, demand, tax, customer, generation and commodity buckets — the closest the feed has to a miscellaneous line.", sql: "amf.total_charges_other AS \"totalChargesOther\"" },
@@ -82,16 +86,12 @@ export default {
 		{ group: "Charges", value: "totalChargesCommodity", label: "Commodity Charges", description: "Monetary value for commodity charges.", sql: "amf.total_charges_commodity AS \"totalChargesCommodity\"" },
 		{ group: "Charges", value: "totalChargesBilledUse", label: "Billed Use Charges", description: "Monetary value for billed usage subcharges.", sql: "amf.total_charges_billeduse AS \"totalChargesBilledUse\"" },
 
-		// --- Consumption charges by time-of-use tier ---
 		{ group: "Charges (time of use)", value: "chargesConsumptionOnpeak", label: "Consumption Charges (On-Peak)", description: "Monetary value for onpeak consumption charges.", sql: "amf.total_charges_consumption_onpeak AS \"chargesConsumptionOnpeak\"" },
 		{ group: "Charges (time of use)", value: "chargesConsumptionMidpeak", label: "Consumption Charges (Mid-Peak)", description: "Monetary value for midpeak consumption charges.", sql: "amf.total_charges_consumption_midpeak AS \"chargesConsumptionMidpeak\"" },
 		{ group: "Charges (time of use)", value: "chargesConsumptionOffpeak", label: "Consumption Charges (Off-Peak)", description: "Monetary value for offpeak consumption charges.", sql: "amf.total_charges_consumption_offpeak AS \"chargesConsumptionOffpeak\"" },
 		{ group: "Charges (time of use)", value: "chargesConsumptionShoulderpeak", label: "Consumption Charges (Shoulder-Peak)", description: "Monetary value for shoulderpeak consumption charges.", sql: "amf.total_charges_consumption_shoulderpeak AS \"chargesConsumptionShoulderpeak\"" },
 		{ group: "Charges (time of use)", value: "chargesConsumptionSuperpeak", label: "Consumption Charges (Super-Peak)", description: "Monetary value for superpeak consumption charges.", sql: "amf.total_charges_consumption_superpeak AS \"chargesConsumptionSuperpeak\"" },
 
-		// --- Weather (raw degree-days only) ---
-		// UBM has no "normalization type" attribute; we expose raw HDD/CDD and
-		// any normalization is done client-side. (UBM team 2026-06-17.)
 		{ group: "Weather", value: "totalHdd", label: "Heating Degree Days", description: "Number of days associated with heating degree days.", sql: "amf.total_hdd_billblock AS \"totalHdd\"" },
 		{ group: "Weather", value: "totalCdd", label: "Cooling Degree Days", description: "Number of days associated with cooling degree days.", sql: "amf.total_cdd_billblock AS \"totalCdd\"" },
 		{ group: "Weather", value: "degreeDaysTotal", label: "Degree Days (Total)", description: "Number of days associated with total degree days.", sql: "amf.total_dd_billblock AS \"degreeDaysTotal\"" },
@@ -99,43 +99,306 @@ export default {
 		{ group: "Weather", value: "genKwhPerDd", label: "Gen kWh per Degree Day", description: "Generation kWh per degree day", sql: "amf.gen_kwh_per_dd_billblock AS \"genKwhPerDd\"" }
 	],
 
-	// locationNumber, not locationId: the site number is what the client's own
-	// reports key on. The internal id is still selectable for anyone who needs it.
 	defaultVisibleFields: [
 		"month", "location", "locationNumber", "utilityType",
 		"vendor", "totalCharges", "totalConsumption", "uom"
 	],
 
-	// ----- Base FROM -----
-	// locations (l) is the parent; location_detail (lt) holds address/status/number.
-	// Vendor name is a scalar subquery rather than a join: the pretty-name view held
-	// the raw code for 209 of 377 vendors, and a code can repeat within a customer.
-	fromClause:
-		`bill_management_v2.analytics_monthly_feed amf
-		LEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id
-		LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id`,
+	FILTER_WIDGETS: [
+		"FieldsSelect", "StartDate", "EndDate",
+		"LocationName", "StateProvinceSelect",
+		"CountrySelect", "LocationStatusSelect",
+		"AccountNumberSelect", "AccountStatusSelect",
+		"VendorSelect", "ServiceTypesSelect",
+		"LocationAttributesSelect", "AccountAttributesSelect",
+		"AccountAttributeValuesSelect"
+	],
 
-	// Default ORDER BY (stable paging key) — also the tiebreaker for orderBy().
+	reportPresets: () => {
+
+		const dupColumns = [
+			"locationNumber", "vendorId", "vendor", "utilityType", "accountNumber",
+			{ attr: "^gl\\s*code", label: "Customer GL Number" },
+			"locationAddress", "billServiceCost", "billBeginDate", "billEndDate", "billQuantity"
+		];
+		const dup = (value, label, service) => ({
+			value: value,
+			label: label,
+			columns: dupColumns,
+			dateColumn: "ah.start_date",
+			filters: { utilityType: { match: service } }
+		});
+
+		return [
+
+			{ value: "custom", label: "Custom Report", columns: null, filters: {} },
+
+			{
+				value: "glAllocations",
+				label: "GL Allocations",
+
+				columns: [
+					"location", "locationNumber", "vendor", "accountNumber", "accountStatus",
+					"utilityType", "glCode", "glAllocation"
+				],
+
+				availableExtra: [
+					"locationAddress", "locationCity", "locationState", "locationZip",
+					"locationCountry", "locationStatus", "vendorCode",
+					"vendorAddress1", "vendorAddress2", "vendorCity", "vendorState",
+					"vendorZip", "vendorCountry",
+					"cleanAccountNumber", "meterSerial",
+					"accountCreatedDate", "accountActivityDate",
+
+					"glCode", "glAllocation",
+					{ attr: "^gl\\s*code", label: "Customer GL Number", all: true },
+					{ attr: "gl\\s*desc", label: "GL Description", all: true },
+					{ attr: "gl\\s*alloc", label: "GL % Allocation", all: true }
+				],
+				filters: {}
+			},
+
+			{
+				value: "vendorBySite",
+				label: "Vendor by Site with Account",
+				columns: ["vendor", "vendorId", "locationNumber", "location", "accountNumber"],
+				filters: { accountStatus: { neq: ["Closed"] } }
+			},
+
+			{
+				value: "accountActivity",
+				label: "Account Activity",
+				columns: [
+					"location", "locationNumber", "locationStatus", "vendor", "accountNumber",
+					"accountCreatedDate", "glCode", "glAllocation"
+				],
+				dateColumn: "af.first_period",
+
+				availableExtra: ["cleanAccountNumber"],
+				filters: {}
+			},
+
+			{
+				value: "deactivation",
+				label: "Deactivation",
+				columns: ["location", "vendor", "accountNumber", "accountActivityDate", "accountStatus"],
+				dateColumn: "vas.account_closed",
+				filters: { accountStatus: { eq: ["Closed"] } }
+			},
+
+			{
+				value: "customerFinalBill",
+				label: "Customer Final Bill",
+				columns: ["vendor", "location", "summaryAccount", "accountNumber"],
+				availableExtra: ["customerName"],
+				filters: {}
+			},
+
+			dup("water", "Water", "^\\s*(water|sewer)\\s*$"),
+			dup("gas", "Gas", "^\\s*(natural\\s*gas|gas)\\s*$"),
+			dup("electric", "Electric", "^\\s*electric(ity)?\\s*$")
+		];
+	},
+
+	presetOptions: () => ReportSpecs.reportPresets().map(p => ({ label: p.label, value: p.value })),
+
+	activePreset: () => {
+		const presets = ReportSpecs.reportPresets();
+		const v = (typeof ReportSelect !== "undefined" && ReportSelect.selectedOptionValue) || "custom";
+		return presets.find(p => p.value === v) || presets[0];
+	},
+
+	_attrNames: () => {
+		const rows = (typeof getAccountAttributesList !== "undefined" && getAccountAttributesList.data) || [];
+		return (Array.isArray(rows) ? rows : [])
+			.map(r => r && r.value)
+			.filter(v => v != null && String(v).trim() !== "")
+			.map(String);
+	},
+
+	_resolveAttr: (spec) => {
+		const re = new RegExp(spec.attr, "i");
+		const names = ReportSpecs._attrNames()
+			.filter(n => re.test(n))
+			.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+		if (names.length === 0) return [];
+		return (spec.all ? names : names.slice(0, 1)).map(n => ReportSpecs.ATTR_PREFIX + n);
+	},
+
+	_resolveSpecs: (specs) => {
+		const out = [];
+		(specs || []).forEach(c => {
+			if (typeof c === "string") { out.push(c); return; }
+			ReportSpecs._resolveAttr(c).forEach(a => out.push(a));
+		});
+		return out;
+	},
+
+	presetColumns: () => {
+		const p = ReportSpecs.activePreset();
+		if (!p || !p.columns) return ReportSpecs.defaultVisibleFields;
+		return ReportSpecs._resolveSpecs(p.columns);
+	},
+
+	presetAvailable: () => {
+		const p = ReportSpecs.activePreset();
+		if (!p || !p.columns) return null;
+		return p.availableExtra ? p.columns.concat(p.availableExtra) : p.columns;
+	},
+
+	presetMissing: () => {
+		const p = ReportSpecs.activePreset();
+		if (!p || !p.columns) return [];
+		return p.columns
+			.filter(c => typeof c !== "string" && ReportSpecs._resolveAttr(c).length === 0)
+			.map(c => c.label || c.attr);
+	},
+
+	showFilter: (name) => {
+		if (name !== "accountAttributes") return true;
+		const avail = ReportSpecs.presetAvailable();
+		if (!avail) return true;
+		return ReportSpecs._resolveSpecs(avail).some(v => ReportSpecs.isAttrPick(v));
+	},
+
+	_presetFilter: (key, rows) => {
+		const p = ReportSpecs.activePreset();
+		const spec = (p && p.filters && p.filters[key]) || null;
+		if (!spec) return [];
+		if (Array.isArray(spec)) return spec;
+		const values = (Array.isArray(rows) ? rows : []).map(r => r && r.value).filter(v => v != null);
+
+		const norm = v => String(v).trim().toLowerCase();
+		if (spec.eq) {
+			const want = spec.eq.map(norm);
+			return values.filter(v => want.indexOf(norm(v)) >= 0);
+		}
+		if (spec.neq) {
+			const skip = spec.neq.map(norm);
+			return values.filter(v => skip.indexOf(norm(v)) < 0);
+		}
+		if (spec.not) {
+			const skip = new RegExp(spec.not, "i");
+			return values.filter(v => !skip.test(String(v)));
+		}
+		const re = new RegExp(spec.match, "i");
+		return values.filter(v => re.test(String(v)));
+	},
+
+	presetServiceTypes: () =>
+		ReportSpecs._presetFilter("utilityType", (typeof getServiceTypes !== "undefined" && getServiceTypes.data) || []),
+
+	presetAccountStatuses: () =>
+		ReportSpecs._presetFilter("accountStatus", (typeof getAccountStatuses !== "undefined" && getAccountStatuses.data) || []),
+
+	selectPreset: async (value) => {
+		// The selected report is not stored anywhere — ReportSelect holds it, and a
+		// reload takes the widget back to its Custom default. This clears the value
+		// earlier versions persisted to the browser, which outlived the session and
+		// reopened days later on a page whose filters had been reset around it.
+		try { removeValue("reportPreset"); } catch (e) {  }
+		for (const w of ReportSpecs.FILTER_WIDGETS) {
+			try { resetWidget(w, false); } catch (e) {  }
+		}
+		await ReportSpecs.refreshGrid();
+		const p = ReportSpecs.activePreset();
+		if (p && p.value !== "custom") showAlert(`Loaded the ${p.label} report`, "success");
+	},
+
+	BILL_FIELDS: ["billBeginDate", "billEndDate", "billServiceCost", "billQuantity"],
+
+	usesBillLevel: () =>
+		ReportSpecs.selectedColumns().some(o => ReportSpecs.BILL_FIELDS.indexOf(o.value) >= 0),
+
+	feedKeys: () => {
+		const shown = ReportSpecs.selectedColumns();
+		if (ReportSpecs.usesBillLevel()) {
+			return ["bill_id", "virtual_account_id", "utility_type"];
+		}
+		if (shown.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")))) return null;
+		const keys = ["virtual_account_id"];
+		if (shown.some(o => o.group === "Location")) keys.push("location_id");
+		if (shown.some(o => o.value === "utilityType")) keys.push("utility_type");
+		return keys;
+	},
+
+	feedCte: () => {
+		const cid = ReportSpecs.customerIdSql();
+		const src = `FROM bill_management_v2.analytics_monthly_feed WHERE customer_id = ${cid}`;
+		const keys = ReportSpecs.feedKeys();
+		if (!keys) return `SELECT * ${src}`;
+		const k = keys.join(", ");
+		return `SELECT DISTINCT ON (${k}) * ${src} ORDER BY ${k}, time_period DESC NULLS LAST`;
+	},
+
+	dateFilterColumn: () => {
+		const p = ReportSpecs.activePreset();
+		const col = (p && p.dateColumn) || "";
+		if (!col) return "amf.time_period";
+
+		if (col.indexOf("ah.") === 0 && !ReportSpecs.usesBillLevel()) return "amf.time_period";
+		return col;
+	},
+
+	GL_ROW_FIELDS: ["glCode", "glAllocation"],
+
+	usesGlRows: () =>
+		ReportSpecs.selectedColumns().some(o => ReportSpecs.GL_ROW_FIELDS.indexOf(o.value) >= 0),
+
+	fromClause: () => {
+		let sql = ReportSpecs.baseFrom;
+		if (ReportSpecs.usesGlRows()) {
+			sql += "\n\t\tLEFT JOIN gl_rows glr ON glr.virtual_account_id = amf.virtual_account_id AND glr.gl_code IS NOT NULL";
+		}
+		if (ReportSpecs.usesBillLevel()) {
+			sql += "\n\t\tLEFT JOIN bill_history ah ON ah.bill_id = amf.bill_id AND ah.virtual_account_id = amf.virtual_account_id"
+				+ " AND upper(btrim(ah.commodity)) = upper(btrim(amf.utility_type))";
+		}
+
+		ReportSpecs.accountAttrColumns().forEach(o => {
+			if (!o.joinAlias) return;
+			sql += `\n\t\tLEFT JOIN attr_vals ${o.joinAlias} ON ${o.joinAlias}.virtual_account_id = amf.virtual_account_id`
+				+ ` AND ${o.joinAlias}.attribute_name = ${ReportSpecs._quote(o.attrName)}`;
+		});
+		return sql;
+	},
+
+	baseFrom:
+		`feed_scoped amf
+		LEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id
+		LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id
+		LEFT JOIN bill_management_v2.virtual_accounts va ON va.id = amf.virtual_account_id
+		LEFT JOIN bill_management_v2.vendors v ON v.code = amf.vendor_code
+		LEFT JOIN bill_management_v2.customers_vendors_pretty_name cvpn ON cvpn.vendor_id = v.id AND cvpn.customer_id = amf.customer_id
+		LEFT JOIN cpv_one cpv ON cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id
+		LEFT JOIN pv_one pv ON pv.code = amf.vendor_code
+		LEFT JOIN vas_one vas ON vas.virtual_account_id = amf.virtual_account_id
+		LEFT JOIN rv_one rv ON rv.vendor_code = amf.vendor_code AND rv.customer_id = amf.customer_id
+		LEFT JOIN amf_first af ON COALESCE(af.account_code, '') = COALESCE(va.account_code, '') AND COALESCE(af.location_id, -1) = COALESCE(amf.location_id, -1) AND COALESCE(af.vendor_code, '') = COALESCE(amf.vendor_code, '')`,
+
 	orderByClause: "l.id, amf.time_period",
 
-	// ORDER BY from the grid's sort menu, via the sortModel the grid persists to the
-	// store. Postgres allows ORDER BY on output aliases. The stable default is
-	// appended as a tiebreaker so paging stays deterministic.
 	orderBy: () => {
 		const known = ReportSpecs.allFieldOptions().map(o => o.value);
 		let model = [];
 		try { model = JSON.parse(appsmith.store.reportsSortModel || "[]"); } catch (e) { model = []; }
-		const terms = (Array.isArray(model) ? model : [])
-			.filter(s => s && known.indexOf(s.colId) >= 0)
-			.map(s => `"${s.colId}" ${s.sort === "desc" ? "DESC" : "ASC"}`);
-		return terms.length > 0
-			? `${terms.join(", ")}, ${ReportSpecs.orderByClause}`
-			: ReportSpecs.orderByClause;
+		const picked = (Array.isArray(model) ? model : []).filter(s => s && known.indexOf(s.colId) >= 0);
+		const terms = picked.map(s => `"${s.colId}" ${s.sort === "desc" ? "DESC" : "ASC"}`);
+		const cols = ReportSpecs.selectedColumns();
+		const varies = cols.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")));
+		if (varies) {
+			return terms.length > 0
+				? `${terms.join(", ")}, ${ReportSpecs.orderByClause}`
+				: ReportSpecs.orderByClause;
+		}
+		const seen = {};
+		picked.forEach(s => { seen[s.colId] = true; });
+		cols.forEach(o => {
+			if (!seen[o.value]) { seen[o.value] = true; terms.push(`"${o.value}"`); }
+		});
+		return terms.length > 0 ? terms.join(", ") : "1";
 	},
 
-	// ----- ISO state/country code → pretty name maps -----
-	// DB stores ISO codes like "US-CA", "CA-ON". Filter SELECT/IN still uses
-	// the code; only the dropdown label changes via prettyStates/prettyCountries.
 	stateNames: {
 		"US-AL": "Alabama", "US-AK": "Alaska", "US-AZ": "Arizona", "US-AR": "Arkansas",
 		"US-CA": "California", "US-CO": "Colorado", "US-CT": "Connecticut", "US-DE": "Delaware",
@@ -188,10 +451,6 @@ export default {
 			}));
 	},
 
-	// ----- Helpers -----
-	// CustomerSelect holds the fdg_code, SQL filters on customer_id. Resolved with an
-	// in-database subquery so query bodies carry no query.data dependency, which
-	// Appsmith rejects. Returns "0" (fail closed, no rows) when nothing is selected.
 	customerIdSql: () => {
 		const v = CustomerSelect && CustomerSelect.selectedOptionValue;
 		if (v == null || String(v).trim() === "") return "0";
@@ -199,21 +458,19 @@ export default {
 		return `(SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '${code}' AND active IS NOT FALSE LIMIT 1)`;
 	},
 
-	// ----- Visible Columns -----
-	// One picker for every output column: catalog fields plus account attributes. An
-	// attribute option carries its name in the value ("attr:GL Code 1") because the
-	// SQL builders run in query bodies, which cannot read another query's data.
 	ATTR_PREFIX: "attr:",
 
 	isAttrPick: (v) => String(v).indexOf(ReportSpecs.ATTR_PREFIX) === 0,
 
-	// Group prefix, alphabetical within the group, since the widget cannot draw group
-	// headers. Groups keep catalog order so the list runs identity to measures.
-	// Display only: exports and grid headers use the plain label from fieldCatalog().
 	fieldOptions: () => {
+		const scope = ReportSpecs.presetAvailable();
+		const allow = scope ? ReportSpecs._resolveSpecs(scope) : null;
+		const inScope = (v) => !allow || allow.indexOf(v) >= 0;
+
 		const order = [];
 		const byGroup = {};
 		ReportSpecs.visibleFieldOptions.forEach(f => {
+			if (!inScope(f.value)) return;
 			const g = f.group || "Other";
 			if (!byGroup[g]) { byGroup[g] = []; order.push(g); }
 			byGroup[g].push({ label: g + " · " + f.label, value: f.value });
@@ -227,40 +484,40 @@ export default {
 		const attrs = (Array.isArray(rows) ? rows : [])
 			.filter(r => r && r.value)
 			.map(r => ({ label: "Account attribute · " + r.value, value: ReportSpecs.ATTR_PREFIX + r.value }))
+			.filter(o => inScope(o.value))
 			.sort((a, b) => a.label.localeCompare(b.label));
 		return catalog.concat(attrs);
 	},
 
-	// One attribute pick -> the same shape as a catalog entry. `value` is the SELECT
-	// alias and the grid's column key, so it must be safe whatever the attribute is
-	// named. Values are aggregated with " | " (a VA can carry one more than once);
-	// this is a correlated subquery per attribute.
+	presetAttrLabels: () => {
+		const p = ReportSpecs.activePreset();
+
+		return ((p && p.columns) || [])
+			.filter(c => typeof c !== "string" && c.label && !c.all)
+			.map(c => ({ re: new RegExp(c.attr, "i"), label: c.label }));
+	},
+
 	accountAttrColumn: (pick) => {
 		const name = String(pick).slice(ReportSpecs.ATTR_PREFIX.length).trim();
 		let alias = "attr_" + name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 		if (alias === "attr_") alias = "attr_unnamed";
 		return {
 			value: alias,
-			label: name,
+			label: (ReportSpecs.presetAttrLabels().find(s => s.re.test(name)) || {}).label || name,
 			description: "Account attribute: " + name,
-			sql:
-				"(SELECT string_agg(DISTINCT vam.attribute_value, ' | ' ORDER BY vam.attribute_value) " +
-				"FROM bill_management_v2.virtual_accounts_attributes_mapping vam " +
-				"JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta " +
-				"ON vmeta.id = vam.virtual_accounts_attributes_metadata_id " +
-				"WHERE vam.virtual_account_id = amf.virtual_account_id " +
-				"AND vmeta.customer_id = amf.customer_id " +
-				"AND vmeta.deleted_at IS NULL " +
-				`AND vmeta.attribute_name = ${ReportSpecs._quote(name)}) AS "${alias}"`
+			attrName: name,
+			joinAlias: "av_" + alias,
+			sql: `av_${alias}.val AS "${alias}"`
 		};
 	},
 
-	// The report's columns, resolved and in the order they were picked — catalog
-	// entries and attributes interleaved exactly as they sit in Visible Columns.
-	// Single source for the SELECT, the grid, exports and header labels.
 	selectedColumns: () => {
 		const picked = (FieldsSelect && FieldsSelect.selectedOptionValues) || [];
-		const fields = (Array.isArray(picked) && picked.length > 0) ? picked : ReportSpecs.defaultVisibleFields;
+		const preset = ReportSpecs.activePreset();
+		const fallback = (preset && preset.columns)
+			? preset.columns.filter(c => typeof c === "string")
+			: ReportSpecs.defaultVisibleFields;
+		const fields = (Array.isArray(picked) && picked.length > 0) ? picked : fallback;
 		const used = {};
 		const out = [];
 		fields.forEach(f => {
@@ -268,7 +525,7 @@ export default {
 				? ReportSpecs.accountAttrColumn(f)
 				: ReportSpecs.visibleFieldOptions.find(x => x.value === f);
 			if (!o) return;
-			// Two attributes can slug down to the same alias; keep them distinct.
+
 			if (used[o.value]) { used[o.value]++; out.push(Object.assign({}, o, { value: o.value + "_" + used[o.value] })); }
 			else { used[o.value] = 1; out.push(o); }
 		});
@@ -277,120 +534,104 @@ export default {
 
 	accountAttrColumns: () => ReportSpecs.selectedColumns().filter(o => String(o.value).indexOf("attr_") === 0),
 
-	// Every column the report can emit: the catalog plus the attributes in play.
-	// Single lookup source for SELECT/label/sort/filter code.
 	allFieldOptions: () => ReportSpecs.visibleFieldOptions.concat(ReportSpecs.accountAttrColumns()),
 
 	gridColumns: () => ReportSpecs.selectedColumns().map(o => o.value),
 
-	// ----- SELECT builder -----
 	selectClause: () => {
-		const exprs = ReportSpecs.selectedColumns().map(o => o.sql);
-		return exprs.length > 0 ? exprs.join(", ") : "1 AS placeholder";
+		const cols = ReportSpecs.selectedColumns();
+		const varies = cols.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")));
+		const exprs = cols.map(o => o.sql);
+		const sql = exprs.length > 0 ? exprs.join(", ") : "1 AS placeholder";
+		return varies ? sql : `DISTINCT ${sql}`;
 	},
 
-	// ----- WHERE builder (every filter is SQL-side) -----
-	// Helpers
 	_quote: v => `'${String(v).replace(/'/g, "''")}'`,
 	_inList: (col, values, notIn) => {
 		const list = values.map(v => ReportSpecs._quote(v)).join(",");
 		return `AND ${col} ${notIn ? "NOT IN" : "IN"} (${list})`;
 	},
 
-	// Quoted CSV of the attribute names picked, for getAccountAttributeValues'
-	// IN (...). Returns '' (matches nothing) when none are selected.
 	accountAttrNames: () => {
 		const names = (typeof AccountAttributesSelect !== "undefined" && AccountAttributesSelect.selectedOptionValues) || [];
 		if (!names.length) return "''";
 		return names.map(n => ReportSpecs._quote(n)).join(",");
 	},
 
-	// includeGrid: include the AG Grid column filters. excludeField: skip the filter
-	// on that column, so a set-filter's value list is not collapsed by its own picks.
 	filterClauses: (includeGrid = true, excludeField = null) => {
 		const parts = ["WHERE 1=1"];
 		const cidSql = ReportSpecs.customerIdSql();
-		// Fail closed: with no customer resolved (missing/unknown ?customer= fdg_code),
-		// match no rows instead of returning every tenant's data.
+
 		if (cidSql === "0") return "WHERE 1=0";
 		parts.push(`AND amf.customer_id = ${cidSql}`);
-		// True when the column we're listing values for is the one this filter
-		// targets, so we skip it (don't let a column filter constrain its own list).
+
 		const skip = (aliases) => {
 			if (!excludeField) return false;
 			return Array.isArray(aliases) ? aliases.indexOf(excludeField) >= 0 : aliases === excludeField;
 		};
 
-		// Date range (always applied if provided). amf.time_period is the canonical
-		// month bucket — start of month for monthly feed.
+		const dateCol = ReportSpecs.dateFilterColumn();
 		if (StartDate && StartDate.selectedDate) {
 			const d = moment(StartDate.selectedDate).startOf("month").format("YYYY-MM-DD");
-			parts.push(`AND amf.time_period >= '${d}'`);
+			parts.push(`AND ${dateCol} >= '${d}'`);
 		}
 		if (EndDate && EndDate.selectedDate) {
 			const d = moment(EndDate.selectedDate).endOf("month").format("YYYY-MM-DD");
-			parts.push(`AND amf.time_period <= '${d}'`);
+			parts.push(`AND ${dateCol} <= '${d}'`);
 		}
 
-		// State / Province (+ Not In)
 		const states = (typeof StateProvinceSelect !== "undefined" && StateProvinceSelect.selectedOptionValues) || [];
 		if (states.length > 0 && !skip("locationState")) {
-			const notIn = (typeof StateNotIn !== "undefined") && StateNotIn.isSwitchedOn;
-			parts.push(ReportSpecs._inList("l.state", states, notIn));
+			parts.push(ReportSpecs._inList("l.state", states));
 		}
 
-		// Country
 		const countries = (typeof CountrySelect !== "undefined" && CountrySelect.selectedOptionValues) || [];
 		if (countries.length > 0 && !skip("locationCountry")) {
 			parts.push(ReportSpecs._inList("l.country", countries));
 		}
 
-		// Location status — lives on location_detail (lt) per the schema.
 		const statuses = (typeof LocationStatusSelect !== "undefined" && LocationStatusSelect.selectedOptionValues) || [];
 		if (statuses.length > 0 && !skip("locationStatus")) {
 			parts.push(ReportSpecs._inList("lt.location_status", statuses));
 		}
 
-		// Account #. A code repeats across commodities (137636-551343 is WATER, SEWER
-		// and FIREPROTECTION), so it is listed once and selecting it takes every service.
 		const accounts = (typeof AccountNumberSelect !== "undefined" && AccountNumberSelect.selectedOptionValues) || [];
 		if (accounts.length > 0 && !skip("accountNumber")) {
 			const list = accounts.map(v => ReportSpecs._quote(v)).join(",");
-			parts.push(
-				"AND EXISTS (SELECT 1 FROM bill_management_v2.virtual_accounts va " +
-				`WHERE va.id = amf.virtual_account_id AND va.account_code IN (${list}))`
-			);
+			parts.push(`AND va.account_code IN (${list})`);
 		}
 
-		// Account status - the account's own status, not the location's. EXISTS so the
-		// status table's index on virtual_account_id can be used.
 		const acctStatuses = (typeof AccountStatusSelect !== "undefined" && AccountStatusSelect.selectedOptionValues) || [];
-		if (acctStatuses.length > 0 && !skip("accountStatus")) {
-			const list = acctStatuses.map(v => ReportSpecs._quote(v)).join(",");
-			parts.push(
-				"AND EXISTS (SELECT 1 FROM bill_management_v2.virtual_accounts_status vas " +
-				`WHERE vas.virtual_account_id = amf.virtual_account_id AND vas.account_status IN (${list}))`
-			);
+		if (!skip("accountStatus")) {
+			if (acctStatuses.length > 0) {
+				const list = acctStatuses.map(v => ReportSpecs._quote(v)).join(",");
+				parts.push(`AND vas.account_status IN (${list})`);
+			} else {
+				const p = ReportSpecs.activePreset();
+				const rule = (p && p.filters && p.filters.accountStatus) || null;
+				const list = vs => vs.map(v => ReportSpecs._quote(String(v).trim().toLowerCase())).join(",");
+				if (rule && rule.eq) {
+					parts.push(`AND lower(btrim(vas.account_status)) IN (${list(rule.eq)})`);
+				} else if (rule && rule.neq) {
+					parts.push(`AND (vas.account_status IS NULL OR lower(btrim(vas.account_status)) NOT IN (${list(rule.neq)}))`);
+				} else if (rule && rule.not) {
+					parts.push(`AND (vas.account_status IS NULL OR vas.account_status !~* ${ReportSpecs._quote(rule.not)})`);
+				} else if (rule && rule.match) {
+					parts.push(`AND vas.account_status ~* ${ReportSpecs._quote(rule.match)}`);
+				}
+			}
 		}
 
-		// Vendor — selecting by vendor code (the stable join key).
 		const vendors = (typeof VendorSelect !== "undefined" && VendorSelect.selectedOptionValues) || [];
 		if (vendors.length > 0 && !skip(["vendor", "vendorCode"])) {
 			parts.push(ReportSpecs._inList("amf.vendor_code", vendors));
 		}
-		// Vendor Territory — not available in UBM. UBM stores vendor *location*
-		// info instead; filter by vendor location once that column is mapped.
-		// (UBM team 2026-06-17.)
 
-		// Service / Utility type (+ Not In)
 		const services = (typeof ServiceTypesSelect !== "undefined" && ServiceTypesSelect.selectedOptionValues) || [];
 		if (services.length > 0 && !skip("utilityType")) {
-			const notIn = (typeof ServiceNotIn !== "undefined") && ServiceNotIn.isSwitchedOn;
-			parts.push(ReportSpecs._inList("amf.utility_type", services, notIn));
+			parts.push(ReportSpecs._inList("amf.utility_type", services));
 		}
 
-		// Location - multi-select of location ids (getLocationsForCustomer). The text
-		// branch is a fallback in case the widget is ever swapped back to an input.
 		const locFields = ["location", "locationId", "locationNumber", "locationAddress"];
 		const locIds = (typeof LocationName !== "undefined" && LocationName.selectedOptionValues) || [];
 		const locText = (typeof LocationName !== "undefined" && LocationName.text) || "";
@@ -404,14 +645,9 @@ export default {
 			);
 		}
 
-		// Location attributes: value-level filtering needs a second picker we haven't
-		// built, so this no-ops for now.
-
-		// Account attributes (UBM "VA attributes"). Values are encoded as name + CHR(31)
-		// + value, grouped by name into one EXISTS each: attributes AND, values OR.
 		const accVals = (typeof AccountAttributeValuesSelect !== "undefined" && AccountAttributeValuesSelect.selectedOptionValues) || [];
 		if (accVals.length > 0) {
-			const SEP = String.fromCharCode(31); // unit separator, matches CHR(31) in the query
+			const SEP = String.fromCharCode(31);
 			const groups = {};
 			accVals.forEach(s => {
 				const str = String(s);
@@ -434,9 +670,6 @@ export default {
 			});
 		}
 
-		// ----- AG Grid column filters (header menus) -----
-		// ANDed on top of the panel filters. WHERE can't reference SELECT aliases, so
-		// each field resolves to its raw expression (the sql before " AS ").
 		if (!includeGrid) return parts.join(" ");
 		let gridModel = {};
 		try { gridModel = JSON.parse(appsmith.store.reportsFilterModel || "{}"); } catch (e) { gridModel = {}; }
@@ -486,9 +719,9 @@ export default {
 				const hasNull = vals.length !== nonNull.length;
 				if (inList && hasNull) return `(${expr} IN (${inList}) OR ${expr} IS NULL)`;
 				if (inList) return `${expr} IN (${inList})`;
-				return "1=0"; // nothing selected => match nothing
+				return "1=0";
 			}
-			return textCond(expr, c); // default: text filter
+			return textCond(expr, c);
 		};
 		const buildCond = (expr, f) => {
 			let conds = null, op = "AND";
@@ -504,7 +737,7 @@ export default {
 			return oneCond(expr, f);
 		};
 		Object.keys(gridModel || {}).forEach(field => {
-			if (field === excludeField) return; // don't constrain a column's list by its own filter
+			if (field === excludeField) return;
 			const expr = rawExpr(field);
 			if (!expr) return;
 			const clause = buildCond(expr, gridModel[field]);
@@ -514,27 +747,20 @@ export default {
 		return parts.join(" ");
 	},
 
-	// ----- Pagination plumbing (unchanged contract for GridWidget) -----
 	fetchPage: async () => {
 		const m = (typeof GridWidget !== "undefined") ? GridWidget.model : null;
 		const start = Math.max(0, (m && Number(m.pendingStart)) || 0);
 		const end = Math.max(start + 1, (m && Number(m.pendingEnd)) || (start + 100));
 		await storeValue("reportsPageStart", start);
 		await storeValue("reportsPageEnd", end);
-		// Persist the grid's column sort/filter state so orderBy() and
-		// filterClauses() pick it up when the queries below re-evaluate.
+
 		await storeValue("reportsSortModel", (m && m.pendingSort) || "[]");
 		await storeValue("reportsFilterModel", (m && m.pendingFilter) || "{}");
 		await Promise.all([runReport.run(), runReportCount.run()]);
-		// Bump this only after the queries resolve: the grid delivers rows when it
-		// changes, so the premature updateModel() (still holding the previous page) is
-		// ignored. Without it the grid lags one fetch behind.
+
 		await storeValue("reportsResponseTs", Date.now());
 	},
 
-	// ----- Set-filter distinct values (checkbox lists) -----
-	// Raw expression for the column the grid is asking about. Whitelisted via
-	// allFieldOptions and attribute names are quoted, so it's injection-safe.
 	distinctExpr: () => {
 		const field = appsmith.store.reportsDistinctField;
 		const o = ReportSpecs.allFieldOptions().find(x => x.value === field);
@@ -543,33 +769,87 @@ export default {
 		return (i >= 0 ? o.sql.slice(0, i) : o.sql).trim();
 	},
 
-	// WHERE for the set-filter value list: every other active filter but not the
-	// column's own, so the checkbox list doesn't collapse to what you already picked.
 	distinctWhere: () => {
 		return ReportSpecs.filterClauses(true, appsmith.store.reportsDistinctField);
 	},
 
-	// Minimal FROM for the value query: only the joins the column and active filters
-	// actually reference, so a distinct on an amf-only column skips them entirely.
-	distinctFrom: () => {
-		const sql = ReportSpecs.distinctExpr() + " " + ReportSpecs.distinctWhere();
-		const parts = ["bill_management_v2.analytics_monthly_feed amf"];
-		if (/\bl\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.locations l ON l.id = amf.location_id");
-		if (/\blt\./.test(sql)) parts.push("LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = amf.location_id");
-		// Vendor and account columns are scalar subqueries off amf, so they need no
-		// join here — they carry their own FROM.
-		return parts.join("\n");
+	distinctFrom: () => ReportSpecs.fromClause(),
+
+	DISTINCT_CHUNK: () => 5000,
+
+	DISTINCT_MAX: () => 20000,
+
+	distinctLimit: () => {
+		const n = Number(appsmith.store.reportsDistinctLimit);
+		return (n > 0) ? n : ReportSpecs.DISTINCT_CHUNK();
 	},
 
-	// onFetchDistinct handler: the grid asks for a column's checkbox values.
-	// Persist the requested field, run the distinct query, then bump the ts the
-	// grid watches so it can hand the values to the pending set filter.
+	distinctOffset: () => Math.max(0, Number(appsmith.store.reportsDistinctOffset) || 0),
+
+	// A column with tens of thousands of distinct values used to come back as one
+	// response and get cut off mid-row, which left the checkbox list empty. Page it
+	// the way the export does — silently, since this runs while a filter is opening
+	// and an alert per chunk would be noise on top of a UI interaction.
 	fetchDistinct: async () => {
+		const MIN_CHUNK = 250;
+
 		const m = (typeof GridWidget !== "undefined") ? GridWidget.model : null;
 		const field = (m && m.reqDistinctField) || "";
 		await storeValue("reportsDistinctField", field);
-		await getDistinctValues.run();
+		await storeValue("reportsDistinctRows", [], false);
+		if (!field) {
+			await storeValue("reportsDistinctTs", Date.now());
+			return;
+		}
+
+		const all = [];
+		let limit = ReportSpecs.DISTINCT_CHUNK();
+		let offset = 0;
+		let truncated = false;
+		let failed = null;
+		for (;;) {
+			await storeValue("reportsDistinctLimit", limit, false);
+			await storeValue("reportsDistinctOffset", offset, false);
+			let batch;
+			try {
+				const res = await getDistinctValues.run();
+				batch = Array.isArray(res) ? res : (getDistinctValues.data || []);
+			} catch (e) {
+
+				if (limit > MIN_CHUNK) { limit = Math.max(MIN_CHUNK, Math.floor(limit / 2)); continue; }
+
+				// Out of retries. Say so — silence here is indistinguishable from a
+				// column that genuinely has no values, which is what an empty
+				// checkbox list looks like.
+				failed = (e && e.message) ? String(e.message) : "the query failed";
+				break;
+			}
+			for (const r of batch) all.push(r);
+
+			// Hand the filter what we have before fetching the rest, so the list fills
+			// in instead of sitting on Loading until the last chunk. slice() because
+			// the store compares by reference and would ignore the same array again.
+			await storeValue("reportsDistinctRows", all.slice(), false);
+			await storeValue("reportsDistinctTs", Date.now());
+
+			if (batch.length < limit) break;
+			offset += batch.length;
+			if (all.length >= ReportSpecs.DISTINCT_MAX()) { truncated = true; break; }
+		}
+
+		await storeValue("reportsDistinctOffset", 0, false);
+		await storeValue("reportsDistinctTruncated", truncated, false);
+		await storeValue("reportsDistinctFailed", failed != null && all.length === 0, false);
 		await storeValue("reportsDistinctTs", Date.now());
+
+		if (failed != null) {
+			showAlert(
+				all.length > 0
+					? `Only part of the filter list loaded for this column (${all.length.toLocaleString()} values) — ${failed}`
+					: `Couldn't load the filter list for this column — ${failed}`,
+				"error"
+			);
+		}
 	},
 
 	totalRows: () => {
@@ -581,8 +861,6 @@ export default {
 
 	refreshKey: () => Number(appsmith.store.reportsRefreshKey) || 0,
 
-	// The values query's dependency on the names picker is hidden inside
-	// accountAttrNames(), so Appsmith won't re-run it — do it explicitly here.
 	onAccountAttrChange: async () => {
 		resetWidget("AccountAttributeValuesSelect", false);
 		getAccountAttributeValues.run();
@@ -592,31 +870,26 @@ export default {
 	refreshGrid: async () => {
 		await storeValue("reportsPageStart", 0);
 		await storeValue("reportsPageEnd", 100);
-		// Clear any grid column sort/filter so a fresh Run starts clean; the
-		// rebuilt grid re-sends its (empty) state on the next page fetch anyway.
+
 		await storeValue("reportsSortModel", "[]");
 		await storeValue("reportsFilterModel", "{}");
 		await storeValue("reportsRefreshKey", (Number(appsmith.store.reportsRefreshKey) || 0) + 1);
 	},
 
-	// Column keys actually present in runReport.data (for the column picker UI).
 	columnOptions: () => {
 		const rows = runReport.data;
 		if (!Array.isArray(rows) || rows.length === 0) return ReportSpecs.fieldOptions();
 		return Object.keys(rows[0]).map(k => ({ label: k, value: k }));
 	},
 
-	// Message for a bad ?customer= link (a numeric id, or an unknown code) instead of
-	// a silently empty report; "" when valid or absent. Reads getCustomers.data,
-	// which is fine here - consumed by a widget binding, not a query body.
 	customerError: () => {
 		const raw = (appsmith.URL && appsmith.URL.queryParams && appsmith.URL.queryParams.customer);
 		const code = (raw == null ? "" : String(raw)).trim();
-		if (code === "") return ""; // no ?customer= → standalone / dropdown mode
+		if (code === "") return "";
 		const rows = (typeof getCustomers !== "undefined" && getCustomers.data) || [];
-		if (!Array.isArray(rows) || rows.length === 0) return ""; // list still loading — don't flash an error
+		if (!Array.isArray(rows) || rows.length === 0) return "";
 		const lc = code.toLowerCase();
-		if (rows.find(r => String(r.fdg_code || "").toLowerCase().trim() === lc)) return ""; // valid code
+		if (rows.find(r => String(r.fdg_code || "").toLowerCase().trim() === lc)) return "";
 		const byId = rows.find(r => String(r.id) === code);
 		if (byId) return `This link uses a customer ID (${code}). Use the customer code instead — ?customer=${byId.fdg_code}`;
 		return `Unknown customer code "${code}" — no data for this link. Check the ?customer= value in the URL.`;
@@ -626,27 +899,71 @@ export default {
 		const err = ReportSpecs.customerError();
 		if (err) return "⚠️ " + err;
 		if (runReport.isLoading) return "Loading...";
+
+		const p = ReportSpecs.activePreset();
+		const name = (p && p.value !== "custom") ? p.label + " · " : "";
+		const missing = ReportSpecs.presetMissing();
+		const warn = missing.length ? ` · ⚠️ this customer has no ${missing.join(" / ")} attribute` : "";
+
 		const total = ReportSpecs.totalRows();
-		if (total == null) return "Pick a customer and click Run";
-		// No report name: it read "· Cost Analysis – Trendline", which told the client
-		// the builder was locked to one report. Row count alone until there are several.
-		return `${total.toLocaleString()} total rows`;
+		if (total == null) {
+			const chosen = String((CustomerSelect && CustomerSelect.selectedOptionValue) || "").trim();
+			return chosen === ""
+				? `${name}Pick a customer, then click Run${warn}`
+				: `${name}No data loaded — click Run to fetch${warn}`;
+		}
+		if (total > 0) return `${name}${total.toLocaleString()} total rows${warn}`;
+
+		const code = String((CustomerSelect && CustomerSelect.selectedOptionValue) || "").trim();
+		if (code === "") {
+			return `${name}⚠️ 0 rows — no customer selected, so the report matches nothing. Pick a customer.`;
+		}
+		const customers = (typeof getCustomers !== "undefined" && getCustomers.data) || [];
+		const hit = (Array.isArray(customers) ? customers : [])
+			.find(r => String(r.fdg_code || "").toLowerCase().trim() === code.toLowerCase());
+		if (!hit) {
+
+			return `${name}⚠️ 0 rows — the customer code "${code}" doesn't resolve to a customer, so nothing can match it.`;
+		}
+
+		const on = [];
+		const picked = (w, label) => {
+			const v = (w && w.selectedOptionValues) || [];
+			if (v.length) on.push(`${label} (${v.length})`);
+		};
+		if (typeof StartDate !== "undefined" && StartDate && StartDate.selectedDate) on.push("From month");
+		if (typeof EndDate !== "undefined" && EndDate && EndDate.selectedDate) on.push("To month");
+		picked(typeof LocationName !== "undefined" ? LocationName : null, "Location");
+		picked(typeof StateProvinceSelect !== "undefined" ? StateProvinceSelect : null, "State/Province");
+		picked(typeof CountrySelect !== "undefined" ? CountrySelect : null, "Country");
+		picked(typeof LocationStatusSelect !== "undefined" ? LocationStatusSelect : null, "Location Status");
+		picked(typeof AccountNumberSelect !== "undefined" ? AccountNumberSelect : null, "Account #");
+		picked(typeof AccountStatusSelect !== "undefined" ? AccountStatusSelect : null, "Account Status");
+		picked(typeof VendorSelect !== "undefined" ? VendorSelect : null, "Vendor");
+		picked(typeof ServiceTypesSelect !== "undefined" ? ServiceTypesSelect : null, "Service Type");
+		picked(typeof AccountAttributeValuesSelect !== "undefined" ? AccountAttributeValuesSelect : null, "Account attribute values");
+		let grid = {};
+		try { grid = JSON.parse(appsmith.store.reportsFilterModel || "{}"); } catch (e) { grid = {}; }
+		const gridCols = Object.keys(grid || {});
+
+		if (gridCols.length) on.push(`column filter on ${gridCols.join(", ")}`);
+
+		if (on.length) {
+			return `${name}0 rows — ${hit.name} has nothing matching: ${on.join(" · ")}. Clear one, or press Reset.`;
+		}
+		return `${name}⚠️ 0 rows — nothing is filtered, so ${hit.name} (customer id ${hit.id}) has no rows in the monthly feed. That is a data question for the UBM team, not a filter one.`;
 	},
 
-	// ----- Export -----
 	filenameStem: () => {
 		const customer = (CustomerSelect && CustomerSelect.selectedOptionLabel || "customer")
 			.toString().replace(/\s+/g, "_");
 		const stamp = moment().format("YYYYMMDD-HHmmss");
-		// Also dropped the report name here — the client sees this on every file he
-		// downloads, so leaving it would have undone half the point of removing it
-		// from the screen.
-		return `${customer}-report-${stamp}`;
+
+		const p = ReportSpecs.activePreset();
+		const name = (p && p.value !== "custom") ? p.label.replace(/[^A-Za-z0-9]+/g, "_") : "report";
+		return `${customer}-${name}-${stamp}`;
 	},
 
-	// Export fields honor the user's FieldsSelect picks (column order + which
-	// columns) plus any account attribute columns, falling back to whatever the
-	// export query returned.
 	exportFields: (rows) => {
 		const cols = ReportSpecs.gridColumns();
 		if (cols.length > 0) return cols;
@@ -654,34 +971,25 @@ export default {
 	},
 
 	exportLabel: (field) => {
-		// Honor the user's browser-local column renames, then the catalog label.
+
 		const ov = (appsmith.store.reportsFieldLabels || {})[field];
 		if (ov) return ov;
 		const o = ReportSpecs.allFieldOptions().find(x => x.value === field);
 		return o ? o.label : field;
 	},
 
-	// ----- Column header renames (browser-local; no DB write) -----
-	// Catalog (default) header labels, keyed by field — passed to the grid so it
-	// shows friendly names and knows the baseline to reset a rename back to.
 	fieldCatalog: () => {
 		const m = {};
 		ReportSpecs.allFieldOptions().forEach(o => { m[o.value] = o.label; });
 		return m;
 	},
 
-	// Field descriptions keyed by field, mirroring fieldCatalog(). Delivered to the
-	// GridWidget model so each AG Grid column header can show an info (ⓘ) icon with
-	// this text on hover/click. Sourced from allFieldOptions()[].description.
 	fieldDescriptions: () => {
 		const m = {};
 		ReportSpecs.allFieldOptions().forEach(o => { m[o.value] = o.description || ""; });
 		return m;
 	},
 
-	// onRenameField handler: the grid sends the field + new label. Persist to the
-	// browser (localStorage via storeValue) so renames survive reloads. An empty
-	// label removes the override (reset to the catalog name). No DB access needed.
 	saveFieldLabel: async () => {
 		const g = (typeof GridWidget !== "undefined") ? GridWidget.model : null;
 		const field = g && g.renameField;
@@ -692,17 +1000,11 @@ export default {
 		await storeValue("reportsFieldLabels", map, true);
 	},
 
-	// Appsmith caps a query response at 5 MB, so the export is pulled in LIMIT/OFFSET
-	// slices and stitched together here. Returns the accumulated rows, or null if a
-	// slice failed outright.
 	fetchExportRows: async () => {
-		// 5000 rows leaves a ~1 KB/row budget before a slice hits the 5 MB cap.
-		// Very wide reports can still blow that, so back off on failure instead
-		// of giving up.
+
 		const CHUNK = 5000;
 		const MIN_CHUNK = 250;
-		// Ceiling on a single export — past this the browser holds the whole file in
-		// memory as one string. Raise the exportCsv/exportXlsx timeouts to match.
+
 		const MAX_ROWS = 250000;
 
 		const all = [];
@@ -717,8 +1019,7 @@ export default {
 				await exportRows.run();
 				batch = exportRows.data || [];
 			} catch (e) {
-				// Almost always the 5 MB response cap on an unusually wide row set.
-				// Halve the slice and retry the same offset.
+
 				if (limit > MIN_CHUNK) {
 					limit = Math.max(MIN_CHUNK, Math.floor(limit / 2));
 					showAlert(`Rows are wide — retrying in batches of ${limit.toLocaleString()}`, "warning");
@@ -728,7 +1029,7 @@ export default {
 				return null;
 			}
 			for (const r of batch) all.push(r);
-			// A short slice means we've reached the end of the result set.
+
 			if (batch.length < limit) break;
 			offset += batch.length;
 			if (all.length >= MAX_ROWS) { truncated = true; break; }
@@ -741,8 +1042,6 @@ export default {
 		return all;
 	},
 
-	// Shared CSV serializer. eol is "\n" for plain CSV, "\r\n" for the Excel
-	// flavor (Excel wants CRLF for clean column splitting).
 	buildCsv: (rows, fields, eol) => {
 		const escape = v => {
 			if (v === null || v === undefined) return "";
@@ -755,19 +1054,13 @@ export default {
 		return lines.join(eol);
 	},
 
-	// ----- Excel export -----
-	// The .xls HTML-table trick renders as raw markup in Numbers and Sheets, and
-	// SheetJS's XLSX.utils is blocked by Appsmith's sandbox, so the .xlsx is written
-	// by hand: a ZIP of XML parts, stored uncompressed so no deflate is needed.
-
-	// Identifier columns that must stay text: "0115" not 115, "501480.000" not
-	// 501480. Attribute columns are added at build time; everything else is typed
-	// per value so charges and consumption still sum in the sheet.
-	textFields: ["locationNumber", "locationZip", "vendorCode", "accountNumber"],
+	textFields: [
+		"locationNumber", "locationZip", "vendorCode", "accountNumber",
+		"cleanAccountNumber", "meterSerial", "vendorZip"
+	],
 
 	_utf8: (str) => {
 		if (typeof TextEncoder !== "undefined") return new TextEncoder().encode(str);
-		// Manual fallback, surrogate pairs included.
 		const out = [];
 		for (let i = 0; i < str.length; i++) {
 			let c = str.charCodeAt(i);
@@ -795,12 +1088,10 @@ export default {
 		return (crc ^ -1) >>> 0;
 	},
 
-	// Minimal ZIP writer, stored (method 0) entries only.
-	// files: [{ name, data: Uint8Array }]
 	_zip: (files) => {
 		const u16 = n => new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF]);
 		const u32 = n => new Uint8Array([n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF]);
-		const DOS_DATE = 0x0021; // 1980-01-01; fixed so exports are byte-identical
+		const DOS_DATE = 0x0021;
 		const parts = [];
 		const central = [];
 		let offset = 0;
@@ -808,8 +1099,6 @@ export default {
 			const name = ReportSpecs._utf8(f.name);
 			const crc = ReportSpecs._crc32(f.data);
 			const size = f.data.length;
-			// Local file header: sig, version, flags (bit 11 = UTF-8 names), method,
-			// time, date, crc, compressed size, uncompressed size, name len, extra len.
 			[u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(DOS_DATE),
 			 u32(crc), u32(size), u32(size), u16(name.length), u16(0), name, f.data
 			].forEach(c => parts.push(c));
@@ -833,19 +1122,16 @@ export default {
 
 	_base64: (bytes) => {
 		let bin = "";
-		const CHUNK = 0x8000; // apply() blows the stack on much more than this
+		const CHUNK = 0x8000;
 		for (let i = 0; i < bytes.length; i += CHUNK) {
 			bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
 		}
 		return btoa(bin);
 	},
 
-	// Build the .xlsx as bytes.
 	buildXlsx: (rows, fields) => {
 		const alwaysText = {};
 		ReportSpecs.textFields.forEach(f => { alwaysText[f] = true; });
-		// Attributes are identifiers, except percentages: "GL Allocation 1 (%)" is a
-		// measure and needs to be a number to check a location totals 100.
 		ReportSpecs.accountAttrColumns()
 			.filter(o => !/%/.test(o.label))
 			.forEach(o => { alwaysText[o.value] = true; });
@@ -858,16 +1144,12 @@ export default {
 			while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); }
 			return s;
 		};
-		// Numeric unless that would lose information: a leading zero (an identifier), or
-		// a whole number past Excel's 15 digits. Long decimals stay numeric (float noise).
 		const isNumeric = (field, s) => {
 			if (alwaysText[field]) return false;
 			if (!/^-?\d+(\.\d+)?$/.test(s)) return false;
 			if (/^-?0\d/.test(s)) return false;
 			return /\./.test(s) || s.replace(/-/g, "").length <= 15;
 		};
-		// Strings go through the shared-string table: this data repeats heavily, so one
-		// entry per distinct value roughly halves an uncompressed file.
 		const strings = new Map();
 		let strRefs = 0;
 		const strIndex = (s) => {
@@ -876,7 +1158,6 @@ export default {
 			if (i === undefined) { i = strings.size; strings.set(s, i); }
 			return i;
 		};
-		// Widest rendered value per column, used to size the columns below.
 		const widths = fields.map(() => 0);
 		const cellXml = (v, field, ref, ci) => {
 			if (v === null || v === undefined) return "";
@@ -892,7 +1173,6 @@ export default {
 		body.push("<row r=\"1\">" + fields.map((f, i) => {
 			const label = String(ReportSpecs.exportLabel(f));
 			if (label.length > widths[i]) widths[i] = label.length;
-			// s="1" is the bold header style from styles.xml.
 			return `<c r="${colName(i)}1" s="1" t="s"><v>${strIndex(label)}</v></c>`;
 		}).join("") + "</row>");
 		rows.forEach((r, ri) => {
@@ -900,9 +1180,6 @@ export default {
 			body.push(`<row r="${n}">` + fields.map((f, i) => cellXml(r[f], f, colName(i) + n, i)).join("") + "</row>");
 		});
 
-		// Without explicit widths columns default to ~8 chars and a location name wraps
-		// over five lines. Floored so headers stay readable, capped so one long value
-		// can't push the rest off screen.
 		const cols = "<cols>" + widths.map((w, i) =>
 			`<col min="${i + 1}" max="${i + 1}" width="${Math.min(45, Math.max(10, w + 2))}" customWidth="1"/>`
 		).join("") + "</cols>";
@@ -918,9 +1195,6 @@ export default {
 
 		const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 
-		// Without a stylesheet each app picks its own font and Numbers picks a large one.
-		// Format 0 is the body, 1 the bold header. The empty fills/borders are required:
-		// Excel rejects a fills list that doesn't start with "none" and "gray125".
 		const styles = XML +
 			'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
 			'<fonts count="2">' +
@@ -998,9 +1272,6 @@ export default {
 		}
 		const fields = ReportSpecs.exportFields(rows);
 		const stem = ReportSpecs.filenameStem();
-		// ZIP entries are stored uncompressed, so a very wide/long report can build a
-		// file big enough to hurt the browser tab. Past the ceiling, hand back the CSV
-		// rather than hang: it carries the same data and Excel still opens it.
 		const MAX_BYTES = 64 * 1024 * 1024;
 		let bytes = null;
 		try {
@@ -1020,21 +1291,12 @@ export default {
 		showAlert(`Exported ${rows.length.toLocaleString()} rows to ${filename}`, "success");
 	},
 
-	// Reset all filter widgets and re-fetch from page 1.
 	reset: async () => {
-		const widgetNames = [
-			"FieldsSelect", "StartDate", "EndDate",
-			"LocationName", "StateProvinceSelect", "StateNotIn",
-			"CountrySelect", "LocationStatusSelect",
-			"AccountNumberSelect", "AccountStatusSelect",
-			"VendorSelect", "ServiceTypesSelect", "ServiceNotIn",
-			"LocationAttributesSelect", "AccountAttributesSelect",
-			"AccountAttributeValuesSelect"
-		];
-		for (const w of widgetNames) {
+		for (const w of ReportSpecs.FILTER_WIDGETS) {
 			try { resetWidget(w, false); } catch (e) { /* widget may not exist yet */ }
 		}
 		await ReportSpecs.refreshGrid();
-		showAlert("Filters reset", "success");
+		const p = ReportSpecs.activePreset();
+		showAlert(p && p.value !== "custom" ? `Reset to the ${p.label} report` : "Filters reset", "success");
 	}
 };

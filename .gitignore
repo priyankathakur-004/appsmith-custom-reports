@@ -1,2 +1,8 @@
 # Local-only iframe embed test harness
 embed-test.php
+
+# UBM schema snapshots. Local only - this repo is public, and these are a full
+# structural dump of a client production database. Regenerate per docs/UBM-SCHEMA.md.
+docs/ubm-columns.txt
+docs/ubm-keys.txt
+docs/test

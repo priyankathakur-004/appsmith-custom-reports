@@ -5,7 +5,7 @@
   "pluginType": "DB",
   "unpublishedAction": {
     "actionConfiguration": {
-      "body": "SELECT DISTINCT vas.account_status AS value, vas.account_status AS label\nFROM bill_management_v2.virtual_accounts_status vas\nJOIN bill_management_v2.virtual_accounts va ON va.id = vas.virtual_account_id\nWHERE va.customer_id = {{ ReportSpecs.customerIdSql() }}\n  AND vas.account_status IS NOT NULL AND vas.account_status <> ''\nORDER BY 1;\n",
+      "body": "SELECT DISTINCT vas.account_status AS value,\n       CASE\n         WHEN lower(btrim(vas.account_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive'\n         WHEN lower(btrim(vas.account_status)) IN ('active','open') THEN 'Active'\n         ELSE vas.account_status\n       END AS label\nFROM bill_management_v2.virtual_accounts_status vas\nJOIN bill_management_v2.virtual_accounts va ON va.id = vas.virtual_account_id\nWHERE va.customer_id = {{ ReportSpecs.customerIdSql() }}\n  AND vas.account_status IS NOT NULL AND vas.account_status <> ''\nORDER BY 1;\n",
       "encodeParamsToggle": true,
       "paginationType": "NONE",
       "pluginSpecifiedTemplates": [
