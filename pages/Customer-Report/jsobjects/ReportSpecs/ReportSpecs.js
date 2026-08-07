@@ -125,6 +125,7 @@ export default {
 			value: value,
 			label: label,
 			columns: dupColumns,
+			dateColumn: "ah.start_date",
 			filters: { utilityType: { match: service } }
 		});
 
@@ -324,6 +325,15 @@ export default {
 		if (!keys) return `SELECT * ${src}`;
 		const k = keys.join(", ");
 		return `SELECT DISTINCT ON (${k}) * ${src} ORDER BY ${k}, time_period DESC NULLS LAST`;
+	},
+
+	dateFilterColumn: () => {
+		const p = ReportSpecs.activePreset();
+		const col = (p && p.dateColumn) || "";
+		if (!col) return "amf.time_period";
+
+		if (col.indexOf("ah.") === 0 && !ReportSpecs.usesBillLevel()) return "amf.time_period";
+		return col;
 	},
 
 	GL_ROW_FIELDS: ["glCode", "glAllocation"],
@@ -548,8 +558,7 @@ export default {
 			return Array.isArray(aliases) ? aliases.indexOf(excludeField) >= 0 : aliases === excludeField;
 		};
 
-		const datePreset = ReportSpecs.activePreset();
-		const dateCol = (datePreset && datePreset.dateColumn) || "amf.time_period";
+		const dateCol = ReportSpecs.dateFilterColumn();
 		if (StartDate && StartDate.selectedDate) {
 			const d = moment(StartDate.selectedDate).startOf("month").format("YYYY-MM-DD");
 			parts.push(`AND ${dateCol} >= '${d}'`);
