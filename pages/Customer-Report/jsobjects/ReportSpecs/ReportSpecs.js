@@ -485,13 +485,25 @@ export default {
 		return catalog.concat(attrs);
 	},
 
+	presetAttrLabels: () => {
+		const p = ReportSpecs.activePreset();
+		const map = {};
+		((p && p.columns) || []).forEach(c => {
+			if (typeof c === "string" || !c.label) return;
+
+			const picks = ReportSpecs._resolveAttr(c);
+			if (picks.length === 1) map[picks[0]] = c.label;
+		});
+		return map;
+	},
+
 	accountAttrColumn: (pick) => {
 		const name = String(pick).slice(ReportSpecs.ATTR_PREFIX.length).trim();
 		let alias = "attr_" + name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 		if (alias === "attr_") alias = "attr_unnamed";
 		return {
 			value: alias,
-			label: name,
+			label: ReportSpecs.presetAttrLabels()[pick] || name,
 			description: "Account attribute: " + name,
 			attrName: name,
 			joinAlias: "av_" + alias,
