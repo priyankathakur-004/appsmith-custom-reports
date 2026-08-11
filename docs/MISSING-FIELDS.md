@@ -361,11 +361,22 @@ Account Notes, Supplier Only Account, GL Description):
 | Bill Image, Details | No image, scan or document column. `bills.bill_url_hash` and `bills.files` exist and might construct a link, but the URL pattern is not in the schema and would have to come from Engie. |
 | Account Country | `virtual_accounts` has no address columns at all, same as the other five. |
 
-**One filter difference to raise before comparing row for row:** their tab is filtered
-on **Date Type = Bill Date** for a single month, plus Tax = Exclude and One Time
-Charges = Exclude. The builder's date filter runs on billing month, and it has no
-tax or one-time-charge exclusion, so a like-for-like comparison needs those settled
-first.
+**The date filter now runs on bill date, not billing month.** Their tab is filtered on
+Date Type = Bill Date, and this is the report that is named after it. Measured against
+their 81-row sample, **51 rows — 63% — have a bill month in a different month from
+their bill date**: a bill dated 18 March 2026 sitting in billing month February. A
+billing-month filter would have missed every one of them and included others their tab
+excludes, so the preset sets `dateColumn: "amf.statement_date"`. No other preset moves.
+
+Two things still stop a row-for-row comparison against that tab:
+
+- **Half their sample is on a site UBM does not have.** 41 of the 81 rows are site `0`,
+  `!0000-Summary Billing Accounts`, one of the summary pseudo-sites recorded above as
+  absent. Only the 40 rows on site 115 are candidates at all.
+- **Tax and One Time Charges are excluded on their tab** and the builder has no
+  equivalent filter. `total_charges_taxes` exists as a column, but excluding tax means
+  netting it off `total_charges` rather than hiding a column, which is a change to what
+  Cost means and needs the client to confirm it is what they want.
 
 ## Account & Service List — the client's 54 Visible Columns
 

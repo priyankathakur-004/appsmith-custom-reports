@@ -240,6 +240,7 @@ export default {
 			{
 				value: "invoiceByDate",
 				label: "Invoice by Date",
+				dateColumn: "amf.statement_date",
 				columns: [
 					"location", "locationNumber", "vendor", "accountNumber",
 					"month", "statementDate", "startDate", "endDate",
