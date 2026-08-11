@@ -260,9 +260,16 @@ They carry real charges, so this misplaces money between sites rather than addin
 empty rows. Not fixable in a report: correcting it means knowing which site an
 account belongs to, which only the pairing data can say.
 
-Scale not yet established. This estimates it, by flagging accounts whose site sits
-outside their vendor's main state — treat the number as an upper bound, since a
-genuinely multi-state vendor will trip it:
+**Scale: 893 of 11,353 accounts — 7.9% — sit on a site outside their vendor's main
+state**, measured 2026-08-11. That is an upper bound: a genuinely multi-state supplier
+trips the test without anything being wrong. It is still large enough that even a
+modest true fraction of it matters, and the seven confirmed cases above came from
+looking at only four vendors.
+
+Narrowing it to vendors that are 90%+ in one state, where an outlier cannot be
+explained by the vendor's own footprint, is the next cut and has not been run yet.
+
+The upper-bound query:
 
 ```sql
 WITH acct AS (
