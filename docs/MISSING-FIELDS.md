@@ -260,16 +260,22 @@ They carry real charges, so this misplaces money between sites rather than addin
 empty rows. Not fixable in a report: correcting it means knowing which site an
 account belongs to, which only the pairing data can say.
 
-**Scale: 893 of 11,353 accounts — 7.9% — sit on a site outside their vendor's main
-state**, measured 2026-08-11. That is an upper bound: a genuinely multi-state supplier
-trips the test without anything being wrong. It is still large enough that even a
-modest true fraction of it matters, and the seven confirmed cases above came from
-looking at only four vendors.
+**Scale: about 21 accounts, across 13 vendors — 0.18%.** Measured 2026-08-11.
 
-Narrowing it to vendors that are 90%+ in one state, where an outlier cannot be
-explained by the vendor's own footprint, is the next cut and has not been run yet.
+A first cut counted 893 of 11,353 accounts (7.9%) on a site outside their vendor's
+main state, but that was an upper bound and almost all of it is legitimate: 872 of the
+893 belong to vendors whose own accounts span several states, where being outside the
+main one means nothing. Restricting to vendors with 90%+ of their accounts in a single
+state — where an outlier cannot be the vendor's own footprint — leaves **21**. The
+seven confirmed above are a third of those, which fits, since only four of the
+thirteen affected vendors were examined.
 
-The upper-bound query:
+So this is real but small. Worth passing to the UBM team to correct, not worth holding
+a report back for. The practical caution is narrow: a single site's account list may
+gain or lose an account or two, so per-site totals are not exact — it does not put a
+portfolio-level figure in doubt.
+
+The two queries, upper bound first:
 
 ```sql
 WITH acct AS (
@@ -284,6 +290,30 @@ WITH acct AS (
 )
 SELECT count(*) AS accounts, count(*) FILTER (WHERE a.state IS DISTINCT FROM m.state) AS off_main_state
 FROM acct a JOIN modal m ON m.vendor_code = a.vendor_code AND m.rn = 1;
+```
+
+And the one that separates real strays from multi-state vendors:
+
+```sql
+WITH acct AS (
+  SELECT DISTINCT amf.virtual_account_id, amf.vendor_code, l.state
+  FROM bill_management_v2.analytics_monthly_feed amf
+  JOIN bill_management_v2.locations l ON l.id = amf.location_id
+  WHERE amf.customer_id = <id>
+), per_vendor AS (
+  SELECT vendor_code, count(*) AS total, mode() WITHIN GROUP (ORDER BY state) AS main_state
+  FROM acct GROUP BY vendor_code
+), tally AS (
+  SELECT p.vendor_code, p.total, p.main_state,
+         count(*) FILTER (WHERE a.state = p.main_state)                AS in_main,
+         count(*) FILTER (WHERE a.state IS DISTINCT FROM p.main_state) AS off_main
+  FROM per_vendor p JOIN acct a ON a.vendor_code = p.vendor_code
+  GROUP BY p.vendor_code, p.total, p.main_state
+)
+SELECT sum(off_main) FILTER (WHERE in_main::numeric / total >= 0.9) AS strays_from_single_state_vendors,
+       sum(off_main) FILTER (WHERE in_main::numeric / total <  0.9) AS from_multistate_vendors,
+       count(*)      FILTER (WHERE in_main::numeric / total >= 0.9 AND off_main > 0) AS vendors_affected
+FROM tally;
 ```
 
 ## Account & Service List — the client's 54 Visible Columns
