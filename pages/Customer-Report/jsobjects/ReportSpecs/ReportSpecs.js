@@ -949,6 +949,9 @@ export default {
 		await storeValue("reportsSortModel", "[]");
 		await storeValue("reportsFilterModel", "{}");
 		await storeValue("reportsRefreshKey", (Number(appsmith.store.reportsRefreshKey) || 0) + 1);
+		await Promise.all([runReport.run(), runReportCount.run()]);
+
+		await storeValue("reportsResponseTs", Date.now());
 	},
 
 	columnOptions: () => {
