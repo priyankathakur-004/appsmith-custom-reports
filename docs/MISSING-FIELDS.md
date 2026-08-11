@@ -209,12 +209,13 @@ and nothing else.
 Ticking Vendor Name also changes the report's grain: without it Location Detail is
 one row per site, with it one row per site and vendor.
 
-## Vendors that do not serve the site they appear on — open
+## Some accounts are on the wrong site
 
-Found 2026-08-11 while reconciling Account & Service List. Account & Service List
-returns a Dover DE and a Fox Metro IL account at the Anchorage mall, and a Boca Raton
-and a Nashua account at Battlefield Mall in Springfield MO. Unexplained so far; two
-likely causes have been excluded.
+Found 2026-08-11 while reconciling Account & Service List, and worth reading before
+anyone treats a row count from this app as a site's account list. The report returns a
+Dover DE and a Fox Metro IL account at the Anchorage mall, and a Boca Raton and a
+Nashua account at Battlefield Mall in Springfield MO. Two likely causes turned out not
+to be the explanation; the third is.
 
 **Not a vendor-name collision.** Of this customer's 378 vendor codes, none maps to
 more than one row in `vendors`, so the join cannot attach the wrong name — and the
@@ -235,24 +236,47 @@ It is not. That query keyed on `account_code`, which is **not unique** — 3,033
 customer's codes repeat, as recorded below. Those are two distinct virtual accounts
 that share a code, each correctly attached to one site.
 
-**What is still open** is why a virtual account whose vendor is Boca Raton's city
-utility sits on a Springfield MO site at all. Worth establishing next whether those
-accounts carry real bills or are strays, which decides whether this distorts figures
-or merely adds empty rows:
+**Individual accounts are on the wrong site.** Listing every account for those four
+vendors settles it. Nearly all sit where they should — Boca Raton's at Town Center at
+Boca Raton, Fox Metro's at Chicago Premium Outlets, Nashua's at Pheasant Lane Mall,
+Dover's at Dover Mall. Seven do not:
+
+| Account | Vendor serves | Sits on | Charges |
+| --- | --- | --- | --- |
+| `A80-7301` | Aurora IL | Anchorage, AK | 61.95 |
+| `110393-35046` | Dover DE | Anchorage, AK | 62.20 |
+| `110393-34878` | Dover DE | Chicago Premium Outlets, IL | 167.99 |
+| `100027019-70077714` | Nashua NH | Dover Mall, DE | 147.80 |
+| `100024439-70065403` | Nashua NH | Arizona Mills, AZ | 1,044.37 |
+| `100024448-70032430` | Nashua NH | Battlefield Mall, MO | 1,019.65 |
+| `0202585-000564182` | Boca Raton FL | Battlefield Mall, MO | 75.92 |
+
+The sibling numbering is what makes this conclusive. `A80-7300`, `-7302`, `-7303` and
+`-7304` are all at Chicago Premium Outlets and only `-7301` is in Anchorage;
+`100024445/6/7-70032430` are all at Pheasant Lane Mall and only `100024448` is in
+Missouri. Consecutive account numbers from one vendor, all but one on the same site.
+
+They carry real charges, so this misplaces money between sites rather than adding
+empty rows. Not fixable in a report: correcting it means knowing which site an
+account belongs to, which only the pairing data can say.
+
+Scale not yet established. This estimates it, by flagging accounts whose site sits
+outside their vendor's main state — treat the number as an upper bound, since a
+genuinely multi-state vendor will trip it:
 
 ```sql
-SELECT string_agg(x, chr(10) ORDER BY x) FROM (
-  SELECT amf.virtual_account_id || ' | ' || va.account_code || ' | vendor=' || amf.vendor_code
-      || ' | site=' || l.name || ' (' || COALESCE(l.state,'?') || ')'
-      || ' | feed_rows=' || count(*) || ' | bills=' || count(DISTINCT amf.bill_id)
-      || ' | charges=' || COALESCE(round(sum(amf.total_charges), 2), 0) AS x
+WITH acct AS (
+  SELECT DISTINCT amf.virtual_account_id, amf.vendor_code, l.state
   FROM bill_management_v2.analytics_monthly_feed amf
-  JOIN bill_management_v2.virtual_accounts va ON va.id = amf.virtual_account_id
   JOIN bill_management_v2.locations l ON l.id = amf.location_id
   WHERE amf.customer_id = <id>
-    AND amf.vendor_code IN ('CITYOFBOCARATON','DOVERCITY','FOXMETROWRD','15033')
-  GROUP BY amf.virtual_account_id, va.account_code, amf.vendor_code, l.name, l.state
-) s;
+), modal AS (
+  SELECT vendor_code, state, count(*) AS n,
+         row_number() OVER (PARTITION BY vendor_code ORDER BY count(*) DESC) AS rn
+  FROM acct GROUP BY vendor_code, state
+)
+SELECT count(*) AS accounts, count(*) FILTER (WHERE a.state IS DISTINCT FROM m.state) AS off_main_state
+FROM acct a JOIN modal m ON m.vendor_code = a.vendor_code AND m.rn = 1;
 ```
 
 ## Account & Service List — the client's 54 Visible Columns
