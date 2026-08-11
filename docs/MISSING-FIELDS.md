@@ -316,6 +316,50 @@ SELECT sum(off_main) FILTER (WHERE in_main::numeric / total >= 0.9) AS strays_fr
 FROM tally;
 ```
 
+## The feed is stale per site, not uniformly
+
+Measured 2026-08-11, and it corrects a working assumption. UBM is not "a few billing
+cycles behind" across the board — the lag is per site, and it varies enormously:
+
+| | |
+| --- | --- |
+| Customer's latest bill date | 2026-08-07 |
+| Rows with a March 2026 bill date | 254 |
+| Site 0115's latest bill date | **2025-10-16** |
+| Site 0115's rows, all time | **76** |
+
+So parts of the feed are current to within days while site 0115 stopped ten months
+earlier and holds 76 rows in total. A uniform lag would at least be predictable; this
+is not, and nothing on the report tells a reader which kind of site they are looking
+at. Any statement of the form "UBM is N months behind" is wrong — it depends which
+site is being asked about.
+
+**This is why Invoice by Date could not be reconciled.** The client's tab covers bill
+dates in March 2026 at sites `0` and `115`. Site `0` is a summary pseudo-site UBM does
+not have, and site 0115 has no 2026 data at all, so the two never overlap however the
+report is filtered. Nothing about the report is at fault, and it was verified as far
+as the data allows: the bill-date filter was confirmed working on a March 2026 run,
+every column resolves, and 29 of the 33 accounts on their site-115 sample exist in UBM.
+
+To verify it properly, the fastest route is to ask Engie to re-export Invoice by Date
+for a period UBM actually holds for that site — September or October 2025 — rather
+than waiting on a load. Scale of the staleness is not yet measured:
+
+```sql
+WITH per_site AS (
+  SELECT lt.location_number, max(amf.statement_date) AS latest
+  FROM bill_management_v2.analytics_monthly_feed amf
+  JOIN bill_management_v2.location_detail lt ON lt.location_id = amf.location_id
+  WHERE amf.customer_id = <id>
+  GROUP BY lt.location_number
+)
+SELECT count(*) AS sites,
+       count(*) FILTER (WHERE latest >= '2026-06-01') AS current_ish,
+       count(*) FILTER (WHERE latest <  '2026-01-01') AS stale_before_2026,
+       min(latest) AS oldest, max(latest) AS newest
+FROM per_site;
+```
+
 ## Invoice by Date — the client's 70 Visible Columns
 
 Their tab has 69 of the 70 switched on, so it is their everything-on example.
