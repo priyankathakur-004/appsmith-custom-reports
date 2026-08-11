@@ -209,6 +209,48 @@ and nothing else.
 Ticking Vendor Name also changes the report's grain: without it Location Detail is
 one row per site, with it one row per site and vendor.
 
+## Some accounts are paired to sites they are not at
+
+Found 2026-08-11 while reconciling Account & Service List, and worth reading before
+anyone treats a row count from this app as a site's account list.
+
+The report showed a Dover DE and a Fox Metro IL account at the Anchorage mall, and a
+Boca Raton and a Nashua account at Battlefield Mall in Springfield MO. Two candidate
+causes: vendor names resolving wrongly through a `vendor_code` collision, or the
+account-to-site pairing being wrong in the feed. It is the second.
+
+**The vendor names are right.** Of this customer's 378 vendor codes, **none** maps to
+more than one row in `vendors`, so the join cannot attach a wrong name — and the codes
+say plainly what they are: `CITYOFBOCARATON`, `DOVERCITY`, `FOXMETROWRD`.
+
+**The pairing is wrong**, and one account proves it:
+
+```
+0202585-000564182  site=0302-Battlefield Mall           (Springfield, MO)
+0202585-000564182  site=4839-Town Center at Boca Raton  (Boca Raton, FL)
+```
+
+The same account, on two sites, from a vendor that serves exactly one of them. The
+Boca Raton pairing is real; the Battlefield Mall one is not.
+
+This is the mirror of the coverage gap recorded below. That one is accounts missing
+from UBM; this one is accounts attached to sites they are not at, and it inflates row
+counts on every location-scoped report rather than shrinking them. Both are loading
+problems and neither is fixable in a report — filtering the spurious pairings out
+would mean deciding which of an account's sites is the real one, which is a judgement
+the report has no basis to make.
+
+Not yet quantified. The query for it:
+
+```sql
+SELECT count(*) AS accounts,
+       count(*) FILTER (WHERE n > 1) AS at_multiple_sites,
+       max(n) AS worst
+FROM (SELECT virtual_account_id, count(DISTINCT location_id) AS n
+      FROM bill_management_v2.analytics_monthly_feed
+      WHERE customer_id = <id> GROUP BY virtual_account_id) t;
+```
+
 ## Account & Service List — the client's 54 Visible Columns
 
 Their list is 54 entries, four of which appear twice under different casing
