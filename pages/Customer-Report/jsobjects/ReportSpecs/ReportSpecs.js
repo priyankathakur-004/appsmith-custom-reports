@@ -204,7 +204,7 @@ export default {
 					"locationStatus"
 				],
 
-				availableExtra: ["locationId", "buildingType", "squareFeet", "customerName"],
+				availableExtra: ["squareFeet", "vendor"],
 				filters: {}
 			},
 

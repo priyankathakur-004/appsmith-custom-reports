@@ -151,6 +151,30 @@ had to leave out one.
 field option; there is one now. The `locations` table itself carries no phone number,
 so a site absent from `location_detail` reports blank rather than wrong.
 
+**Location Detail's picker is 11 of the client's 14 Visible Columns.** The nine it
+loads, plus Location Size (sq ft) and Vendor Name. Three have no column source:
+
+| Engie Column | Status |
+| --- | --- |
+| Location Address 2 | **Absent**, as recorded below — both address columns are single-line. |
+| Misc Information | **Absent**, as recorded below. |
+| Location Status Date | **Absent.** No locations table carries one. `location_detail` and `reports_locations_view` both have `location_status` and no date beside it, and there is no `location_status_date` column anywhere in the schema. |
+
+Location attributes were the last place they could have been hiding.
+`custom_location_attributes` is a per-customer, per-location store — the
+location-side twin of the account attributes the GL columns come from. Checked
+2026-08-11: this customer has **exactly one**, `Phase`. None of the three are there.
+
+So all three are absent outright, and the mechanism to reach them is not worth
+building. For the record, that mechanism does not exist: the builder can filter on
+location attributes (`LocationAttributesSelect`, `getLocationAttributesList`) but
+cannot select one as a **column** — `ATTR_PREFIX` and `accountAttrColumn()` handle
+account attributes only. Building the location-side equivalent would surface `Phase`
+and nothing else.
+
+Ticking Vendor Name also changes the report's grain: without it Location Detail is
+one row per site, with it one row per site and vendor.
+
 **Service Status is left out of Account & Service List.** Same finding as the row
 above — there is no services table, so there is no per-service status to read. The
 report is built with its other eight columns and the client should be told the column
