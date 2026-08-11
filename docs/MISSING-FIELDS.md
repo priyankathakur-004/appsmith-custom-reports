@@ -147,9 +147,43 @@ query cheap: each attribute column is a correlated subquery.
 Three more presets, built 2026-08-10. Between them they needed one new column and
 had to leave out one.
 
-**Location Phone is now mapped.** `location_detail.location_phone` exists and had no
-field option; there is one now. The `locations` table itself carries no phone number,
-so a site absent from `location_detail` reports blank rather than wrong.
+**Location Phone is mapped but empty.** `location_detail.location_phone` exists and
+had no field option; there is one now. It returns nothing: **0 of 268 sites** carry a
+number, checked 2026-08-11, where the client's own Location Detail has one for most
+sites. So it is offered in the picker rather than loaded — a column of blanks on a
+report they asked to include phone numbers on reads as data loss. It starts working
+by itself if UBM ever loads them.
+
+## Location Detail, checked against the client's tab
+
+Their tab is 124 rows, filtered to Location Status Active and Country in Canada /
+United States. Compared against the report's first 100 rows on 2026-08-11:
+
+| Column | Agreed | Note |
+| --- | --- | --- |
+| Postal Code | 99/99 | Their sheet stores these as numbers, so `07310` is `7310` on both sides. No leading-zero problem. |
+| City | 97/99 | The two are Engie's, not ours — `Panama City Beach, FL` and `Garden City,` carry stray text. |
+| Location Name | 96/99 | `@` vs `at` twice, one casing difference. |
+| Address 1 | 85/99 | See below. |
+| State/Province | 0/99 → fixed | UBM stores `US-AK`; the column now reports `AK`. |
+| Country | 0/99 → fixed | UBM stores `US`; the column now reports `United States`. |
+| Phone | 0/99 | Empty in UBM, as above. |
+
+**Addresses differ because the records differ, not because the report is wrong.** Ten
+of the fourteen are UBM appending a disambiguator where sibling sites share a street
+— `100 Menlo Park Suite 500 Office`, `4663 River City Dr. #119 Center 1`, `... II`,
+`... Village`, `... Owner`, `... Mktplc`. Two are Engie holding more than UBM does (a
+P.O. Box line, an alternate street name), one is a spelling difference, one is Engie
+truncating to `Buford Dr`. None of it is addressable from here.
+
+**Nine of their sites are absent from ours** within the range compared: three
+`!0000-` summary pseudo-sites, and six real ones — OIC Operations, PO Operations
+Regional, Sears JV Santa Rosa Plaza, Coconut Point (CC), Lenox Square Corridor, Mall
+of Georgia SIXPACK. Same coverage gap as everywhere else in this app.
+
+**One row is ours alone: `5037-Woodfield Mall TRAINING`**, status null, duplicating
+site number 5037. It looks like a test record left in UBM and it will show on the
+client's report. Worth having deleted rather than filtered around.
 
 **Location Detail's picker is 11 of the client's 14 Visible Columns.** The nine it
 loads, plus Location Size (sq ft) and Vendor Name. Three have no column source:

@@ -14,10 +14,10 @@ export default {
 		{ group: "Location", value: "locationId", label: "Location ID (internal)", description: "UBM's own database id for the location, e.g. 113614. For the site number that appears on your reports, use Location Number.", sql: "l.id AS \"locationId\"" },
 		{ group: "Location", value: "locationAddress", label: "Location Address", description: "Street address of the location", sql: "l.address AS \"locationAddress\"" },
 		{ group: "Location", value: "locationCity", label: "City", description: "Location city", sql: "l.city AS \"locationCity\"" },
-		{ group: "Location", value: "locationState", label: "State/Province", description: "Location state or province", sql: "l.state AS \"locationState\"" },
-		{ group: "Location", value: "locationCountry", label: "Country", description: "Location country", sql: "l.country AS \"locationCountry\"" },
+		{ group: "Location", value: "locationState", label: "State/Province", description: "Location state or province, written the way the client's reports write it — UBM stores US-AK, this reports AK. The ISO country prefix is dropped where there is one; anything else passes through as stored.", sql: "CASE WHEN l.state ~ '^[A-Za-z]{2}-' THEN substring(l.state from 4) ELSE l.state END AS \"locationState\"" },
+		{ group: "Location", value: "locationCountry", label: "Country", description: "Location country, spelled out the way the client's reports write it — UBM stores US, this reports United States. An unrecognised code passes through as stored.", sql: "CASE upper(btrim(l.country)) WHEN 'US' THEN 'United States' WHEN 'USA' THEN 'United States' WHEN 'CA' THEN 'Canada' WHEN 'CAN' THEN 'Canada' WHEN 'MX' THEN 'Mexico' WHEN 'GB' THEN 'United Kingdom' WHEN 'UK' THEN 'United Kingdom' ELSE l.country END AS \"locationCountry\"" },
 		{ group: "Location", value: "locationZip", label: "Location Zip", description: "Location postal / ZIP code", sql: "l.postcode AS \"locationZip\"" },
-		{ group: "Location", value: "locationPhone", label: "Location Phone", description: "Phone number recorded against the site. Source: location_detail.location_phone — the locations table itself holds no phone number, so a site missing from location_detail reports blank here.", sql: "lt.location_phone AS \"locationPhone\"" },
+		{ group: "Location", value: "locationPhone", label: "Location Phone", description: "Phone number recorded against the site. Source: location_detail.location_phone — the locations table holds no phone number of its own. Empty for this customer: 0 of 268 sites carry one, measured 2026-08-11, where the client's own Location Detail has a number for most sites. Offered rather than loaded for that reason; it will fill in if UBM ever loads the numbers.", sql: "lt.location_phone AS \"locationPhone\"" },
 
 		{ group: "Location", value: "locationStatus", label: "Location Status", description: "Status of the site. UBM records an open site as Operational; this is reported as Active to match the client's reports. Closed / Inactive / Terminated report as Inactive, and any other value passes through as UBM stores it.", sql: "CASE WHEN lower(btrim(lt.location_status)) IN ('operational','active','open') THEN 'Active' WHEN lower(btrim(lt.location_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' ELSE lt.location_status END AS \"locationStatus\"" },
 		{ group: "Location", value: "buildingType", label: "Building Type", description: "Type or category of location building type.", sql: "l.building_type AS \"buildingType\"" },
@@ -200,11 +200,10 @@ export default {
 				label: "Location Detail",
 				columns: [
 					"location", "locationNumber", "locationAddress", "locationCity",
-					"locationState", "locationZip", "locationCountry", "locationPhone",
-					"locationStatus"
+					"locationState", "locationZip", "locationCountry", "locationStatus"
 				],
 
-				availableExtra: ["squareFeet", "vendor"],
+				availableExtra: ["locationPhone", "squareFeet", "vendor"],
 				filters: {}
 			},
 
