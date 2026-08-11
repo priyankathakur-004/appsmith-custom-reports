@@ -36,12 +36,16 @@ export default {
 		{ group: "Vendor address", value: "vendorState", label: "Vendor State/Province", description: "Vendor's state or province. Source: (remittance_address).state.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).state), ''), NULLIF(btrim((pv.remittance_address).state), '')) AS \"vendorState\"" },
 		{ group: "Vendor address", value: "vendorZip", label: "Vendor Postal Code", description: "Vendor's postal / ZIP code. Source: (remittance_address).post_code.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).post_code), ''), NULLIF(btrim((pv.remittance_address).post_code), '')) AS \"vendorZip\"" },
 		{ group: "Vendor address", value: "vendorCountry", label: "Vendor Country", description: "Vendor's country. Source: (remittance_address).country.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).country), ''), NULLIF(btrim((pv.remittance_address).country), '')) AS \"vendorCountry\"" },
+		{ group: "Vendor address", value: "vendorAddress", label: "Vendor Address", description: "The vendor's remittance address on one line — the six address columns joined with commas, blanks skipped. Each part resolves exactly as its own column does, so this reads the same as those columns concatenated.", sql: "NULLIF(concat_ws(', ', NULLIF(btrim(COALESCE((cpv.remittance_address).line_1, (pv.remittance_address).line_1)), ''), NULLIF(btrim(COALESCE((cpv.remittance_address).line_2, (pv.remittance_address).line_2)), ''), NULLIF(btrim(COALESCE((cpv.remittance_address).city, (pv.remittance_address).city)), ''), NULLIF(btrim(COALESCE((cpv.remittance_address).state, (pv.remittance_address).state)), ''), NULLIF(btrim(COALESCE((cpv.remittance_address).post_code, (pv.remittance_address).post_code)), ''), NULLIF(btrim(COALESCE((cpv.remittance_address).country, (pv.remittance_address).country)), '')), '') AS \"vendorAddress\"" },
+		{ group: "Vendor address", value: "vendorPhone", label: "Vendor Phone Business", description: "Vendor's main business phone. Source: main_phone, from the customer's own vendor record where there is one, otherwise the global one — the same priority the vendor name and address use. UBM records no phone extension, so the client's Vendor Phone Extension has no source.", sql: "COALESCE(NULLIF(btrim(cpv.main_phone), ''), NULLIF(btrim(pv.main_phone), '')) AS \"vendorPhone\"" },
 
 		{ group: "Vendor / Account", value: "accountNumber", label: "Account #", description: "Utility account number as it appears on the bill", sql: "va.account_code AS \"accountNumber\"" },
 
 		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status. Closed / Inactive / Terminated report as Inactive. UBM's other value is Unknown, meaning no closure has been recorded, and it is passed through rather than read as Active: measured against the client's deactivation list, a large share of the accounts they have deactivated still read Unknown here. Treat Unknown as unreported, not as active.", sql: "CASE WHEN lower(btrim(vas.account_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' WHEN lower(btrim(vas.account_status)) IN ('active','open') THEN 'Active' ELSE vas.account_status END AS \"accountStatus\"" },
 
 		{ group: "Vendor / Account", value: "accountCreatedDate", label: "Account Created Date", description: "First month the account was billed — UBM's closest equivalent to the client's FIQ Account Creation Date. UBM holds no account opening date: virtual_accounts.account_opened and virtual_accounts_status.account_opened are both empty, and created_at is the date UBM loaded the record, not the date the account opened.", sql: "TO_CHAR(af.first_period, 'YYYY-MM-DD') AS \"accountCreatedDate\"" },
+
+		{ group: "Vendor / Account", value: "lastBillDate", label: "Date of Last Bill", description: "Statement date of the most recent bill UBM holds for the account. Taken per account number, site and vendor, the same grain as Account Created Date, so an account number billed for several commodities reports one date rather than one per service. Note UBM runs some billing cycles behind the client's own reports, so this will read earlier than theirs.", sql: "TO_CHAR(af.last_bill_date, 'YYYY-MM-DD') AS \"lastBillDate\"" },
 
 		{ group: "Vendor / Account", value: "accountActivityDate", label: "Account Activity Date", description: "Date the account's current status took effect — the deactivation date where the account has one, otherwise the first month it was billed. Source: virtual_accounts_status.account_closed, falling back to the feed because no opening date is recorded.", sql: "TO_CHAR(COALESCE(vas.account_closed, af.first_period), 'YYYY-MM-DD') AS \"accountActivityDate\"" },
 
@@ -216,10 +220,12 @@ export default {
 				],
 
 				availableExtra: [
-					"vendorCode", "vendorId", "cleanAccountNumber", "meterSerial",
-					"accountCreatedDate", "accountActivityDate",
-					"locationAddress", "locationCity", "locationState",
-					"locationZip", "locationCountry"
+					"locationAddress", "locationCity", "locationState", "locationZip",
+					"locationCountry", "locationPhone", "squareFeet",
+					"vendorAddress", "vendorAddress1", "vendorAddress2", "vendorCity",
+					"vendorState", "vendorZip", "vendorCountry", "vendorPhone", "vendorCode",
+					"cleanAccountNumber", "accountCreatedDate", "accountActivityDate",
+					"meterSerial", "lastBillDate"
 				],
 				filters: {}
 			},
@@ -1102,7 +1108,7 @@ export default {
 
 	textFields: [
 		"locationNumber", "locationZip", "vendorCode", "accountNumber",
-		"cleanAccountNumber", "meterSerial", "vendorZip", "locationPhone"
+		"cleanAccountNumber", "meterSerial", "vendorZip", "locationPhone", "vendorPhone"
 	],
 
 	_utf8: (str) => {

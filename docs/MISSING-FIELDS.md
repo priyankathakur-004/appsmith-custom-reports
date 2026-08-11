@@ -209,6 +209,47 @@ and nothing else.
 Ticking Vendor Name also changes the report's grain: without it Location Detail is
 one row per site, with it one row per site and vendor.
 
+## Account & Service List — the client's 54 Visible Columns
+
+Their list is 54 entries, four of which appear twice under different casing
+(`LOCATION STATUS`/`Location Status`, `VENDOR NAME`/`Vendor Name`, `SERVICE
+TYPE`/`Service Type`, `SERVICE STATUS`/`Service Status`), so 50 distinct.
+**29 are offered**, checked against the schema on 2026-08-11.
+
+Three were built in this pass:
+
+| Engie Column | UBM Source |
+| --- | --- |
+| Vendor Address | *derived* — the six remittance address parts joined with commas, blanks skipped. Reads the same as those columns concatenated. |
+| Vendor Phone Business | `main_phone`, customer's own vendor record first then the global one — the priority the vendor name and address already use. Needed `main_phone` adding to the `cpv_one` / `pv_one` CTEs. |
+| Date of Last Bill | `MAX(analytics_monthly_feed.statement_date)`, per account number / site / vendor — the same grain as Account Created Date, added to the `amf_first` CTE. Statement date is populated on every feed row. |
+
+`Customer Vendor Code` maps to the existing Vendor Code (`analytics_monthly_feed.vendor_code`,
+which is also `customers_providers_vendors.code`). The other 25 were already field options.
+
+**Rate Schedule is the one open item.** `account_history.rate_code` exists, but
+`account_history` is bill grain and this report is account grain — offering it would
+either multiply rows or need an arbitrary pick among an account's bills. It needs a
+decision on which of those the client wants, so it is left out rather than guessed at.
+
+**Twenty have no source.** Confirmed absent, not merely unmapped — searched every
+relation in the schema for contact, email, notes, meter-status and audit columns:
+
+| Engie Column | Finding |
+| --- | --- |
+| Service Status, Service Point Location | No services table, as recorded below. |
+| Location Contact Name / Title / Phone / Email | **No contact columns exist anywhere in UBM.** The only `email` columns belong to the notification and user tables; the only `vendor_contact` is in a view built for a different customer. |
+| Location Notes, Account Notes | No notes column on locations, virtual accounts or their attributes. The schema's only `notes` is on `hubspot_companies`, a CRM table. |
+| Location Address 2, Misc Information, Location Status Date | As recorded above. |
+| Meter Status | No meter-status column; `virtual_accounts.meter_serial` is the only meter field. |
+| Audit Only, Account Address 1 / 2 / City / State / Postal | As recorded below. |
+| Supplier Only Account | No such flag. `supplier_code` exists only on two vendor export views, and is a code rather than an account-level flag. |
+| Vendor Phone Extension | `main_phone`, `custsvc_phone`, `emergency_phone` and `priority_phone` exist; no extension column beside any of them. |
+
+Neither attribute store can supply these either: this customer's account attributes
+are the twelve GL ones plus `Constellation Acct ID`, and its only location attribute
+is `Phase`.
+
 **Service Status is left out of Account & Service List.** Same finding as the row
 above — there is no services table, so there is no per-service status to read. The
 report is built with its other eight columns and the client should be told the column
