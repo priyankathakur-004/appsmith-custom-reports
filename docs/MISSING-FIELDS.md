@@ -209,46 +209,50 @@ and nothing else.
 Ticking Vendor Name also changes the report's grain: without it Location Detail is
 one row per site, with it one row per site and vendor.
 
-## Some accounts are paired to sites they are not at
+## Vendors that do not serve the site they appear on — open
 
-Found 2026-08-11 while reconciling Account & Service List, and worth reading before
-anyone treats a row count from this app as a site's account list.
+Found 2026-08-11 while reconciling Account & Service List. Account & Service List
+returns a Dover DE and a Fox Metro IL account at the Anchorage mall, and a Boca Raton
+and a Nashua account at Battlefield Mall in Springfield MO. Unexplained so far; two
+likely causes have been excluded.
 
-The report showed a Dover DE and a Fox Metro IL account at the Anchorage mall, and a
-Boca Raton and a Nashua account at Battlefield Mall in Springfield MO. Two candidate
-causes: vendor names resolving wrongly through a `vendor_code` collision, or the
-account-to-site pairing being wrong in the feed. It is the second.
+**Not a vendor-name collision.** Of this customer's 378 vendor codes, none maps to
+more than one row in `vendors`, so the join cannot attach the wrong name — and the
+codes say plainly what they are: `CITYOFBOCARATON`, `DOVERCITY`, `FOXMETROWRD`. The
+names the report shows are the right names for those codes.
 
-**The vendor names are right.** Of this customer's 378 vendor codes, **none** maps to
-more than one row in `vendors`, so the join cannot attach a wrong name — and the codes
-say plainly what they are: `CITYOFBOCARATON`, `DOVERCITY`, `FOXMETROWRD`.
+**Not one account spread across several sites.** All 11,353 of this customer's
+accounts map to exactly one `location_id` in the feed; none is at two.
 
-**The pairing is wrong**, and one account proves it:
+A first pass read the pair below as one account on two sites:
 
 ```
 0202585-000564182  site=0302-Battlefield Mall           (Springfield, MO)
 0202585-000564182  site=4839-Town Center at Boca Raton  (Boca Raton, FL)
 ```
 
-The same account, on two sites, from a vendor that serves exactly one of them. The
-Boca Raton pairing is real; the Battlefield Mall one is not.
+It is not. That query keyed on `account_code`, which is **not unique** — 3,033 of this
+customer's codes repeat, as recorded below. Those are two distinct virtual accounts
+that share a code, each correctly attached to one site.
 
-This is the mirror of the coverage gap recorded below. That one is accounts missing
-from UBM; this one is accounts attached to sites they are not at, and it inflates row
-counts on every location-scoped report rather than shrinking them. Both are loading
-problems and neither is fixable in a report — filtering the spurious pairings out
-would mean deciding which of an account's sites is the real one, which is a judgement
-the report has no basis to make.
-
-Not yet quantified. The query for it:
+**What is still open** is why a virtual account whose vendor is Boca Raton's city
+utility sits on a Springfield MO site at all. Worth establishing next whether those
+accounts carry real bills or are strays, which decides whether this distorts figures
+or merely adds empty rows:
 
 ```sql
-SELECT count(*) AS accounts,
-       count(*) FILTER (WHERE n > 1) AS at_multiple_sites,
-       max(n) AS worst
-FROM (SELECT virtual_account_id, count(DISTINCT location_id) AS n
-      FROM bill_management_v2.analytics_monthly_feed
-      WHERE customer_id = <id> GROUP BY virtual_account_id) t;
+SELECT string_agg(x, chr(10) ORDER BY x) FROM (
+  SELECT amf.virtual_account_id || ' | ' || va.account_code || ' | vendor=' || amf.vendor_code
+      || ' | site=' || l.name || ' (' || COALESCE(l.state,'?') || ')'
+      || ' | feed_rows=' || count(*) || ' | bills=' || count(DISTINCT amf.bill_id)
+      || ' | charges=' || COALESCE(round(sum(amf.total_charges), 2), 0) AS x
+  FROM bill_management_v2.analytics_monthly_feed amf
+  JOIN bill_management_v2.virtual_accounts va ON va.id = amf.virtual_account_id
+  JOIN bill_management_v2.locations l ON l.id = amf.location_id
+  WHERE amf.customer_id = <id>
+    AND amf.vendor_code IN ('CITYOFBOCARATON','DOVERCITY','FOXMETROWRD','15033')
+  GROUP BY amf.virtual_account_id, va.account_code, amf.vendor_code, l.name, l.state
+) s;
 ```
 
 ## Account & Service List — the client's 54 Visible Columns
