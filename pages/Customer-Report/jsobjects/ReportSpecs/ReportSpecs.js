@@ -58,6 +58,11 @@ export default {
 		{ group: "GL", value: "glAllocation", label: "GL Allocation %", description: "Share of the account allocated to this row's GL code, as a percentage — 51.25 means 51.25%, and an account charged to a single GL reads 100. The scale is UBM's own, unchanged. Note the client's own exports format these cells as percentages, so Excel shows 51.25% while storing 0.5125 — the same number, not a different scale.", sql: "CASE WHEN btrim(glr.gl_allocation) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN btrim(glr.gl_allocation)::numeric END AS \"glAllocation\"" },
 		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
 
+		{ group: "Bill record", value: "billId", label: "Engie Insight Bill ID", description: "UBM's own id for the bill behind this row. Source: analytics_monthly_feed.bill_id, no join needed.", sql: "amf.bill_id AS \"billId\"" },
+		{ group: "Bill record", value: "vendorInvoice", label: "Vendor Invoice #", description: "Invoice number as the vendor wrote it. Source: bill_records.invoice_number, joined on the feed's own bill_record_id, so one bill record per row and no row multiplication.", sql: "br.invoice_number AS \"vendorInvoice\"" },
+		{ group: "Bill record", value: "dueDate", label: "Due Date", description: "Date the bill was due. Source: bill_records.due_date.", sql: "TO_CHAR(br.due_date, 'YYYY-MM-DD') AS \"dueDate\"" },
+		{ group: "Bill record", value: "receiptDate", label: "Receipt Date", description: "Date the bill was received. Source: bill_records.received_on — UBM's nearest equivalent to the client's Receipt Date; confirm with them that it means the same thing before relying on it.", sql: "TO_CHAR(br.received_on, 'YYYY-MM-DD') AS \"receiptDate\"" },
+
 		{ group: "Bill", value: "billBeginDate", label: "Begin Date", description: "First day of the bill's service period, as billed. Source: account_history.start_date, which is bill-level — the monthly feed's Service Start is the start of a month's slice of that bill, not the bill itself.", sql: "TO_CHAR(ah.start_date, 'YYYY-MM-DD') AS \"billBeginDate\"" },
 		{ group: "Bill", value: "billEndDate", label: "End Date", description: "Last day of the bill's service period, as billed. Source: account_history.end_date. A bill spanning a month end is one row here and two in the monthly feed.", sql: "TO_CHAR(ah.end_date, 'YYYY-MM-DD') AS \"billEndDate\"" },
 		{ group: "Bill", value: "billServiceCost", label: "Service Cost", description: "Charges for the bill as billed, not spread across the months it covers. Source: account_history.subcharges — UBM's Subcharges family is per bill block, where the Charges family on the monthly feed is pro-rated.", sql: "ah.subcharges AS \"billServiceCost\"" },
@@ -67,6 +72,7 @@ export default {
 
 		{ group: "Usage", value: "uom", label: "Unit of Measure", description: "Unit of measure for consumption (e.g. CCF, KWH)", sql: "amf.total_consumption_uom AS \"uom\"" },
 		{ group: "Usage", value: "totalConsumption", label: "Total Consumption", description: "Total metered consumption", sql: "amf.total_consumption AS \"totalConsumption\"" },
+		{ group: "Usage", value: "usagePerDay", label: "Usage per Day", description: "Total consumption divided by days of service, for this row's slice of the bill. Derived — UBM stores no per-day usage. Blank where days of service is zero.", sql: "(amf.total_consumption / NULLIF(amf.days_of_service, 0)) AS \"usagePerDay\"" },
 		{ group: "Usage", value: "totalGenConsumption", label: "Generation Consumption", description: "On-site generation consumption", sql: "amf.total_gen_consumption AS \"totalGenConsumption\"" },
 		{ group: "Usage", value: "demand", label: "Max Demand", description: "Maximum demand (kW)", sql: "amf.max_demand AS \"demand\"" },
 		{ group: "Usage", value: "cogenConsumption", label: "Cogeneration Consumption", description: "Cogeneration consumption", sql: "amf.total_cogen_consumption AS \"cogenConsumption\"" },
@@ -79,6 +85,7 @@ export default {
 		{ group: "Usage (time of use)", value: "consumptionSuperoffpeak", label: "Consumption (Super-Off-Peak)", description: "Consumption during super-off-peak hours", sql: "amf.total_consumption_superoffpeak AS \"consumptionSuperoffpeak\"" },
 
 		{ group: "Charges", value: "totalCharges", label: "Total Charges", description: "Monetary value for total charges.", sql: "amf.total_charges AS \"totalCharges\"" },
+		{ group: "Charges", value: "costPerDay", label: "Cost per Day", description: "Total charges divided by days of service, for this row's slice of the bill. Derived — UBM stores no per-day cost. Blank where days of service is zero.", sql: "(amf.total_charges / NULLIF(amf.days_of_service, 0)) AS \"costPerDay\"" },
 		{ group: "Charges", value: "totalChargesUsage", label: "Usage Charges", description: "Monetary value for usage charges.", sql: "amf.total_charges_usage AS \"totalChargesUsage\"" },
 		{ group: "Charges", value: "totalChargesConsumption", label: "Consumption Charges", description: "Monetary value for consumption charges.", sql: "amf.total_charges_consumption AS \"totalChargesConsumption\"" },
 		{ group: "Charges", value: "totalChargesDemand", label: "Demand Charges", description: "Monetary value for demand charges.", sql: "amf.total_charges_demand AS \"totalChargesDemand\"" },
@@ -240,8 +247,15 @@ export default {
 				],
 
 				availableExtra: [
-					"summaryAccount", "vendorCode", "billType", "daysOfService",
-					"totalChargesUsage", "totalChargesTaxes", "totalChargesOther", "demand"
+					"billType", "daysOfService", "costPerDay", "usagePerDay", "billQuantity",
+					"vendorAddress1", "vendorAddress2", "vendorCity", "vendorState",
+					"vendorZip", "vendorCountry", "vendorCode", "vendorInvoice",
+					"locationAddress", "locationCity", "locationState", "locationZip",
+					"locationCountry", "locationStatus",
+					"summaryAccount", "cleanAccountNumber", "accountStatus",
+					"accountActivityDate", "meterSerial",
+					"billId", "dueDate", "receiptDate",
+					"glCode", "glAllocation", "demand"
 				],
 				filters: {}
 			},
@@ -397,6 +411,11 @@ export default {
 	usesGlRows: () =>
 		ReportSpecs.selectedColumns().some(o => ReportSpecs.GL_ROW_FIELDS.indexOf(o.value) >= 0),
 
+	BILL_RECORD_FIELDS: ["vendorInvoice", "dueDate", "receiptDate"],
+
+	usesBillRecord: () =>
+		ReportSpecs.selectedColumns().some(o => ReportSpecs.BILL_RECORD_FIELDS.indexOf(o.value) >= 0),
+
 	fromClause: () => {
 		let sql = ReportSpecs.baseFrom;
 		if (ReportSpecs.usesGlRows()) {
@@ -405,6 +424,9 @@ export default {
 		if (ReportSpecs.usesBillLevel()) {
 			sql += "\n\t\tLEFT JOIN bill_history ah ON ah.bill_id = amf.bill_id AND ah.virtual_account_id = amf.virtual_account_id"
 				+ " AND upper(btrim(ah.commodity)) = upper(btrim(amf.utility_type))";
+		}
+		if (ReportSpecs.usesBillRecord()) {
+			sql += "\n\t\tLEFT JOIN bill_management_v2.bill_records br ON br.id = amf.bill_record_id";
 		}
 
 		ReportSpecs.accountAttrColumns().forEach(o => {
@@ -1108,7 +1130,8 @@ export default {
 
 	textFields: [
 		"locationNumber", "locationZip", "vendorCode", "accountNumber",
-		"cleanAccountNumber", "meterSerial", "vendorZip", "locationPhone", "vendorPhone"
+		"cleanAccountNumber", "meterSerial", "vendorZip", "locationPhone", "vendorPhone",
+		"vendorInvoice", "billId"
 	],
 
 	_utf8: (str) => {

@@ -316,6 +316,57 @@ SELECT sum(off_main) FILTER (WHERE in_main::numeric / total >= 0.9) AS strays_fr
 FROM tally;
 ```
 
+## Invoice by Date — the client's 70 Visible Columns
+
+Their tab has 69 of the 70 switched on, so it is their everything-on example.
+**42 are offered**, checked against the schema on 2026-08-11.
+
+Six were built in this pass:
+
+| Engie Column | UBM Source |
+| --- | --- |
+| Cost per Day | *derived* — `total_charges / days_of_service`, blank where days is zero |
+| Usage per Day | *derived* — `total_consumption / days_of_service` |
+| Engie Insight Bill ID | `analytics_monthly_feed.bill_id`, already on the row, no join |
+| Vendor Invoice # | `bill_records.invoice_number` |
+| Due Date | `bill_records.due_date` |
+| Receipt Date | `bill_records.received_on` — nearest equivalent; confirm the client means the same thing |
+
+The last three join `bill_records` on the feed's own `bill_record_id`. That is the
+table's primary key, so the join is one-to-one and cannot multiply rows. It is added
+only when one of those three columns is picked, the way the GL and bill-level joins
+already work, so the default query stays cheap.
+
+**Billed Quantity changes the report's grain.** It is offered because it is on their
+list, but it is a bill-level column: picking it makes the feed collapse to one row per
+bill, turning a monthly report into a bill one. That is the existing behaviour the DUP
+presets rely on, not new, but it will surprise anyone who ticks it here.
+
+**Bill Estimated is buildable and deliberately deferred.** `account_history.estimated`
+exists, but reaching it means adding to the bill-level CTE, so it would carry the same
+grain change as Billed Quantity for a single flag. Worth doing only if the client asks.
+
+**Twenty-eight have no source.** Beyond the ones already recorded in this file
+(Location Address 2, Misc Information, the five Account address columns, Audit Only,
+Account Notes, Supplier Only Account, GL Description):
+
+| Engie Column | Finding |
+| --- | --- |
+| Consolidated Date / Invoice # / Funding Date / Month | **No `consolidat*` column exists anywhere in the schema.** |
+| Entry Date, Receipt-adjacent dates | No `entry_date`. `bills.created_at` is the UBM load timestamp, already shown to be meaningless for this customer. |
+| Payment Initiated Date, Check #, Payment Clearing Date | `bp_payments` holds `check_number` and `check_cleared_timestamp`, but nothing on it keys back to a bill or virtual account — only `batch_id` and free-text vendor and account ids. Not reachable from a bill row. |
+| Audit Exceptions, Open Exceptions | No `exception` column anywhere. |
+| Misc/OTC Notes | No notes column, as recorded above. |
+| Total Number of Bills, Total Bill Amount | Aggregates, not row values. The builder lists rows; these belong with the grouping work the six unbuilt reports need. |
+| Bill Image, Details | No image, scan or document column. `bills.bill_url_hash` and `bills.files` exist and might construct a link, but the URL pattern is not in the schema and would have to come from Engie. |
+| Account Country | `virtual_accounts` has no address columns at all, same as the other five. |
+
+**One filter difference to raise before comparing row for row:** their tab is filtered
+on **Date Type = Bill Date** for a single month, plus Tax = Exclude and One Time
+Charges = Exclude. The builder's date filter runs on billing month, and it has no
+tax or one-time-charge exclusion, so a like-for-like comparison needs those settled
+first.
+
 ## Account & Service List — the client's 54 Visible Columns
 
 Their list is 54 entries, four of which appear twice under different casing
