@@ -17,6 +17,7 @@ export default {
 		{ group: "Location", value: "locationState", label: "State/Province", description: "Location state or province", sql: "l.state AS \"locationState\"" },
 		{ group: "Location", value: "locationCountry", label: "Country", description: "Location country", sql: "l.country AS \"locationCountry\"" },
 		{ group: "Location", value: "locationZip", label: "Location Zip", description: "Location postal / ZIP code", sql: "l.postcode AS \"locationZip\"" },
+		{ group: "Location", value: "locationPhone", label: "Location Phone", description: "Phone number recorded against the site. Source: location_detail.location_phone — the locations table itself holds no phone number, so a site missing from location_detail reports blank here.", sql: "lt.location_phone AS \"locationPhone\"" },
 
 		{ group: "Location", value: "locationStatus", label: "Location Status", description: "Status of the site. UBM records an open site as Operational; this is reported as Active to match the client's reports. Closed / Inactive / Terminated report as Inactive, and any other value passes through as UBM stores it.", sql: "CASE WHEN lower(btrim(lt.location_status)) IN ('operational','active','open') THEN 'Active' WHEN lower(btrim(lt.location_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' ELSE lt.location_status END AS \"locationStatus\"" },
 		{ group: "Location", value: "buildingType", label: "Building Type", description: "Type or category of location building type.", sql: "l.building_type AS \"buildingType\"" },
@@ -191,6 +192,52 @@ export default {
 				label: "Customer Final Bill",
 				columns: ["vendor", "location", "summaryAccount", "accountNumber"],
 				availableExtra: ["customerName"],
+				filters: {}
+			},
+
+			{
+				value: "locationDetail",
+				label: "Location Detail",
+				columns: [
+					"location", "locationNumber", "locationAddress", "locationCity",
+					"locationState", "locationZip", "locationCountry", "locationPhone",
+					"locationStatus"
+				],
+
+				availableExtra: ["locationId", "buildingType", "squareFeet", "customerName"],
+				filters: {}
+			},
+
+			{
+				value: "accountServiceList",
+				label: "Account & Service List",
+				columns: [
+					"location", "locationNumber", "locationStatus", "vendor",
+					"accountNumber", "accountStatus", "summaryAccount", "utilityType"
+				],
+
+				availableExtra: [
+					"vendorCode", "vendorId", "cleanAccountNumber", "meterSerial",
+					"accountCreatedDate", "accountActivityDate",
+					"locationAddress", "locationCity", "locationState",
+					"locationZip", "locationCountry"
+				],
+				filters: {}
+			},
+
+			{
+				value: "invoiceByDate",
+				label: "Invoice by Date",
+				columns: [
+					"location", "locationNumber", "vendor", "accountNumber",
+					"month", "statementDate", "startDate", "endDate",
+					"totalCharges", "utilityType", "uom", "totalConsumption"
+				],
+
+				availableExtra: [
+					"summaryAccount", "vendorCode", "billType", "daysOfService",
+					"totalChargesUsage", "totalChargesTaxes", "totalChargesOther", "demand"
+				],
 				filters: {}
 			},
 
@@ -1056,7 +1103,7 @@ export default {
 
 	textFields: [
 		"locationNumber", "locationZip", "vendorCode", "accountNumber",
-		"cleanAccountNumber", "meterSerial", "vendorZip"
+		"cleanAccountNumber", "meterSerial", "vendorZip", "locationPhone"
 	],
 
 	_utf8: (str) => {

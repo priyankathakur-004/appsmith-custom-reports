@@ -142,6 +142,40 @@ across if both are picked, where Engie's report puts one GL code per row. That i
 unpivot decision, still open. Leaving them unticked also keeps the report's default
 query cheap: each attribute column is a correlated subquery.
 
+## Location Detail, Account & Service List, Invoice by Date
+
+Three more presets, built 2026-08-10. Between them they needed one new column and
+had to leave out one.
+
+**Location Phone is now mapped.** `location_detail.location_phone` exists and had no
+field option; there is one now. The `locations` table itself carries no phone number,
+so a site absent from `location_detail` reports blank rather than wrong.
+
+**Service Status is left out of Account & Service List.** Same finding as the row
+above — there is no services table, so there is no per-service status to read. The
+report is built with its other eight columns and the client should be told the column
+is missing for want of a source, not hidden. Every other column on all three tabs
+maps to an existing field.
+
+**Invoice by Date is monthly-feed grain, not bill grain.** It deliberately does not
+take the `bill_history` join the Water / Gas / Electric presets use.
+
+Measured 2026-08-10: the feed holds **2.2 rows per bill** (25,374 rows over 11,545
+bills). Splitting an invoice across months is the normal case, not an edge one — a
+monthly bill straddles a month end. So before the client compares this to their own
+tab:
+
+- One invoice is typically **two rows** here. Service Begin / End are that month's
+  slice of the bill, and Cost is the pro-rated share of it, not the invoice total.
+- An account billed twice in a month is likewise two rows for the same Bill Month.
+- Bill Date is safe to show: `statement_date` is populated on all 25,374 rows.
+
+Their tab carries a Bill Month column of its own, which points to it being monthly
+grain too — worth confirming rather than assuming, because if it is one row per
+invoice our row count lands at roughly double theirs. That shape is the bill-grain
+one the DUP presets already have, and would be a different report rather than a fix
+to this one.
+
 ## Also found
 
 `location_detail` carries `location_division`, `location_top_group`,
