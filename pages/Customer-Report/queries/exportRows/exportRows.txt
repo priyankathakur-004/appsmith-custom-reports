@@ -93,7 +93,10 @@ lf_bills AS (
   GROUP BY f.virtual_account_id, f.bill_id
 ),
 lf_fee AS (
-  SELECT li.virtual_account_id, li.bill_id, SUM(li.charge) AS late_fee
+  SELECT li.virtual_account_id, li.bill_id,
+         SUM(CASE WHEN li.charge > 0 THEN li.charge ELSE 0 END) AS late_fee_charged,
+         SUM(CASE WHEN li.charge < 0 THEN li.charge ELSE 0 END) AS late_fee_recouped,
+         SUM(li.charge)                                         AS late_fee
   FROM bill_management_v2.analytics_billing_line_items li
   WHERE li.customer_id = {{ ReportSpecs.customerIdSql() }}
     AND li.code = 'LATEFEE'
@@ -101,7 +104,7 @@ lf_fee AS (
 ),
 lf_seq AS (
   SELECT b.virtual_account_id, b.bill_id, b.bill_date, b.bill_amount,
-         fee.late_fee,
+         fee.late_fee, fee.late_fee_charged, fee.late_fee_recouped,
          LAG(b.bill_date)      OVER w AS prev_bill_date,
          LAG(b.bill_amount)    OVER w AS prev_bill_amount,
          LAG(b.bill_record_id) OVER w AS prev_bill_record_id

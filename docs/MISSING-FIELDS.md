@@ -431,6 +431,27 @@ FROM (SELECT bill_id, count(DISTINCT bill_type) AS types
       WHERE customer_id = <id> GROUP BY bill_id) t;
 ```
 
+**Late fees follow the main UBM app's convention.** `fetch_late_fees` in
+appsmith-ubm-native splits `LATEFEE` lines three ways — charged (positive), recouped
+(negative) and net — so this report does the same: Late Fee Amount is the net, with Fee
+Charged and Fee Recouped offered separately. That settles the −3,040.06 line: it is a
+recoupment, and the house convention shows it rather than netting it away unseen. The
+report's filter catches a bill with either, so a fully-recouped fee still appears.
+
+**On `bill_type`, this app deliberately diverges.** That same query filters
+`bill_type = 'live'`, but it defaults to customer 76013, where the filter presumably
+works. For this customer `live` holds no `LATEFEE` lines at all, so applying it returns
+an empty report. Worth raising with the UBM team as a loading question — why one
+customer's line items are `setup` and another's are `live` — rather than treating the
+convention as wrong.
+
+**`received_on` is meant to be a real date.** The native app's Full Bill page shows it
+as "Date Bill Received" beside a separate "Date Loaded" from
+`reports_bill_processing_time`, so the two are distinct by design. That makes the
+−520 and −355 day values below a data-quality problem rather than a mislabelled column,
+and `reports_bill_processing_time.loaded_date` is available if a load date is ever
+wanted alongside.
+
 **The previous-bill half of the report is empty in practice.** First run, 2026-08-12:
 3 rows out of roughly 100 came back with a previous bill. The `LAG` needs two bills for
 one account, and UBM holds about one bill per account for this customer — the coverage

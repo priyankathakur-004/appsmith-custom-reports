@@ -60,7 +60,9 @@ export default {
 
 		{ group: "Late fee", value: "billDate", label: "Bill Date", description: "Statement date of the bill this row is for. Source: the earliest statement_date on the bill's feed rows. Distinct from the Period group's Statement Date, which is per monthly slice and would split a bill into several rows.", sql: "TO_CHAR(lf.bill_date, 'YYYY-MM-DD') AS \"billDate\"" },
 		{ group: "Late fee", value: "billAmount", label: "Bill Amount", description: "Total charged on the bill. Source: the sum of analytics_monthly_feed.total_charges across the bill's monthly slices, so it is the whole bill rather than one month's share.", sql: "lf.bill_amount AS \"billAmount\"" },
-		{ group: "Late fee", value: "lateFeeAmount", label: "Late Fee Amount", description: "Late fee charged on this bill, in full. Source: analytics_billing_line_items where code is LATEFEE. Blank where the bill carried no fee.", sql: "lf.late_fee AS \"lateFeeAmount\"" },
+		{ group: "Late fee", value: "lateFeeAmount", label: "Late Fee Amount", description: "Net late fee on this bill — fees charged less any recouped. Source: analytics_billing_line_items where code is LATEFEE. The main UBM app splits the same three ways; Fee Charged and Fee Recouped are offered separately.", sql: "lf.late_fee AS \"lateFeeAmount\"" },
+		{ group: "Late fee", value: "lateFeeCharged", label: "Late Fee Charged", description: "Late fees charged on this bill, positive lines only, before any recoupment.", sql: "lf.late_fee_charged AS \"lateFeeCharged\"" },
+		{ group: "Late fee", value: "lateFeeRecouped", label: "Late Fee Recouped", description: "Late fees credited back on this bill, negative lines only. Reported separately rather than netted away silently, matching the main UBM app.", sql: "lf.late_fee_recouped AS \"lateFeeRecouped\"" },
 		{ group: "Late fee", value: "prevBillDate", label: "Prev Bill Date", description: "Statement date of the account's previous bill, taken in bill-date order.", sql: "TO_CHAR(lf.prev_bill_date, 'YYYY-MM-DD') AS \"prevBillDate\"" },
 		{ group: "Late fee", value: "prevBillAmount", label: "Prev Bill Amount", description: "Total charged on the account's previous bill.", sql: "lf.prev_bill_amount AS \"prevBillAmount\"" },
 		{ group: "Late fee", value: "prevBillReceiptDate", label: "Prev Bill Receipt Date", description: "Date the previous bill was received. Source: bill_records.received_on for that bill.", sql: "TO_CHAR(pbr.received_on, 'YYYY-MM-DD') AS \"prevBillReceiptDate\"" },
@@ -276,7 +278,7 @@ export default {
 				grain: "bill",
 				lateFees: true,
 				dateColumn: "amf.statement_date",
-				where: "COALESCE(lf.late_fee, 0) <> 0",
+				where: "(COALESCE(lf.late_fee_charged, 0) <> 0 OR COALESCE(lf.late_fee_recouped, 0) <> 0)",
 				columns: [
 					"location", "locationNumber", "vendor", "accountNumber",
 					"billDate", "billAmount", "lateFeeAmount",
@@ -285,6 +287,7 @@ export default {
 				],
 
 				availableExtra: [
+					"lateFeeCharged", "lateFeeRecouped",
 					"billId", "vendorInvoice", "summaryAccount", "cleanAccountNumber",
 					"accountStatus", "locationStatus", "utilityType", "billType"
 				],
@@ -447,7 +450,8 @@ export default {
 	BILL_RECORD_FIELDS: ["vendorInvoice", "dueDate", "receiptDate"],
 
 	LATE_FEE_FIELDS: ["billDate", "billAmount", "lateFeeAmount", "prevBillDate",
-		"prevBillAmount", "prevBillReceiptDate", "prevBillDueDate", "daysUntilDue"],
+		"prevBillAmount", "prevBillReceiptDate", "prevBillDueDate", "daysUntilDue",
+		"lateFeeCharged", "lateFeeRecouped"],
 
 	usesLateFee: () => {
 		const p = ReportSpecs.activePreset();
