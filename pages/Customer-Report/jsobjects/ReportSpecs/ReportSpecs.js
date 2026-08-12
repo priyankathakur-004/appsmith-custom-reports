@@ -63,6 +63,8 @@ export default {
 		{ group: "Late fee", value: "lateFeeAmount", label: "Late Fee Amount", description: "Net late fee on this bill — fees charged less any recouped. Source: analytics_billing_line_items where code is LATEFEE. The main UBM app splits the same three ways; Fee Charged and Fee Recouped are offered separately.", sql: "lf.late_fee AS \"lateFeeAmount\"" },
 		{ group: "Late fee", value: "lateFeeCharged", label: "Late Fee Charged", description: "Late fees charged on this bill, positive lines only, before any recoupment.", sql: "lf.late_fee_charged AS \"lateFeeCharged\"" },
 		{ group: "Late fee", value: "lateFeeRecouped", label: "Late Fee Recouped", description: "Late fees credited back on this bill, negative lines only. Reported separately rather than netted away silently, matching the main UBM app.", sql: "lf.late_fee_recouped AS \"lateFeeRecouped\"" },
+		{ group: "Late fee", value: "lateFeePct", label: "Late Fee % of Charges", description: "Net late fee as a percentage of the bill total — 5 means the fee was 5% of what was billed. Matches the Late fee/charges column on the main UBM app's Bill Health report.", sql: "((lf.late_fee / NULLIF(lf.bill_amount, 0)) * 100) AS \"lateFeePct\"" },
+		{ group: "Late fee", value: "recoupedPct", label: "Recouped % of Late Fees", description: "How much of the fee charged was credited back, as a percentage. 100 means the whole fee was recouped. Matches the Recouped/late fees column on the main UBM app's Bill Health report.", sql: "((ABS(lf.late_fee_recouped) / NULLIF(lf.late_fee_charged, 0)) * 100) AS \"recoupedPct\"" },
 		{ group: "Late fee", value: "prevBillDate", label: "Prev Bill Date", description: "Statement date of the account's previous bill, taken in bill-date order.", sql: "TO_CHAR(lf.prev_bill_date, 'YYYY-MM-DD') AS \"prevBillDate\"" },
 		{ group: "Late fee", value: "prevBillAmount", label: "Prev Bill Amount", description: "Total charged on the account's previous bill.", sql: "lf.prev_bill_amount AS \"prevBillAmount\"" },
 		{ group: "Late fee", value: "prevBillReceiptDate", label: "Prev Bill Receipt Date", description: "Date the previous bill was received. Source: bill_records.received_on for that bill.", sql: "TO_CHAR(pbr.received_on, 'YYYY-MM-DD') AS \"prevBillReceiptDate\"" },
@@ -287,7 +289,7 @@ export default {
 				],
 
 				availableExtra: [
-					"lateFeeCharged", "lateFeeRecouped",
+					"lateFeeCharged", "lateFeeRecouped", "lateFeePct", "recoupedPct",
 					"billId", "vendorInvoice", "summaryAccount", "cleanAccountNumber",
 					"accountStatus", "locationStatus", "utilityType", "billType"
 				],
@@ -451,7 +453,7 @@ export default {
 
 	LATE_FEE_FIELDS: ["billDate", "billAmount", "lateFeeAmount", "prevBillDate",
 		"prevBillAmount", "prevBillReceiptDate", "prevBillDueDate", "daysUntilDue",
-		"lateFeeCharged", "lateFeeRecouped"],
+		"lateFeeCharged", "lateFeeRecouped", "lateFeePct", "recoupedPct"],
 
 	usesLateFee: () => {
 		const p = ReportSpecs.activePreset();
