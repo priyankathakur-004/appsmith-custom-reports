@@ -385,35 +385,51 @@ sum to a bill total is not obvious from the schema. The feed is the money source
 rest of this app already trusts, so summing it per bill avoids the question. The late
 fee itself is unambiguous — one code, one meaning.
 
-**`bill_type` means two different things in two tables, and the difference matters.**
+**`bill_type` means two different things in two tables, and neither behaves as the
+name suggests.** Checked 2026-08-12.
 
 | Table | Values | What it is |
 | --- | --- | --- |
-| `analytics_billing_line_items` | `historical`, `live`, `setup`, `special` | Record version — **must** be filtered, or a bill with a historical and a live version doubles |
-| `analytics_monthly_feed` | `Distribution Only`, `Full Service`, `Supply Only` | Service arrangement — **must not** be filtered; these are real, separate bills |
+| `analytics_billing_line_items` | `setup`, `historical`, `special`, `live` | Record version |
+| `analytics_monthly_feed` | `Distribution Only`, `Full Service`, `Supply Only` | Service arrangement — real, separate bills |
 
-Checked 2026-08-12. The late-fee sum is scoped to `live`, matching the Late Charges
-field that already did so. The feed needs no such filter, so every preset reading it
-unfiltered has been correct.
+The feed needs no filter, so every preset reading it unfiltered is correct. Its values
+also explain the paired rows on deregulated accounts noticed while reconciling Invoice
+by Date: 4,671 Supply Only against 4,983 Distribution Only, near-equal because the same
+accounts are billed twice, once for the commodity and once for delivery. 38% of the
+feed, not duplication, and the Bill Type column tells them apart.
 
-The feed's values also explain the paired rows on deregulated accounts noticed while
-reconciling Invoice by Date — two rows for one account and period, one carrying usage
-and one not. Those are Supply Only and Distribution Only: 4,671 and 4,983 rows against
-15,720 Full Service, near-equal counts because the same accounts are billed twice, once
-for the commodity and once for delivery. 38% of the feed is on that arrangement. It is
-not duplication, and the Bill Type column in the picker tells the two apart. Whether
-Engie's own tabs show them as one line or two is still worth confirming before
-comparing row counts.
+**On line items, `live` is all but empty and filtering to it returns nothing.** For
+this customer:
 
-**Two have no source.** `AUDIT RESOLUTION` (`Customer Pays Late Fee` / `ENGIE Insight
-Pays Late Fee`) is Engie workflow data — no audit or resolution column exists anywhere
-in the schema. `PREV BILL CONSOLIDATED DATE` is the same `consolidat*` gap recorded
-elsewhere in this file.
+| bill_type | Lines | Late fee lines |
+| --- | --- | --- |
+| `setup` | ~81,000 | 308, totalling 17,122.64 |
+| `historical` | ~4,100 | 1, totalling −3,040.06 |
+| `special` | ~250 | 0 |
+| `live` | **73** | **0** |
 
-This preset introduced three mechanics, all opt-in and used by nothing else: a `grain`
-override so the feed collapses to one row per bill, a preset-level `where` so the
-report shows only bills that carried a fee, and a conditional join to the `lf_seq`
-window CTE.
+So `live` is not the current version — `setup` carries the data. Two consequences:
+
+- The **Late Charges** field has filtered `bill_type = 'live'` since it was written, so
+  it has returned zero on every row of every report. Fixed by counting every bill type.
+- The same filter was briefly added to the Late Fees CTE, which would have made that
+  report return no rows at all. Removed.
+
+Neither now filters on bill type. The practical double-count risk is small — one
+`historical` late-fee line against 308 `setup` ones — but **it is not zero, and the one
+historical line is a −3,040.06 reversal**, large against a 17,122.64 total. It lands on
+a single bill's row rather than in a total, so it is visible rather than hidden, but
+whether reversals should net off or be excluded is a client question. Worth also
+checking whether a `bill_id` ever appears under two bill types, which is what would
+make a genuine double-count possible:
+
+```sql
+SELECT count(*) AS bills, count(*) FILTER (WHERE types > 1) AS bills_with_several_types
+FROM (SELECT bill_id, count(DISTINCT bill_type) AS types
+      FROM bill_management_v2.analytics_billing_line_items
+      WHERE customer_id = <id> GROUP BY bill_id) t;
+```
 
 ## Invoice by Date — the client's 70 Visible Columns
 
