@@ -438,12 +438,21 @@ Charged and Fee Recouped offered separately. That settles the −3,040.06 line: 
 recoupment, and the house convention shows it rather than netting it away unseen. The
 report's filter catches a bill with either, so a fully-recouped fee still appears.
 
-**On `bill_type`, this app deliberately diverges.** That same query filters
-`bill_type = 'live'`, but it defaults to customer 76013, where the filter presumably
-works. For this customer `live` holds no `LATEFEE` lines at all, so applying it returns
-an empty report. Worth raising with the UBM team as a loading question — why one
-customer's line items are `setup` and another's are `live` — rather than treating the
-convention as wrong.
+**On `bill_type`, this app deliberately diverges — and the consequence is visible in
+the main app.** `fetch_late_fees` filters `bill_type = 'live'`. Run against this
+customer it returns bills perfectly well — 25 in a twelve-month window — but
+`late_fee`, `recouped_late_fee` and `net_late_fee` come back **0 on every one**,
+because none of this customer's `LATEFEE` lines carry that bill type. Its 308 fees, and
+the 17,122.64 they total, sit under `setup`.
+
+So the main app's Bill Health → Late Fees tab reports this customer as having no late
+fees at all. That is not an empty screen anyone would question; it is a confident zero.
+This report leaves the filter off for that reason.
+
+The underlying question belongs with the UBM team: why one customer's line items load
+as `setup` while another's load as `live`. Until that is settled, any query filtering
+on `bill_type` should be checked against real counts for the customer in hand rather
+than trusted from convention.
 
 **`received_on` is meant to be a real date.** The native app's Full Bill page shows it
 as "Date Bill Received" beside a separate "Date Loaded" from
