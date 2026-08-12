@@ -282,16 +282,19 @@ export default {
 				dateColumn: "amf.statement_date",
 				where: "(COALESCE(lf.late_fee_charged, 0) <> 0 OR COALESCE(lf.late_fee_recouped, 0) <> 0)",
 				columns: [
-					"location", "locationNumber", "vendor", "accountNumber",
+					"locationNumber", "vendor", "accountNumber",
 					"billDate", "billAmount", "lateFeeAmount",
 					"prevBillDate", "prevBillAmount", "prevBillReceiptDate",
 					"prevBillDueDate", "daysUntilDue"
 				],
 
 				availableExtra: [
-					"lateFeeCharged", "lateFeeRecouped", "lateFeePct", "recoupedPct",
-					"billId", "vendorInvoice", "summaryAccount", "cleanAccountNumber",
-					"accountStatus", "locationStatus", "utilityType", "billType"
+					"location", "locationAddress", "locationCity", "locationState",
+					"locationZip", "locationCountry", "locationStatus",
+					"vendorAddress1", "vendorAddress2", "vendorCity", "vendorState",
+					"vendorZip", "vendorCountry",
+					"cleanAccountNumber", "summaryAccount", "accountStatus", "accountActivityDate",
+					"lateFeeCharged", "lateFeeRecouped", "lateFeePct", "recoupedPct"
 				],
 				filters: {}
 			},

@@ -360,10 +360,22 @@ SELECT count(*) AS sites,
 FROM per_site;
 ```
 
-## Late Fees — 12 of the client's 14 columns
+## Late Fees — the client's 38 Visible Columns
 
 Built 2026-08-12. Their tab is one row per bill that carried a late fee, filtered on
 Date Type = Bill Date, with the *previous* bill's details alongside for comparison.
+
+Their Visible Fields list is 38 entries, 13 of them loaded by default. **28 are
+offered**, 11 of them loaded — the two missing defaults being Prev Bill Consolidated
+Date and Audit Resolution, neither of which has a source. Note their default set starts
+at LOCATION #, with LOCATION NAME offered but not loaded, so this report matches that.
+
+Ten have no source: the two above, Location Address 2, Misc Information, the five
+Account address columns and Bill Image — all recorded elsewhere in this file.
+
+Four extras are offered beyond their list: Late Fee Charged, Late Fee Recouped and the
+two percentages. They are decompositions of a column that is on their list, and without
+them a fully-recouped fee shows as zero with nothing explaining why.
 
 | Engie Column | UBM Source |
 | --- | --- |
