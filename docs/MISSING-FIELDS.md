@@ -385,12 +385,25 @@ sum to a bill total is not obvious from the schema. The feed is the money source
 rest of this app already trusts, so summing it per bill avoids the question. The late
 fee itself is unambiguous — one code, one meaning.
 
-**The line-item table holds four bill types** — `historical`, `live`, `setup` and
-`special` — so anything summing charges out of it must scope to one, or a bill with
-both a historical and a live version doubles. The late-fee sum is scoped to `live`,
-matching the Late Charges field that was already doing so. Worth checking the same
-question of the feed if a total ever looks doubled, though every preset has read it
-unfiltered from the start without that showing up.
+**`bill_type` means two different things in two tables, and the difference matters.**
+
+| Table | Values | What it is |
+| --- | --- | --- |
+| `analytics_billing_line_items` | `historical`, `live`, `setup`, `special` | Record version — **must** be filtered, or a bill with a historical and a live version doubles |
+| `analytics_monthly_feed` | `Distribution Only`, `Full Service`, `Supply Only` | Service arrangement — **must not** be filtered; these are real, separate bills |
+
+Checked 2026-08-12. The late-fee sum is scoped to `live`, matching the Late Charges
+field that already did so. The feed needs no such filter, so every preset reading it
+unfiltered has been correct.
+
+The feed's values also explain the paired rows on deregulated accounts noticed while
+reconciling Invoice by Date — two rows for one account and period, one carrying usage
+and one not. Those are Supply Only and Distribution Only: 4,671 and 4,983 rows against
+15,720 Full Service, near-equal counts because the same accounts are billed twice, once
+for the commodity and once for delivery. 38% of the feed is on that arrangement. It is
+not duplication, and the Bill Type column in the picker tells the two apart. Whether
+Engie's own tabs show them as one line or two is still worth confirming before
+comparing row counts.
 
 **Two have no source.** `AUDIT RESOLUTION` (`Customer Pays Late Fee` / `ENGIE Insight
 Pays Late Fee`) is Engie workflow data — no audit or resolution column exists anywhere

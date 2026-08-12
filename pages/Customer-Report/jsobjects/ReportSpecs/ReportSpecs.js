@@ -286,7 +286,7 @@ export default {
 
 				availableExtra: [
 					"billId", "vendorInvoice", "summaryAccount", "cleanAccountNumber",
-					"accountStatus", "locationStatus", "utilityType"
+					"accountStatus", "locationStatus", "utilityType", "billType"
 				],
 				filters: {}
 			},
