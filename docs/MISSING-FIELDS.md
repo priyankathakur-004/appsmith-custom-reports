@@ -449,6 +449,14 @@ So the main app's Bill Health → Late Fees tab reports this customer as having 
 fees at all. That is not an empty screen anyone would question; it is a confident zero.
 This report leaves the filter off for that reason.
 
+Confirmed on the full result, 2026-08-12: all 25 rows are Constellation ELECTRIC bills
+at three sites, with `late_fee`, `recouped_late_fee` and `net_late_fee` zero on every
+one. A twelve-month window across a 268-site portfolio returning 25 bills from one
+vendor and one commodity points at what `live` means — bills that have been through the
+live billing pipeline since this customer went live, where `setup` is the backfilled
+history. If that is right, filtering to `live` on a customer part-way through
+onboarding shows only the newest trickle, and will keep doing so.
+
 The underlying question belongs with the UBM team: why one customer's line items load
 as `setup` while another's load as `live`. Until that is settled, any query filtering
 on `bill_type` should be checked against real counts for the customer in hand rather
