@@ -431,6 +431,30 @@ FROM (SELECT bill_id, count(DISTINCT bill_type) AS types
       WHERE customer_id = <id> GROUP BY bill_id) t;
 ```
 
+**The previous-bill half of the report is empty in practice.** First run, 2026-08-12:
+3 rows out of roughly 100 came back with a previous bill. The `LAG` needs two bills for
+one account, and UBM holds about one bill per account for this customer — the coverage
+gap recorded elsewhere in this file. The columns are correct and will fill in as more
+billing history loads; today they are blank on ~97% of rows.
+
+**Where a previous bill does exist, `received_on` looks unreliable.** Of the three:
+
+| Site | Prev receipt | Prev due | Days Until Due |
+| --- | --- | --- | --- |
+| North East Mall | 2026-02-20 | 2026-02-26 | 6 |
+| Cape Cod Mall | 2025-11-25 | 2024-06-23 | **−520** |
+| Woodfield Mall TRAINING | 2026-03-11 | 2025-03-21 | **−355** |
+
+Two of the three have the bill received more than a year *after* it was due — the same
+signature as `virtual_accounts.created_at`, a load timestamp wearing a business-date
+label. Days Until Due is only as good as that column, so it should not go in front of
+the client until `received_on` is confirmed to be a real receipt date.
+
+The −3,040.06 reversal that prompted the bill-type question lands on
+`5037-Woodfield Mall TRAINING`, the test record already flagged for deletion. That
+lowers the concern about it distorting anything real, and is one more reason to have
+the record removed.
+
 ## Invoice by Date — the client's 70 Visible Columns
 
 Their tab has 69 of the 70 switched on, so it is their everything-on example.
