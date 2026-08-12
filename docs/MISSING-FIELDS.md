@@ -469,6 +469,35 @@ as "Date Bill Received" beside a separate "Date Loaded" from
 and `reports_bill_processing_time.loaded_date` is available if a load date is ever
 wanted alongside.
 
+**Reconciled against the client's tab, and the fees match exactly.** Run over their
+window (bill dates 2025-12 to 2026-03), every bill UBM holds that also appears on their
+Late Fees tab agrees to the cent:
+
+| Their ACCOUNT # | Our Account # | Bill date | Fee |
+| --- | --- | --- | --- |
+| 15243292 | 204499998-16 | 2026-02-05 | 107.42 |
+| 15243297 | 204499998-19 | 2026-02-05 | 12.47 |
+| 15243355 | 204499998-25 | 2026-02-05 | 10.61 |
+| 15243268 | 204499998-7 | 2026-02-05 | 16.77 |
+| 15243355 | 204499998-25 | 2026-02-27 | 17.95 |
+
+This is the first fee-level agreement achieved against any Engie tab. The pairing is
+unambiguous — the four fees on 2026-02-05 are all distinct amounts, and 15243355 pairs
+with 204499998-25 again on 2026-02-27 at a different amount.
+
+**Their Late Fees tab uses a different account identifier.** `15243292` is not a vendor
+account number; ours, `204499998-16`, is the Constellation account as billed. Note this
+differs from their Account & Service List tab, where ACCOUNT # *is* the vendor number
+and matched ours directly. Anything reconciling against Late Fees has to match on
+vendor, date and amount rather than on account number, until someone establishes what
+that identifier is.
+
+**What does not match is coverage, not correctness.** In the same window their tab has
+seven more fees UBM has no bill for — three more on 2026-02-27 and all four on
+2026-03-28 — and thirteen of their fourteen sites produce no rows at all. Their totals
+2,677.40 against our 285.03 is entirely that gap, the same per-site staleness recorded
+above, not a difference in how the fee is calculated.
+
 **The previous-bill half of the report is empty in practice.** First run, 2026-08-12:
 3 rows out of roughly 100 came back with a previous bill. The `LAG` needs two bills for
 one account, and UBM holds about one bill per account for this customer — the coverage
