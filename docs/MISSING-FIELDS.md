@@ -360,6 +360,41 @@ SELECT count(*) AS sites,
 FROM per_site;
 ```
 
+## Late Fees — 12 of the client's 14 columns
+
+Built 2026-08-12. Their tab is one row per bill that carried a late fee, filtered on
+Date Type = Bill Date, with the *previous* bill's details alongside for comparison.
+
+| Engie Column | UBM Source |
+| --- | --- |
+| Bill Date | earliest `statement_date` on the bill's feed rows |
+| Bill Amount | `SUM(analytics_monthly_feed.total_charges)` across the bill's monthly slices |
+| Late Fee Amount | `analytics_billing_line_items` where `code = 'LATEFEE'` |
+| Prev Bill Date / Amount | `LAG` over the account's bills in bill-date order |
+| Prev Bill Receipt / Due Date | `bill_records.received_on` / `.due_date` for that previous bill |
+| Days Until Due | *derived* — due date minus receipt date |
+
+**Days Until Due was worked out rather than guessed.** Their tab shows 21, −6 and 6 on
+its first three rows, and prev-due minus prev-receipt reproduces all three exactly. A
+negative means the bill arrived after it was already due, which is the usual reason a
+fee follows.
+
+**Bill Amount comes from the feed, not from line items.** Line items carry `type` codes
+of `C`, `U` and `UC` across categories including `Usage Information`, and which of them
+sum to a bill total is not obvious from the schema. The feed is the money source the
+rest of this app already trusts, so summing it per bill avoids the question. The late
+fee itself is unambiguous — one code, one meaning.
+
+**Two have no source.** `AUDIT RESOLUTION` (`Customer Pays Late Fee` / `ENGIE Insight
+Pays Late Fee`) is Engie workflow data — no audit or resolution column exists anywhere
+in the schema. `PREV BILL CONSOLIDATED DATE` is the same `consolidat*` gap recorded
+elsewhere in this file.
+
+This preset introduced three mechanics, all opt-in and used by nothing else: a `grain`
+override so the feed collapses to one row per bill, a preset-level `where` so the
+report shows only bills that carried a fee, and a conditional join to the `lf_seq`
+window CTE.
+
 ## Invoice by Date — the client's 70 Visible Columns
 
 Their tab has 69 of the 70 switched on, so it is their everything-on example.

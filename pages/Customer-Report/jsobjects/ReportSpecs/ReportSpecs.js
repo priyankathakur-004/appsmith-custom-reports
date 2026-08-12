@@ -58,6 +58,15 @@ export default {
 		{ group: "GL", value: "glAllocation", label: "GL Allocation %", description: "Share of the account allocated to this row's GL code, as a percentage — 51.25 means 51.25%, and an account charged to a single GL reads 100. The scale is UBM's own, unchanged. Note the client's own exports format these cells as percentages, so Excel shows 51.25% while storing 0.5125 — the same number, not a different scale.", sql: "CASE WHEN btrim(glr.gl_allocation) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN btrim(glr.gl_allocation)::numeric END AS \"glAllocation\"" },
 		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
 
+		{ group: "Late fee", value: "billDate", label: "Bill Date", description: "Statement date of the bill this row is for. Source: the earliest statement_date on the bill's feed rows. Distinct from the Period group's Statement Date, which is per monthly slice and would split a bill into several rows.", sql: "TO_CHAR(lf.bill_date, 'YYYY-MM-DD') AS \"billDate\"" },
+		{ group: "Late fee", value: "billAmount", label: "Bill Amount", description: "Total charged on the bill. Source: the sum of analytics_monthly_feed.total_charges across the bill's monthly slices, so it is the whole bill rather than one month's share.", sql: "lf.bill_amount AS \"billAmount\"" },
+		{ group: "Late fee", value: "lateFeeAmount", label: "Late Fee Amount", description: "Late fee charged on this bill, in full. Source: analytics_billing_line_items where code is LATEFEE. Blank where the bill carried no fee.", sql: "lf.late_fee AS \"lateFeeAmount\"" },
+		{ group: "Late fee", value: "prevBillDate", label: "Prev Bill Date", description: "Statement date of the account's previous bill, taken in bill-date order.", sql: "TO_CHAR(lf.prev_bill_date, 'YYYY-MM-DD') AS \"prevBillDate\"" },
+		{ group: "Late fee", value: "prevBillAmount", label: "Prev Bill Amount", description: "Total charged on the account's previous bill.", sql: "lf.prev_bill_amount AS \"prevBillAmount\"" },
+		{ group: "Late fee", value: "prevBillReceiptDate", label: "Prev Bill Receipt Date", description: "Date the previous bill was received. Source: bill_records.received_on for that bill.", sql: "TO_CHAR(pbr.received_on, 'YYYY-MM-DD') AS \"prevBillReceiptDate\"" },
+		{ group: "Late fee", value: "prevBillDueDate", label: "Prev Bill Due Date", description: "Date the previous bill was due. Source: bill_records.due_date for that bill.", sql: "TO_CHAR(pbr.due_date, 'YYYY-MM-DD') AS \"prevBillDueDate\"" },
+		{ group: "Late fee", value: "daysUntilDue", label: "Days Until Due", description: "Days between receiving the previous bill and its due date — due date minus receipt date. Negative means it arrived after it was already due, which is the usual reason a late fee follows. Derived; matches the arithmetic on the client's own Late Fees tab.", sql: "(pbr.due_date::date - pbr.received_on::date) AS \"daysUntilDue\"" },
+
 		{ group: "Bill record", value: "billId", label: "Engie Insight Bill ID", description: "UBM's own id for the bill behind this row. Source: analytics_monthly_feed.bill_id, no join needed.", sql: "amf.bill_id AS \"billId\"" },
 		{ group: "Bill record", value: "vendorInvoice", label: "Vendor Invoice #", description: "Invoice number as the vendor wrote it. Source: bill_records.invoice_number, joined on the feed's own bill_record_id, so one bill record per row and no row multiplication.", sql: "br.invoice_number AS \"vendorInvoice\"" },
 		{ group: "Bill record", value: "dueDate", label: "Due Date", description: "Date the bill was due. Source: bill_records.due_date.", sql: "TO_CHAR(br.due_date, 'YYYY-MM-DD') AS \"dueDate\"" },
@@ -261,6 +270,27 @@ export default {
 				filters: {}
 			},
 
+			{
+				value: "lateFees",
+				label: "Late Fees",
+				grain: "bill",
+				lateFees: true,
+				dateColumn: "amf.statement_date",
+				where: "COALESCE(lf.late_fee, 0) <> 0",
+				columns: [
+					"location", "locationNumber", "vendor", "accountNumber",
+					"billDate", "billAmount", "lateFeeAmount",
+					"prevBillDate", "prevBillAmount", "prevBillReceiptDate",
+					"prevBillDueDate", "daysUntilDue"
+				],
+
+				availableExtra: [
+					"billId", "vendorInvoice", "summaryAccount", "cleanAccountNumber",
+					"accountStatus", "locationStatus", "utilityType"
+				],
+				filters: {}
+			},
+
 			dup("water", "Water", "^\\s*(water|sewer)\\s*$"),
 			dup("gas", "Gas", "^\\s*(natural\\s*gas|gas)\\s*$"),
 			dup("electric", "Electric", "^\\s*electric(ity)?\\s*$")
@@ -379,6 +409,8 @@ export default {
 
 	feedKeys: () => {
 		const shown = ReportSpecs.selectedColumns();
+		const gp = ReportSpecs.activePreset();
+		if (gp && gp.grain === "bill") return ["bill_id", "virtual_account_id"];
 		if (ReportSpecs.usesBillLevel()) {
 			return ["bill_id", "virtual_account_id", "utility_type"];
 		}
@@ -414,6 +446,15 @@ export default {
 
 	BILL_RECORD_FIELDS: ["vendorInvoice", "dueDate", "receiptDate"],
 
+	LATE_FEE_FIELDS: ["billDate", "billAmount", "lateFeeAmount", "prevBillDate",
+		"prevBillAmount", "prevBillReceiptDate", "prevBillDueDate", "daysUntilDue"],
+
+	usesLateFee: () => {
+		const p = ReportSpecs.activePreset();
+		if (p && p.lateFees) return true;
+		return ReportSpecs.selectedColumns().some(o => ReportSpecs.LATE_FEE_FIELDS.indexOf(o.value) >= 0);
+	},
+
 	usesBillRecord: () =>
 		ReportSpecs.selectedColumns().some(o => ReportSpecs.BILL_RECORD_FIELDS.indexOf(o.value) >= 0),
 
@@ -428,6 +469,10 @@ export default {
 		}
 		if (ReportSpecs.usesBillRecord()) {
 			sql += "\n\t\tLEFT JOIN bill_management_v2.bill_records br ON br.id = amf.bill_record_id";
+		}
+		if (ReportSpecs.usesLateFee()) {
+			sql += "\n\t\tLEFT JOIN lf_seq lf ON lf.virtual_account_id = amf.virtual_account_id AND lf.bill_id = amf.bill_id"
+				+ "\n\t\tLEFT JOIN bill_management_v2.bill_records pbr ON pbr.id = lf.prev_bill_record_id";
 		}
 
 		ReportSpecs.accountAttrColumns().forEach(o => {
@@ -644,6 +689,9 @@ export default {
 			if (!excludeField) return false;
 			return Array.isArray(aliases) ? aliases.indexOf(excludeField) >= 0 : aliases === excludeField;
 		};
+
+		const preset = ReportSpecs.activePreset();
+		if (preset && preset.where) parts.push(`AND ${preset.where}`);
 
 		const dateCol = ReportSpecs.dateFilterColumn();
 		if (StartDate && StartDate.selectedDate) {
