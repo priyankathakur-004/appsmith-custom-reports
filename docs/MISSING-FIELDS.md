@@ -369,7 +369,7 @@ Date Type = Bill Date, with the *previous* bill's details alongside for comparis
 | --- | --- |
 | Bill Date | earliest `statement_date` on the bill's feed rows |
 | Bill Amount | `SUM(analytics_monthly_feed.total_charges)` across the bill's monthly slices |
-| Late Fee Amount | `analytics_billing_line_items` where `code = 'LATEFEE'` |
+| Late Fee Amount | `analytics_billing_line_items` where `code = 'LATEFEE'` and `bill_type = 'live'` |
 | Prev Bill Date / Amount | `LAG` over the account's bills in bill-date order |
 | Prev Bill Receipt / Due Date | `bill_records.received_on` / `.due_date` for that previous bill |
 | Days Until Due | *derived* — due date minus receipt date |
@@ -384,6 +384,13 @@ of `C`, `U` and `UC` across categories including `Usage Information`, and which 
 sum to a bill total is not obvious from the schema. The feed is the money source the
 rest of this app already trusts, so summing it per bill avoids the question. The late
 fee itself is unambiguous — one code, one meaning.
+
+**The line-item table holds four bill types** — `historical`, `live`, `setup` and
+`special` — so anything summing charges out of it must scope to one, or a bill with
+both a historical and a live version doubles. The late-fee sum is scoped to `live`,
+matching the Late Charges field that was already doing so. Worth checking the same
+question of the feed if a total ever looks doubled, though every preset has read it
+unfiltered from the start without that showing up.
 
 **Two have no source.** `AUDIT RESOLUTION` (`Customer Pays Late Fee` / `ENGIE Insight
 Pays Late Fee`) is Engie workflow data — no audit or resolution column exists anywhere

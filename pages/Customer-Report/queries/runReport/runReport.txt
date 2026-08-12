@@ -97,6 +97,7 @@ lf_fee AS (
   FROM bill_management_v2.analytics_billing_line_items li
   WHERE li.customer_id = {{ ReportSpecs.customerIdSql() }}
     AND li.code = 'LATEFEE'
+    AND li.bill_type = 'live'
   GROUP BY li.virtual_account_id, li.bill_id
 ),
 lf_seq AS (
