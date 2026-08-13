@@ -360,6 +360,47 @@ SELECT count(*) AS sites,
 FROM per_site;
 ```
 
+## Invoice Detail — 15 of the client's 16 columns
+
+Built 2026-08-13. Their tab carries no Visible Fields list, so the 16 report columns are
+the whole specification.
+
+**This is the first preset that does not read the monthly feed.** Invoice Detail is one
+row per charge line, not per account-month, so the preset carries `source: "lineItems"`
+and the `feed_scoped` CTE reads `analytics_billing_line_items` instead, projected under
+the feed's own column names — `charge AS total_charges`, `commodity AS utility_type`,
+`usage AS total_consumption` and so on. Every existing location, vendor and account
+join then works untouched, and only four new fields are needed.
+
+Fields carrying `source: "lineItems"` are hidden on every other preset, so nothing can
+select a line-item column against the feed and produce invalid SQL.
+
+**Informational lines are excluded.** Line items carry a `type` of `C`, `UC` or `U`.
+Measured 2026-08-12, every `U` line sums to zero charge and sits in the `Usage
+Information` category — they are meter readings, not money. The source filters
+`type <> 'U'`, so a cost report does not list zero-cost rows.
+
+**Service Description is UBM's wording, not the vendor's.** The client's tab shows the
+vendor's own text off the bill — `Elec Cust Chrg`, `G Cust Chrg`, `Gas Supply Customer
+Charge`. UBM normalises every line onto a controlled vocabulary: `Customer Charge (C)`,
+`General Usage Charge (C)`, code `CUSTOMERCHARGE`. The column is there and it is
+meaningful, but **the values will not match their tab**, and that is worth confirming
+with the client before they compare. If they need the vendor's literal text it is not in
+any column read here and would mean digging into `bills.payload` JSON.
+
+**Service Alias has no source at all** — that is the vendor's own line label
+(`Kwh Usage`, `Gross Revenue Tax`, `Fuel`), and nothing in UBM keeps it.
+
+**Billed Quantity needs confirming.** It reads `analytics_billing_line_items.value`,
+which is the quantity stated on the line, while `usage` is the metered figure and feeds
+the Usage column. Which of the two the client's Billed Quantity means has not been
+established against a known bill.
+
+Their Service Type column carries `Tax` and `Misc Charges` alongside commodities. UBM
+splits those: `commodity` gives the utility, and `category` gives `Taxes`, `Other
+Charges` and the rest. The report maps Service Type to commodity and offers Charge
+Category beside it.
+
 ## Late Fees — the client's 38 Visible Columns
 
 Built 2026-08-12. Their tab is one row per bill that carried a late fee, filtered on

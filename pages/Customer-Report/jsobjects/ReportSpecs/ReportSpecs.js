@@ -58,6 +58,10 @@ export default {
 		{ group: "GL", value: "glAllocation", label: "GL Allocation %", description: "Share of the account allocated to this row's GL code, as a percentage — 51.25 means 51.25%, and an account charged to a single GL reads 100. The scale is UBM's own, unchanged. Note the client's own exports format these cells as percentages, so Excel shows 51.25% while storing 0.5125 — the same number, not a different scale.", sql: "CASE WHEN btrim(glr.gl_allocation) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN btrim(glr.gl_allocation)::numeric END AS \"glAllocation\"" },
 		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
 
+		{ group: "Line item", source: "lineItems", value: "serviceDescription", label: "Service Description", description: "What the charge line is, as UBM classifies it — Customer Charge (C), General Usage Charge (C), Late Fee (C). Source: analytics_billing_line_items.description. Note this is UBM's own wording: the client's reports show the vendor's text from the bill (Elec Cust Chrg, G Cust Chrg), which UBM does not keep.", sql: "amf.line_description AS \"serviceDescription\"" },
+		{ group: "Line item", source: "lineItems", value: "billedQuantity", label: "Billed Quantity", description: "Quantity stated on the charge line. Source: analytics_billing_line_items.value. Confirm against a known bill before relying on it — UBM holds a separate metered figure, offered as Total Consumption.", sql: "amf.line_value AS \"billedQuantity\"" },
+		{ group: "Line item", source: "lineItems", value: "lineCode", label: "Charge Code", description: "UBM's code for the charge line — CUSTOMERCHARGE, CHG_CHARGE, LATEFEE. Source: analytics_billing_line_items.code.", sql: "amf.line_code AS \"lineCode\"" },
+		{ group: "Line item", source: "lineItems", value: "lineCategory", label: "Charge Category", description: "Which family the charge falls in — Usage Charges, Customer Charges, Other Charges, Taxes. Source: analytics_billing_line_items.category. This is where the client's Tax and Misc Charges service types live, since UBM does not treat those as commodities.", sql: "amf.line_category AS \"lineCategory\"" },
 		{ group: "Late fee", value: "billDate", label: "Bill Date", description: "Statement date of the bill this row is for. Source: the earliest statement_date on the bill's feed rows. Distinct from the Period group's Statement Date, which is per monthly slice and would split a bill into several rows.", sql: "TO_CHAR(lf.bill_date, 'YYYY-MM-DD') AS \"billDate\"" },
 		{ group: "Late fee", value: "billAmount", label: "Bill Amount", description: "Total charged on the bill. Source: the sum of analytics_monthly_feed.total_charges across the bill's monthly slices, so it is the whole bill rather than one month's share.", sql: "lf.bill_amount AS \"billAmount\"" },
 		{ group: "Late fee", value: "lateFeeAmount", label: "Late Fee Amount", description: "Net late fee on this bill — fees charged less any recouped. Source: analytics_billing_line_items where code is LATEFEE. The main UBM app splits the same three ways; Fee Charged and Fee Recouped are offered separately.", sql: "lf.late_fee AS \"lateFeeAmount\"" },
@@ -299,6 +303,25 @@ export default {
 				filters: {}
 			},
 
+			{
+				value: "invoiceDetail",
+				label: "Invoice Detail",
+				source: "lineItems",
+				dateColumn: "amf.statement_date",
+				columns: [
+					"location", "locationNumber", "vendor", "accountNumber",
+					"month", "statementDate", "startDate", "endDate", "daysOfService",
+					"serviceDescription", "utilityType", "uom", "totalConsumption",
+					"billedQuantity", "totalCharges"
+				],
+
+				availableExtra: [
+					"lineCode", "lineCategory", "locationStatus", "summaryAccount",
+					"cleanAccountNumber", "accountStatus", "vendorCode"
+				],
+				filters: {}
+			},
+
 			dup("water", "Water", "^\\s*(water|sewer)\\s*$"),
 			dup("gas", "Gas", "^\\s*(natural\\s*gas|gas)\\s*$"),
 			dup("electric", "Electric", "^\\s*electric(ity)?\\s*$")
@@ -431,6 +454,19 @@ export default {
 
 	feedCte: () => {
 		const cid = ReportSpecs.customerIdSql();
+		const lp = ReportSpecs.activePreset();
+		if (lp && lp.source === "lineItems") {
+			return "SELECT li.bill_id, li.bill_record_id, li.virtual_account_id, li.location_id,"
+				+ " li.vendor_code, li.customer_id, li.statement_date, li.bill_type,"
+				+ " li.commodity AS utility_type, li.start_date, li.end_date,"
+				+ " date_trunc('month', li.start_date)::date AS time_period,"
+				+ " (li.end_date - li.start_date + 1) AS days_of_service,"
+				+ " li.charge AS total_charges, li.usage AS total_consumption,"
+				+ " li.uom AS total_consumption_uom, li.description AS line_description,"
+				+ " li.code AS line_code, li.category AS line_category, li.value AS line_value"
+				+ " FROM bill_management_v2.analytics_billing_line_items li"
+				+ ` WHERE li.customer_id = ${cid} AND li.type <> 'U'`;
+		}
 		const src = `FROM bill_management_v2.analytics_monthly_feed WHERE customer_id = ${cid}`;
 		const keys = ReportSpecs.feedKeys();
 		if (!keys) return `SELECT * ${src}`;
@@ -598,7 +634,9 @@ export default {
 
 		const order = [];
 		const byGroup = {};
+		const activeSource = (ReportSpecs.activePreset() || {}).source || null;
 		ReportSpecs.visibleFieldOptions.forEach(f => {
+			if (f.source && f.source !== activeSource) return;
 			if (!inScope(f.value)) return;
 			const g = f.group || "Other";
 			if (!byGroup[g]) { byGroup[g] = []; order.push(g); }
