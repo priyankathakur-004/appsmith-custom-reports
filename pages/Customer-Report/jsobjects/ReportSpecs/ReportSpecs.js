@@ -59,7 +59,7 @@ export default {
 		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
 
 		{ group: "Line item", source: "lineItems", value: "serviceDescription", label: "Service Description", description: "What the charge line is, as UBM classifies it — Customer Charge (C), General Usage Charge (C), Late Fee (C). Source: analytics_billing_line_items.description. Note this is UBM's own wording: the client's reports show the vendor's text from the bill (Elec Cust Chrg, G Cust Chrg), which UBM does not keep.", sql: "amf.line_description AS \"serviceDescription\"" },
-		{ group: "Line item", source: "lineItems", value: "billedQuantity", label: "Billed Quantity", description: "Quantity stated on the charge line. Source: analytics_billing_line_items.value. Confirm against a known bill before relying on it — UBM holds a separate metered figure, offered as Total Consumption.", sql: "amf.line_value AS \"billedQuantity\"" },
+		{ group: "Line item", source: "lineItems", value: "serviceAlias", label: "Service Alias", description: "The vendor's own label for the charge line, as printed on the bill — Energy, Fuel, Gross Revenue Tax, Purchased Power. Source: analytics_billing_line_items.value, which despite the column name holds text rather than a number. This is the client's Service Alias column and the values match theirs.", sql: "amf.line_value AS \"serviceAlias\"" },
 		{ group: "Line item", source: "lineItems", value: "lineCode", label: "Charge Code", description: "UBM's code for the charge line — CUSTOMERCHARGE, CHG_CHARGE, LATEFEE. Source: analytics_billing_line_items.code.", sql: "amf.line_code AS \"lineCode\"" },
 		{ group: "Line item", source: "lineItems", value: "lineCategory", label: "Charge Category", description: "Which family the charge falls in — Usage Charges, Customer Charges, Other Charges, Taxes. Source: analytics_billing_line_items.category. This is where the client's Tax and Misc Charges service types live, since UBM does not treat those as commodities.", sql: "amf.line_category AS \"lineCategory\"" },
 		{ group: "Late fee", value: "billDate", label: "Bill Date", description: "Statement date of the bill this row is for. Source: the earliest statement_date on the bill's feed rows. Distinct from the Period group's Statement Date, which is per monthly slice and would split a bill into several rows.", sql: "TO_CHAR(lf.bill_date, 'YYYY-MM-DD') AS \"billDate\"" },
@@ -311,8 +311,8 @@ export default {
 				columns: [
 					"location", "locationNumber", "vendor", "accountNumber",
 					"month", "statementDate", "startDate", "endDate", "daysOfService",
-					"serviceDescription", "utilityType", "uom", "totalConsumption",
-					"billedQuantity", "totalCharges"
+					"serviceDescription", "serviceAlias", "utilityType", "uom",
+					"totalConsumption", "totalCharges"
 				],
 
 				availableExtra: [

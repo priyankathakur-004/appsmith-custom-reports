@@ -380,21 +380,25 @@ Measured 2026-08-12, every `U` line sums to zero charge and sits in the `Usage
 Information` category — they are meter readings, not money. The source filters
 `type <> 'U'`, so a cost report does not list zero-cost rows.
 
-**Service Description is UBM's wording, not the vendor's.** The client's tab shows the
-vendor's own text off the bill — `Elec Cust Chrg`, `G Cust Chrg`, `Gas Supply Customer
-Charge`. UBM normalises every line onto a controlled vocabulary: `Customer Charge (C)`,
-`General Usage Charge (C)`, code `CUSTOMERCHARGE`. The column is there and it is
-meaningful, but **the values will not match their tab**, and that is worth confirming
-with the client before they compare. If they need the vendor's literal text it is not in
-any column read here and would mean digging into `bills.payload` JSON.
+**Service Alias is `analytics_billing_line_items.value`.** Despite the column name it
+holds text, not a number — the vendor's own label for the charge line as printed on the
+bill. Checked against their tab on 2026-08-13: `Gross Revenue Tax`, `Energy`,
+`Purchased Power`, `Fuel`, `Regulatory Cost Charge`, `FIW Renewable Energy Adj` and
+`Backflow Device Administrative Fee` all appear verbatim in their Service Alias column,
+with several more near-matches. **This corrects an earlier note in this file saying
+Service Alias had no source.**
 
-**Service Alias has no source at all** — that is the vendor's own line label
-(`Kwh Usage`, `Gross Revenue Tax`, `Fuel`), and nothing in UBM keeps it.
+**Billed Quantity has no source.** Line items carry exactly two numeric columns,
+`usage` and `charge`. `usage` is already the Usage column and `charge` is Cost, so
+there is no third quantity for Billed Quantity to read. It was briefly mapped to
+`value` before that column turned out to be Service Alias.
 
-**Billed Quantity needs confirming.** It reads `analytics_billing_line_items.value`,
-which is the quantity stated on the line, while `usage` is the metered figure and feeds
-the Usage column. Which of the two the client's Billed Quantity means has not been
-established against a known bill.
+**Service Description is UBM's wording, not the vendor's.** The client's tab shows
+`Elec Cust Chrg`, `G Cust Chrg`, `Water Surchrg`, `Sewer Cust Chrg`. UBM normalises
+every line onto a controlled vocabulary: `Customer Charge (C)`, `General Usage Charge
+(C)`, `Tax (C)`. The column is meaningful and consistent, but **the values will not
+match their tab**. Worth confirming with the client whether the normalised description
+is usable, now that Service Alias beside it does carry the vendor's own words.
 
 Their Service Type column carries `Tax` and `Misc Charges` alongside commodities. UBM
 splits those: `commodity` gives the utility, and `category` gives `Taxes`, `Other
