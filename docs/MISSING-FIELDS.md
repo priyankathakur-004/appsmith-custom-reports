@@ -422,9 +422,12 @@ Account address columns and Bill Image — all recorded elsewhere in this file.
 `consolidat*`, but bills are batched for payment: `bill_records.batch_id` is a foreign
 key to `batches.id`, and a batch carries `created_at`, `uploaded_at` and
 `downloaded_at`. The column reads `batches.created_at` for the previous bill's batch.
-**A candidate, not a confirmed mapping** — which of the three dates the client means has
-not been checked against a known bill, though their sample values sit a few days after
-receipt and before due, which fits a batching date. To settle it:
+Checked 2026-08-13: `uploaded_at` is null on every row sampled, and `created_at` and
+`downloaded_at` are identical, so `created_at` is the only usable choice and the
+distinction between the three does not arise in practice. The gap from receipt to batch
+was seven days on the sample, against one to thirteen days on the client's own tab, so
+the mapping is plausible. Still worth one eyeball against a bill the client can point
+at, since a batch date is not necessarily what they mean by consolidated:
 
 ```sql
 SELECT string_agg(x, chr(10) ORDER BY x) AS batch_date_candidates FROM (
@@ -440,11 +443,36 @@ SELECT string_agg(x, chr(10) ORDER BY x) AS batch_date_candidates FROM (
 ) s;
 ```
 
-**Days Until Due is confirmed, not assumed.** Due date minus receipt date reproduces
-**all 59 rows** of their tab exactly, not just the three checked when it was first
-worked out. The formula is settled; what remains uncertain is only whether `received_on`
-holds a real business date on every bill, which the −520 and −355 day cases below put in
-doubt.
+**Days Until Due: the formula is right, the input is not.** Due date minus receipt date
+reproduces **all 59 rows** of their tab exactly, so the calculation is settled.
+
+`received_on` is the problem. In a sample of 15 bill records taken 2026-08-13, all 15
+carry the same `received_on` of 2025-11-25 while their due dates spread across three
+weeks, 2025-10-20 to 2025-11-12 — and all 15 were batched on the same day, 2025-12-02.
+**Every one was therefore "received" after it was already due**, and Days Until Due
+would read between −13 and −36.
+
+Fifteen different bills cannot arrive on one day with due dates a month apart. That is
+an ingest timestamp from a backfill, the same failure already recorded for
+`virtual_accounts.created_at`. For any bill loaded that way Days Until Due is an
+artefact, and the −520 and −355 cases below are the same thing at greater distance.
+
+The column is left in because it is one of the client's defaults and reads correctly
+wherever `received_on` is genuine — the North East Mall row, +6 days, is a real bill
+processed live. **It should not be presented as a measure until the UBM team confirms
+which bills carry a true receipt date.** How widespread it is:
+
+```sql
+SELECT count(*) AS bills_with_both,
+       count(*) FILTER (WHERE received_on > due_date)      AS received_after_due,
+       count(DISTINCT received_on)                          AS distinct_receipt_dates,
+       round(100.0 * count(*) FILTER (WHERE received_on > due_date) / count(*), 1) AS pct_after_due
+FROM bill_management_v2.bill_records
+WHERE customer_id = <id> AND received_on IS NOT NULL AND due_date IS NOT NULL;
+```
+
+A low count of distinct receipt dates against a high bill count is the signature of
+bulk loading.
 
 Four extras are offered beyond their list: Late Fee Charged, Late Fee Recouped and the
 two percentages. They are decompositions of a column that is on their list, and without
