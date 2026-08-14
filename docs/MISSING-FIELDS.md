@@ -410,13 +410,41 @@ Category beside it.
 Built 2026-08-12. Their tab is one row per bill that carried a late fee, filtered on
 Date Type = Bill Date, with the *previous* bill's details alongside for comparison.
 
-Their Visible Fields list is 38 entries, 13 of them loaded by default. **28 are
-offered**, 11 of them loaded — the two missing defaults being Prev Bill Consolidated
-Date and Audit Resolution, neither of which has a source. Note their default set starts
-at LOCATION #, with LOCATION NAME offered but not loaded, so this report matches that.
+Their Visible Fields list is 38 entries, 13 of them loaded by default. **29 are
+offered**, 12 of them loaded — the one missing default being Audit Resolution. Note
+their default set starts at LOCATION #, with LOCATION NAME offered but not loaded, so
+this report matches that.
 
-Ten have no source: the two above, Location Address 2, Misc Information, the five
+Nine have no source: Audit Resolution, Location Address 2, Misc Information, the five
 Account address columns and Bill Image — all recorded elsewhere in this file.
+
+**Prev Bill Consolidated Date is reachable after all.** Nothing in the schema is named
+`consolidat*`, but bills are batched for payment: `bill_records.batch_id` is a foreign
+key to `batches.id`, and a batch carries `created_at`, `uploaded_at` and
+`downloaded_at`. The column reads `batches.created_at` for the previous bill's batch.
+**A candidate, not a confirmed mapping** — which of the three dates the client means has
+not been checked against a known bill, though their sample values sit a few days after
+receipt and before due, which fits a batching date. To settle it:
+
+```sql
+SELECT string_agg(x, chr(10) ORDER BY x) AS batch_date_candidates FROM (
+  SELECT br.id || ' | received=' || COALESCE(br.received_on::text, '-')
+      || ' | due='        || COALESCE(br.due_date::date::text, '-')
+      || ' | created='    || COALESCE(b.created_at::date::text, '-')
+      || ' | uploaded='   || COALESCE(b.uploaded_at::date::text, '-')
+      || ' | downloaded=' || COALESCE(b.downloaded_at::date::text, '-') AS x
+  FROM bill_management_v2.bill_records br
+  JOIN bill_management_v2.batches b ON b.id = br.batch_id
+  WHERE br.customer_id = <id> AND br.received_on IS NOT NULL
+  LIMIT 15
+) s;
+```
+
+**Days Until Due is confirmed, not assumed.** Due date minus receipt date reproduces
+**all 59 rows** of their tab exactly, not just the three checked when it was first
+worked out. The formula is settled; what remains uncertain is only whether `received_on`
+holds a real business date on every bill, which the −520 and −355 day cases below put in
+doubt.
 
 Four extras are offered beyond their list: Late Fee Charged, Late Fee Recouped and the
 two percentages. They are decompositions of a column that is on their list, and without
