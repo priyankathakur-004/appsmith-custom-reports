@@ -446,21 +446,33 @@ SELECT string_agg(x, chr(10) ORDER BY x) AS batch_date_candidates FROM (
 **Days Until Due: the formula is right, the input is not.** Due date minus receipt date
 reproduces **all 59 rows** of their tab exactly, so the calculation is settled.
 
-`received_on` is the problem. In a sample of 15 bill records taken 2026-08-13, all 15
-carry the same `received_on` of 2025-11-25 while their due dates spread across three
-weeks, 2025-10-20 to 2025-11-12 — and all 15 were batched on the same day, 2025-12-02.
-**Every one was therefore "received" after it was already due**, and Days Until Due
-would read between −13 and −36.
+`received_on` is the problem, and it is not marginal. Measured across the customer on
+2026-08-13:
 
-Fifteen different bills cannot arrive on one day with due dates a month apart. That is
-an ingest timestamp from a backfill, the same failure already recorded for
-`virtual_accounts.created_at`. For any bill loaded that way Days Until Due is an
-artefact, and the −520 and −355 cases below are the same thing at greater distance.
+| | |
+| --- | --- |
+| Bills with both a receipt and a due date | 21,611 |
+| Distinct `received_on` values among them | **20** |
+| Received *after* they were due | 20,059 — **92.8%** |
+
+Twenty dates for 21,611 bills is about 1,080 bills sharing each one. A sample of 15
+shows the shape: all carry `received_on` of 2025-11-25 while their due dates spread
+across three weeks, and all were batched on 2025-12-02.
+
+A thousand bills cannot arrive on one day with due dates a month apart. This is an
+ingest timestamp from a backfill, the same failure already recorded for
+`virtual_accounts.created_at`, and the −520 and −355 cases below are the same thing at
+greater distance.
+
+**Two of the client's thirteen default columns rest on it** — Prev Bill Receipt Date
+and Days Until Due — plus Receipt Date on Invoice by Date. All three now carry the
+figures in their field description, so anyone reading the column in the app sees why it
+looks wrong.
 
 The column is left in because it is one of the client's defaults and reads correctly
 wherever `received_on` is genuine — the North East Mall row, +6 days, is a real bill
 processed live. **It should not be presented as a measure until the UBM team confirms
-which bills carry a true receipt date.** How widespread it is:
+which bills carry a true receipt date.** The query that produced the figures above:
 
 ```sql
 SELECT count(*) AS bills_with_both,
