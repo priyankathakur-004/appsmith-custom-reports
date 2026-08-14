@@ -75,7 +75,7 @@
     "dynamicBindingPathList": [],
     "name": "AG_Grid_Settings",
     "pageId": "Customer-Report",
-    "runBehaviour": "MANUAL",
+    "runBehaviour": "AUTOMATIC",
     "userSetOnLoad": false
   }
 }
