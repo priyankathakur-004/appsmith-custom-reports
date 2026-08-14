@@ -72,6 +72,7 @@ export default {
 		{ group: "Late fee", value: "prevBillDate", label: "Prev Bill Date", description: "Statement date of the account's previous bill, taken in bill-date order.", sql: "TO_CHAR(lf.prev_bill_date, 'YYYY-MM-DD') AS \"prevBillDate\"" },
 		{ group: "Late fee", value: "prevBillAmount", label: "Prev Bill Amount", description: "Total charged on the account's previous bill.", sql: "lf.prev_bill_amount AS \"prevBillAmount\"" },
 		{ group: "Late fee", value: "prevBillReceiptDate", label: "Prev Bill Receipt Date", description: "Date the previous bill was received. Source: bill_records.received_on for that bill.", sql: "TO_CHAR(pbr.received_on, 'YYYY-MM-DD') AS \"prevBillReceiptDate\"" },
+		{ group: "Late fee", value: "prevBillConsolidatedDate", label: "Prev Bill Consolidated Date", description: "Date the previous bill was consolidated into a payment batch. Source: batches.created_at, reached through bill_records.batch_id. A candidate rather than a confirmed mapping — batches also carries uploaded_at and downloaded_at, and which one the client means has not been checked against a known bill. Blank where the bill was never batched.", sql: "TO_CHAR(pbb.created_at, 'YYYY-MM-DD') AS \"prevBillConsolidatedDate\"" },
 		{ group: "Late fee", value: "prevBillDueDate", label: "Prev Bill Due Date", description: "Date the previous bill was due. Source: bill_records.due_date for that bill.", sql: "TO_CHAR(pbr.due_date, 'YYYY-MM-DD') AS \"prevBillDueDate\"" },
 		{ group: "Late fee", value: "daysUntilDue", label: "Days Until Due", description: "Days between receiving the previous bill and its due date — due date minus receipt date. Negative means it arrived after it was already due, which is the usual reason a late fee follows. Derived; matches the arithmetic on the client's own Late Fees tab.", sql: "(pbr.due_date::date - pbr.received_on::date) AS \"daysUntilDue\"" },
 
@@ -289,7 +290,7 @@ export default {
 					"locationNumber", "vendor", "accountNumber",
 					"billDate", "billAmount", "lateFeeAmount",
 					"prevBillDate", "prevBillAmount", "prevBillReceiptDate",
-					"prevBillDueDate", "daysUntilDue"
+					"prevBillConsolidatedDate", "prevBillDueDate", "daysUntilDue"
 				],
 
 				availableExtra: [
@@ -491,7 +492,7 @@ export default {
 	BILL_RECORD_FIELDS: ["vendorInvoice", "dueDate", "receiptDate"],
 
 	LATE_FEE_FIELDS: ["billDate", "billAmount", "lateFeeAmount", "prevBillDate",
-		"prevBillAmount", "prevBillReceiptDate", "prevBillDueDate", "daysUntilDue",
+		"prevBillAmount", "prevBillReceiptDate", "prevBillDueDate", "daysUntilDue", "prevBillConsolidatedDate",
 		"lateFeeCharged", "lateFeeRecouped", "lateFeePct", "recoupedPct"],
 
 	usesLateFee: () => {
@@ -517,7 +518,8 @@ export default {
 		}
 		if (ReportSpecs.usesLateFee()) {
 			sql += "\n\t\tLEFT JOIN lf_seq lf ON lf.virtual_account_id = amf.virtual_account_id AND lf.bill_id = amf.bill_id"
-				+ "\n\t\tLEFT JOIN bill_management_v2.bill_records pbr ON pbr.id = lf.prev_bill_record_id";
+				+ "\n\t\tLEFT JOIN bill_management_v2.bill_records pbr ON pbr.id = lf.prev_bill_record_id"
+			+ "\n\t\tLEFT JOIN bill_management_v2.batches pbb ON pbb.id = pbr.batch_id";
 		}
 
 		ReportSpecs.accountAttrColumns().forEach(o => {
