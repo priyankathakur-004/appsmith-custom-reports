@@ -2,6 +2,7 @@ WITH cpv_one AS (
   SELECT customer_id, code,
          MIN(name) AS name,
          MIN(remittance_name) AS remittance_name,
+         MIN(main_phone) AS main_phone,
          (ARRAY_AGG(remittance_address))[1] AS remittance_address
   FROM bill_management_v2.customers_providers_vendors
   WHERE customer_id = {{ ReportSpecs.customerIdSql() }}
@@ -11,6 +12,7 @@ pv_one AS (
   SELECT code,
          CASE WHEN COUNT(DISTINCT btrim(name)) = 1 THEN MIN(name) END AS name,
          CASE WHEN COUNT(DISTINCT btrim(remittance_name)) = 1 THEN MIN(remittance_name) END AS remittance_name,
+         CASE WHEN COUNT(DISTINCT btrim(main_phone)) = 1 THEN MIN(main_phone) END AS main_phone,
          CASE WHEN COUNT(*) = 1 THEN (ARRAY_AGG(remittance_address))[1] END AS remittance_address
   FROM bill_management_v2.providers_vendors
   WHERE code IN (SELECT vendor_code FROM bill_management_v2.analytics_monthly_feed
@@ -48,7 +50,8 @@ feed_scoped AS (
 ),
 amf_first AS (
   SELECT va2.account_code, f.location_id, f.vendor_code,
-         MIN(f.time_period) AS first_period
+         MIN(f.time_period) AS first_period,
+         MAX(f.statement_date) AS last_bill_date
   FROM bill_management_v2.analytics_monthly_feed f
   JOIN bill_management_v2.virtual_accounts va2 ON va2.id = f.virtual_account_id
   WHERE f.customer_id = {{ ReportSpecs.customerIdSql() }}
@@ -79,6 +82,35 @@ gl_rows AS (
     AND vmeta.deleted_at IS NULL
     AND vmeta.attribute_name ~* '^gl\s*(code|alloc)'
   GROUP BY 1, 2
+),
+lf_bills AS (
+  SELECT f.virtual_account_id, f.bill_id,
+         MIN(f.bill_record_id)       AS bill_record_id,
+         MIN(f.statement_date)::date AS bill_date,
+         SUM(f.total_charges)        AS bill_amount
+  FROM bill_management_v2.analytics_monthly_feed f
+  WHERE f.customer_id = {{ ReportSpecs.customerIdSql() }}
+  GROUP BY f.virtual_account_id, f.bill_id
+),
+lf_fee AS (
+  SELECT li.virtual_account_id, li.bill_id,
+         SUM(CASE WHEN li.charge > 0 THEN li.charge ELSE 0 END) AS late_fee_charged,
+         SUM(CASE WHEN li.charge < 0 THEN li.charge ELSE 0 END) AS late_fee_recouped,
+         SUM(li.charge)                                         AS late_fee
+  FROM bill_management_v2.analytics_billing_line_items li
+  WHERE li.customer_id = {{ ReportSpecs.customerIdSql() }}
+    AND li.code = 'LATEFEE'
+  GROUP BY li.virtual_account_id, li.bill_id
+),
+lf_seq AS (
+  SELECT b.virtual_account_id, b.bill_id, b.bill_date, b.bill_amount,
+         fee.late_fee, fee.late_fee_charged, fee.late_fee_recouped,
+         LAG(b.bill_date)      OVER w AS prev_bill_date,
+         LAG(b.bill_amount)    OVER w AS prev_bill_amount,
+         LAG(b.bill_record_id) OVER w AS prev_bill_record_id
+  FROM lf_bills b
+  LEFT JOIN lf_fee fee ON fee.virtual_account_id = b.virtual_account_id AND fee.bill_id = b.bill_id
+  WINDOW w AS (PARTITION BY b.virtual_account_id ORDER BY b.bill_date, b.bill_id)
 )
 SELECT {{ ReportSpecs.selectClause() }}
 FROM {{ ReportSpecs.fromClause() }}

@@ -14,9 +14,10 @@ export default {
 		{ group: "Location", value: "locationId", label: "Location ID (internal)", description: "UBM's own database id for the location, e.g. 113614. For the site number that appears on your reports, use Location Number.", sql: "l.id AS \"locationId\"" },
 		{ group: "Location", value: "locationAddress", label: "Location Address", description: "Street address of the location", sql: "l.address AS \"locationAddress\"" },
 		{ group: "Location", value: "locationCity", label: "City", description: "Location city", sql: "l.city AS \"locationCity\"" },
-		{ group: "Location", value: "locationState", label: "State/Province", description: "Location state or province", sql: "l.state AS \"locationState\"" },
-		{ group: "Location", value: "locationCountry", label: "Country", description: "Location country", sql: "l.country AS \"locationCountry\"" },
+		{ group: "Location", value: "locationState", label: "State/Province", description: "Location state or province, written the way the client's reports write it — UBM stores US-AK, this reports AK. The ISO country prefix is dropped where there is one; anything else passes through as stored.", sql: "CASE WHEN l.state ~ '^[A-Za-z]{2}-' THEN substring(l.state from 4) ELSE l.state END AS \"locationState\"" },
+		{ group: "Location", value: "locationCountry", label: "Country", description: "Location country, spelled out the way the client's reports write it — UBM stores US, this reports United States. An unrecognised code passes through as stored.", sql: "CASE upper(btrim(l.country)) WHEN 'US' THEN 'United States' WHEN 'USA' THEN 'United States' WHEN 'CA' THEN 'Canada' WHEN 'CAN' THEN 'Canada' WHEN 'MX' THEN 'Mexico' WHEN 'GB' THEN 'United Kingdom' WHEN 'UK' THEN 'United Kingdom' ELSE l.country END AS \"locationCountry\"" },
 		{ group: "Location", value: "locationZip", label: "Location Zip", description: "Location postal / ZIP code", sql: "l.postcode AS \"locationZip\"" },
+		{ group: "Location", value: "locationPhone", label: "Location Phone", description: "Phone number recorded against the site. Source: location_detail.location_phone — the locations table holds no phone number of its own. Empty for this customer: 0 of 268 sites carry one, measured 2026-08-11, where the client's own Location Detail has a number for most sites. Offered rather than loaded for that reason; it will fill in if UBM ever loads the numbers.", sql: "lt.location_phone AS \"locationPhone\"" },
 
 		{ group: "Location", value: "locationStatus", label: "Location Status", description: "Status of the site. UBM records an open site as Operational; this is reported as Active to match the client's reports. Closed / Inactive / Terminated report as Inactive, and any other value passes through as UBM stores it.", sql: "CASE WHEN lower(btrim(lt.location_status)) IN ('operational','active','open') THEN 'Active' WHEN lower(btrim(lt.location_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' ELSE lt.location_status END AS \"locationStatus\"" },
 		{ group: "Location", value: "buildingType", label: "Building Type", description: "Type or category of location building type.", sql: "l.building_type AS \"buildingType\"" },
@@ -35,12 +36,16 @@ export default {
 		{ group: "Vendor address", value: "vendorState", label: "Vendor State/Province", description: "Vendor's state or province. Source: (remittance_address).state.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).state), ''), NULLIF(btrim((pv.remittance_address).state), '')) AS \"vendorState\"" },
 		{ group: "Vendor address", value: "vendorZip", label: "Vendor Postal Code", description: "Vendor's postal / ZIP code. Source: (remittance_address).post_code.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).post_code), ''), NULLIF(btrim((pv.remittance_address).post_code), '')) AS \"vendorZip\"" },
 		{ group: "Vendor address", value: "vendorCountry", label: "Vendor Country", description: "Vendor's country. Source: (remittance_address).country.", sql: "COALESCE(NULLIF(btrim((cpv.remittance_address).country), ''), NULLIF(btrim((pv.remittance_address).country), '')) AS \"vendorCountry\"" },
+		{ group: "Vendor address", value: "vendorAddress", label: "Vendor Address", description: "The vendor's remittance address on one line — the six address columns joined with commas, blanks skipped. Each part resolves exactly as its own column does, so this reads the same as those columns concatenated.", sql: "NULLIF(concat_ws(', ', NULLIF(btrim(COALESCE((cpv.remittance_address).line_1, (pv.remittance_address).line_1)), ''), NULLIF(btrim(COALESCE((cpv.remittance_address).line_2, (pv.remittance_address).line_2)), ''), NULLIF(btrim(COALESCE((cpv.remittance_address).city, (pv.remittance_address).city)), ''), NULLIF(btrim(COALESCE((cpv.remittance_address).state, (pv.remittance_address).state)), ''), NULLIF(btrim(COALESCE((cpv.remittance_address).post_code, (pv.remittance_address).post_code)), ''), NULLIF(btrim(COALESCE((cpv.remittance_address).country, (pv.remittance_address).country)), '')), '') AS \"vendorAddress\"" },
+		{ group: "Vendor address", value: "vendorPhone", label: "Vendor Phone Business", description: "Vendor's main business phone. Source: main_phone, from the customer's own vendor record where there is one, otherwise the global one — the same priority the vendor name and address use. UBM records no phone extension, so the client's Vendor Phone Extension has no source.", sql: "COALESCE(NULLIF(btrim(cpv.main_phone), ''), NULLIF(btrim(pv.main_phone), '')) AS \"vendorPhone\"" },
 
 		{ group: "Vendor / Account", value: "accountNumber", label: "Account #", description: "Utility account number as it appears on the bill", sql: "va.account_code AS \"accountNumber\"" },
 
 		{ group: "Vendor / Account", value: "accountStatus", label: "Account Status", description: "Status of the utility account itself — not the location's status. Closed / Inactive / Terminated report as Inactive. UBM's other value is Unknown, meaning no closure has been recorded, and it is passed through rather than read as Active: measured against the client's deactivation list, a large share of the accounts they have deactivated still read Unknown here. Treat Unknown as unreported, not as active.", sql: "CASE WHEN lower(btrim(vas.account_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' WHEN lower(btrim(vas.account_status)) IN ('active','open') THEN 'Active' ELSE vas.account_status END AS \"accountStatus\"" },
 
 		{ group: "Vendor / Account", value: "accountCreatedDate", label: "Account Created Date", description: "First month the account was billed — UBM's closest equivalent to the client's FIQ Account Creation Date. UBM holds no account opening date: virtual_accounts.account_opened and virtual_accounts_status.account_opened are both empty, and created_at is the date UBM loaded the record, not the date the account opened.", sql: "TO_CHAR(af.first_period, 'YYYY-MM-DD') AS \"accountCreatedDate\"" },
+
+		{ group: "Vendor / Account", value: "lastBillDate", label: "Date of Last Bill", description: "Statement date of the most recent bill UBM holds for the account. Taken per account number, site and vendor, the same grain as Account Created Date, so an account number billed for several commodities reports one date rather than one per service. Note UBM runs some billing cycles behind the client's own reports, so this will read earlier than theirs.", sql: "TO_CHAR(af.last_bill_date, 'YYYY-MM-DD') AS \"lastBillDate\"" },
 
 		{ group: "Vendor / Account", value: "accountActivityDate", label: "Account Activity Date", description: "Date the account's current status took effect — the deactivation date where the account has one, otherwise the first month it was billed. Source: virtual_accounts_status.account_closed, falling back to the feed because no opening date is recorded.", sql: "TO_CHAR(COALESCE(vas.account_closed, af.first_period), 'YYYY-MM-DD') AS \"accountActivityDate\"" },
 
@@ -53,6 +58,29 @@ export default {
 		{ group: "GL", value: "glAllocation", label: "GL Allocation %", description: "Share of the account allocated to this row's GL code, as a percentage — 51.25 means 51.25%, and an account charged to a single GL reads 100. The scale is UBM's own, unchanged. Note the client's own exports format these cells as percentages, so Excel shows 51.25% while storing 0.5125 — the same number, not a different scale.", sql: "CASE WHEN btrim(glr.gl_allocation) ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN btrim(glr.gl_allocation)::numeric END AS \"glAllocation\"" },
 		{ group: "Vendor / Account", value: "billType", label: "Bill Type", description: "Type or category of bill type.", sql: "amf.bill_type AS \"billType\"" },
 
+		{ group: "Line item", source: "lineItems", value: "serviceDescription", label: "Service Description", description: "What the charge line is, as UBM classifies it — Customer Charge (C), General Usage Charge (C), Late Fee (C). Source: analytics_billing_line_items.description. Note this is UBM's own wording: the client's reports show the vendor's text from the bill (Elec Cust Chrg, G Cust Chrg), which UBM does not keep.", sql: "amf.line_description AS \"serviceDescription\"" },
+		{ group: "Line item", source: "lineItems", value: "serviceAlias", label: "Service Alias", description: "The vendor's own label for the charge line, as printed on the bill — Energy, Fuel, Gross Revenue Tax, Purchased Power. Source: analytics_billing_line_items.value, which despite the column name holds text rather than a number. This is the client's Service Alias column and the values match theirs.", sql: "amf.line_value AS \"serviceAlias\"" },
+		{ group: "Line item", source: "lineItems", value: "lineCode", label: "Charge Code", description: "UBM's code for the charge line — CUSTOMERCHARGE, CHG_CHARGE, LATEFEE. Source: analytics_billing_line_items.code.", sql: "amf.line_code AS \"lineCode\"" },
+		{ group: "Line item", source: "lineItems", value: "lineCategory", label: "Charge Category", description: "Which family the charge falls in — Usage Charges, Customer Charges, Other Charges, Taxes. Source: analytics_billing_line_items.category. This is where the client's Tax and Misc Charges service types live, since UBM does not treat those as commodities.", sql: "amf.line_category AS \"lineCategory\"" },
+		{ group: "Late fee", value: "billDate", label: "Bill Date", description: "Statement date of the bill this row is for. Source: the earliest statement_date on the bill's feed rows. Distinct from the Period group's Statement Date, which is per monthly slice and would split a bill into several rows.", sql: "TO_CHAR(lf.bill_date, 'YYYY-MM-DD') AS \"billDate\"" },
+		{ group: "Late fee", value: "billAmount", label: "Bill Amount", description: "Total charged on the bill. Source: the sum of analytics_monthly_feed.total_charges across the bill's monthly slices, so it is the whole bill rather than one month's share.", sql: "lf.bill_amount AS \"billAmount\"" },
+		{ group: "Late fee", value: "lateFeeAmount", label: "Late Fee Amount", description: "Net late fee on this bill — fees charged less any recouped. Source: analytics_billing_line_items where code is LATEFEE. The main UBM app splits the same three ways; Fee Charged and Fee Recouped are offered separately.", sql: "lf.late_fee AS \"lateFeeAmount\"" },
+		{ group: "Late fee", value: "lateFeeCharged", label: "Late Fee Charged", description: "Late fees charged on this bill, positive lines only, before any recoupment.", sql: "lf.late_fee_charged AS \"lateFeeCharged\"" },
+		{ group: "Late fee", value: "lateFeeRecouped", label: "Late Fee Recouped", description: "Late fees credited back on this bill, negative lines only. Reported separately rather than netted away silently, matching the main UBM app.", sql: "lf.late_fee_recouped AS \"lateFeeRecouped\"" },
+		{ group: "Late fee", value: "lateFeePct", label: "Late Fee % of Charges", description: "Net late fee as a percentage of the bill total — 5 means the fee was 5% of what was billed. Matches the Late fee/charges column on the main UBM app's Bill Health report.", sql: "((lf.late_fee / NULLIF(lf.bill_amount, 0)) * 100) AS \"lateFeePct\"" },
+		{ group: "Late fee", value: "recoupedPct", label: "Recouped % of Late Fees", description: "How much of the fee charged was credited back, as a percentage. 100 means the whole fee was recouped. Matches the Recouped/late fees column on the main UBM app's Bill Health report.", sql: "((ABS(lf.late_fee_recouped) / NULLIF(lf.late_fee_charged, 0)) * 100) AS \"recoupedPct\"" },
+		{ group: "Late fee", value: "prevBillDate", label: "Prev Bill Date", description: "Statement date of the account's previous bill, taken in bill-date order.", sql: "TO_CHAR(lf.prev_bill_date, 'YYYY-MM-DD') AS \"prevBillDate\"" },
+		{ group: "Late fee", value: "prevBillAmount", label: "Prev Bill Amount", description: "Total charged on the account's previous bill.", sql: "lf.prev_bill_amount AS \"prevBillAmount\"" },
+		{ group: "Late fee", value: "prevBillReceiptDate", label: "Prev Bill Receipt Date", description: "Date the previous bill was received. Source: bill_records.received_on for that bill. Not reliable for this customer: 21,611 bills carry only 20 distinct received_on values, about 1,080 sharing each, and 92.8% are dated as received after they were already due. It is a bulk-load stamp on backfilled bills, genuine only on bills processed live. Measured 2026-08-13.", sql: "TO_CHAR(pbr.received_on, 'YYYY-MM-DD') AS \"prevBillReceiptDate\"" },
+		{ group: "Late fee", value: "prevBillConsolidatedDate", label: "Prev Bill Consolidated Date", description: "Date the previous bill was consolidated into a payment batch. Source: batches.created_at, reached through bill_records.batch_id. A candidate rather than a confirmed mapping — batches also carries uploaded_at and downloaded_at, and which one the client means has not been checked against a known bill. Blank where the bill was never batched.", sql: "TO_CHAR(pbb.created_at, 'YYYY-MM-DD') AS \"prevBillConsolidatedDate\"" },
+		{ group: "Late fee", value: "prevBillDueDate", label: "Prev Bill Due Date", description: "Date the previous bill was due. Source: bill_records.due_date for that bill.", sql: "TO_CHAR(pbr.due_date, 'YYYY-MM-DD') AS \"prevBillDueDate\"" },
+		{ group: "Late fee", value: "daysUntilDue", label: "Days Until Due", description: "Days between receiving the previous bill and its due date — due date minus receipt date. The arithmetic is confirmed: it reproduces all 59 rows of the client's own Late Fees tab exactly. But it inherits the receipt date, which is not reliable here. Not reliable for this customer: 21,611 bills carry only 20 distinct received_on values, about 1,080 sharing each, and 92.8% are dated as received after they were already due. It is a bulk-load stamp on backfilled bills, genuine only on bills processed live. Measured 2026-08-13. So the column computes correctly and means nothing wherever that date is a load stamp, which is most of them.", sql: "(pbr.due_date::date - pbr.received_on::date) AS \"daysUntilDue\"" },
+
+		{ group: "Bill record", value: "billId", label: "Engie Insight Bill ID", description: "UBM's own id for the bill behind this row. Source: analytics_monthly_feed.bill_id, no join needed.", sql: "amf.bill_id AS \"billId\"" },
+		{ group: "Bill record", value: "vendorInvoice", label: "Vendor Invoice #", description: "Invoice number as the vendor wrote it. Source: bill_records.invoice_number, joined on the feed's own bill_record_id, so one bill record per row and no row multiplication.", sql: "br.invoice_number AS \"vendorInvoice\"" },
+		{ group: "Bill record", value: "dueDate", label: "Due Date", description: "Date the bill was due. Source: bill_records.due_date.", sql: "TO_CHAR(br.due_date, 'YYYY-MM-DD') AS \"dueDate\"" },
+		{ group: "Bill record", value: "receiptDate", label: "Receipt Date", description: "Date the bill was received. Source: bill_records.received_on. Not reliable for this customer: 21,611 bills carry only 20 distinct received_on values, about 1,080 sharing each, and 92.8% are dated as received after they were already due. It is a bulk-load stamp on backfilled bills, genuine only on bills processed live. Measured 2026-08-13.", sql: "TO_CHAR(br.received_on, 'YYYY-MM-DD') AS \"receiptDate\"" },
+
 		{ group: "Bill", value: "billBeginDate", label: "Begin Date", description: "First day of the bill's service period, as billed. Source: account_history.start_date, which is bill-level — the monthly feed's Service Start is the start of a month's slice of that bill, not the bill itself.", sql: "TO_CHAR(ah.start_date, 'YYYY-MM-DD') AS \"billBeginDate\"" },
 		{ group: "Bill", value: "billEndDate", label: "End Date", description: "Last day of the bill's service period, as billed. Source: account_history.end_date. A bill spanning a month end is one row here and two in the monthly feed.", sql: "TO_CHAR(ah.end_date, 'YYYY-MM-DD') AS \"billEndDate\"" },
 		{ group: "Bill", value: "billServiceCost", label: "Service Cost", description: "Charges for the bill as billed, not spread across the months it covers. Source: account_history.subcharges — UBM's Subcharges family is per bill block, where the Charges family on the monthly feed is pro-rated.", sql: "ah.subcharges AS \"billServiceCost\"" },
@@ -62,6 +90,7 @@ export default {
 
 		{ group: "Usage", value: "uom", label: "Unit of Measure", description: "Unit of measure for consumption (e.g. CCF, KWH)", sql: "amf.total_consumption_uom AS \"uom\"" },
 		{ group: "Usage", value: "totalConsumption", label: "Total Consumption", description: "Total metered consumption", sql: "amf.total_consumption AS \"totalConsumption\"" },
+		{ group: "Usage", value: "usagePerDay", label: "Usage per Day", description: "Total consumption divided by days of service, for this row's slice of the bill. Derived — UBM stores no per-day usage. Blank where days of service is zero.", sql: "(amf.total_consumption / NULLIF(amf.days_of_service, 0)) AS \"usagePerDay\"" },
 		{ group: "Usage", value: "totalGenConsumption", label: "Generation Consumption", description: "On-site generation consumption", sql: "amf.total_gen_consumption AS \"totalGenConsumption\"" },
 		{ group: "Usage", value: "demand", label: "Max Demand", description: "Maximum demand (kW)", sql: "amf.max_demand AS \"demand\"" },
 		{ group: "Usage", value: "cogenConsumption", label: "Cogeneration Consumption", description: "Cogeneration consumption", sql: "amf.total_cogen_consumption AS \"cogenConsumption\"" },
@@ -74,12 +103,13 @@ export default {
 		{ group: "Usage (time of use)", value: "consumptionSuperoffpeak", label: "Consumption (Super-Off-Peak)", description: "Consumption during super-off-peak hours", sql: "amf.total_consumption_superoffpeak AS \"consumptionSuperoffpeak\"" },
 
 		{ group: "Charges", value: "totalCharges", label: "Total Charges", description: "Monetary value for total charges.", sql: "amf.total_charges AS \"totalCharges\"" },
+		{ group: "Charges", value: "costPerDay", label: "Cost per Day", description: "Total charges divided by days of service, for this row's slice of the bill. Derived — UBM stores no per-day cost. Blank where days of service is zero.", sql: "(amf.total_charges / NULLIF(amf.days_of_service, 0)) AS \"costPerDay\"" },
 		{ group: "Charges", value: "totalChargesUsage", label: "Usage Charges", description: "Monetary value for usage charges.", sql: "amf.total_charges_usage AS \"totalChargesUsage\"" },
 		{ group: "Charges", value: "totalChargesConsumption", label: "Consumption Charges", description: "Monetary value for consumption charges.", sql: "amf.total_charges_consumption AS \"totalChargesConsumption\"" },
 		{ group: "Charges", value: "totalChargesDemand", label: "Demand Charges", description: "Monetary value for demand charges.", sql: "amf.total_charges_demand AS \"totalChargesDemand\"" },
 		{ group: "Charges", value: "totalChargesTaxes", label: "Tax Charges", description: "Tax portion of the bill's charges — the column to use for the client's Tax line.", sql: "amf.total_charges_taxes AS \"totalChargesTaxes\"" },
 
-		{ group: "Charges", value: "lateCharges", label: "Late Charges", description: "Late fees on the bill behind this row, net of any recouped fees. A bill covers several report rows, so each row shows its share of the fee rather than the whole amount — the column still adds up correctly.", sql: "((SELECT COALESCE(SUM(li.charge), 0) FROM bill_management_v2.analytics_billing_line_items li WHERE li.bill_id = amf.bill_id AND li.code = 'LATEFEE' AND li.bill_type = 'live') / NULLIF((SELECT COUNT(*) FROM bill_management_v2.analytics_monthly_feed a2 WHERE a2.bill_id = amf.bill_id), 0)) AS \"lateCharges\"" },
+		{ group: "Charges", value: "lateCharges", label: "Late Charges", description: "Late fees on the bill behind this row, net of any recouped fees. Counts every bill_type: this customer's LATEFEE lines are almost all bill_type setup, and none at all are live, so filtering to live returned zero for every row. A bill covers several report rows, so each row shows its share of the fee rather than the whole amount — the column still adds up correctly.", sql: "((SELECT COALESCE(SUM(li.charge), 0) FROM bill_management_v2.analytics_billing_line_items li WHERE li.bill_id = amf.bill_id AND li.code = 'LATEFEE') / NULLIF((SELECT COUNT(*) FROM bill_management_v2.analytics_monthly_feed a2 WHERE a2.bill_id = amf.bill_id), 0)) AS \"lateCharges\"" },
 		{ group: "Charges", value: "totalChargesCustomer", label: "Customer Charges", description: "Monetary value for customer charges.", sql: "amf.total_charges_customer AS \"totalChargesCustomer\"" },
 		{ group: "Charges", value: "totalChargesOther", label: "Other Charges", description: "Charges outside the usage, consumption, demand, tax, customer, generation and commodity buckets — the closest the feed has to a miscellaneous line.", sql: "amf.total_charges_other AS \"totalChargesOther\"" },
 		{ group: "Charges", value: "totalChargesGeneration", label: "Generation Charges", description: "Monetary value for generation charges.", sql: "amf.total_charges_generation AS \"totalChargesGeneration\"" },
@@ -191,6 +221,105 @@ export default {
 				label: "Customer Final Bill",
 				columns: ["vendor", "location", "summaryAccount", "accountNumber"],
 				availableExtra: ["customerName"],
+				filters: {}
+			},
+
+			{
+				value: "locationDetail",
+				label: "Location Detail",
+				columns: [
+					"location", "locationNumber", "locationAddress", "locationCity",
+					"locationState", "locationZip", "locationCountry", "locationStatus"
+				],
+
+				availableExtra: ["locationPhone", "squareFeet", "vendor"],
+				filters: {}
+			},
+
+			{
+				value: "accountServiceList",
+				label: "Account & Service List",
+				columns: [
+					"location", "locationNumber", "locationStatus", "vendor",
+					"accountNumber", "accountStatus", "summaryAccount", "utilityType"
+				],
+
+				availableExtra: [
+					"locationAddress", "locationCity", "locationState", "locationZip",
+					"locationCountry", "locationPhone", "squareFeet",
+					"vendorAddress", "vendorAddress1", "vendorAddress2", "vendorCity",
+					"vendorState", "vendorZip", "vendorCountry", "vendorPhone", "vendorCode",
+					"cleanAccountNumber", "accountCreatedDate", "accountActivityDate",
+					"meterSerial", "lastBillDate"
+				],
+				filters: {}
+			},
+
+			{
+				value: "invoiceByDate",
+				label: "Invoice by Date",
+				dateColumn: "amf.statement_date",
+				columns: [
+					"location", "locationNumber", "vendor", "accountNumber",
+					"month", "statementDate", "startDate", "endDate",
+					"totalCharges", "utilityType", "uom", "totalConsumption"
+				],
+
+				availableExtra: [
+					"billType", "daysOfService", "costPerDay", "usagePerDay", "billQuantity",
+					"vendorAddress1", "vendorAddress2", "vendorCity", "vendorState",
+					"vendorZip", "vendorCountry", "vendorCode", "vendorInvoice",
+					"locationAddress", "locationCity", "locationState", "locationZip",
+					"locationCountry", "locationStatus",
+					"summaryAccount", "cleanAccountNumber", "accountStatus",
+					"accountActivityDate", "meterSerial",
+					"billId", "dueDate", "receiptDate",
+					"glCode", "glAllocation", "demand"
+				],
+				filters: {}
+			},
+
+			{
+				value: "lateFees",
+				label: "Late Fees",
+				grain: "bill",
+				lateFees: true,
+				dateColumn: "amf.statement_date",
+				where: "(COALESCE(lf.late_fee_charged, 0) <> 0 OR COALESCE(lf.late_fee_recouped, 0) <> 0)",
+				columns: [
+					"locationNumber", "vendor", "accountNumber",
+					"billDate", "billAmount", "lateFeeAmount",
+					"prevBillDate", "prevBillAmount", "prevBillReceiptDate",
+					"prevBillConsolidatedDate", "prevBillDueDate", "daysUntilDue"
+				],
+
+				availableExtra: [
+					"location", "locationAddress", "locationCity", "locationState",
+					"locationZip", "locationCountry", "locationStatus",
+					"vendorAddress1", "vendorAddress2", "vendorCity", "vendorState",
+					"vendorZip", "vendorCountry",
+					"cleanAccountNumber", "summaryAccount", "accountStatus", "accountActivityDate",
+					"lateFeeCharged", "lateFeeRecouped", "lateFeePct", "recoupedPct"
+				],
+				filters: {}
+			},
+
+			{
+				value: "invoiceDetail",
+				label: "Invoice Detail",
+				source: "lineItems",
+				dateColumn: "amf.statement_date",
+				columns: [
+					"location", "locationNumber", "vendor", "accountNumber",
+					"month", "statementDate", "startDate", "endDate", "daysOfService",
+					"serviceDescription", "serviceAlias", "utilityType", "uom",
+					"totalConsumption", "totalCharges"
+				],
+
+				availableExtra: [
+					"lineCode", "lineCategory", "locationStatus", "summaryAccount",
+					"cleanAccountNumber", "accountStatus", "vendorCode"
+				],
 				filters: {}
 			},
 
@@ -312,6 +441,8 @@ export default {
 
 	feedKeys: () => {
 		const shown = ReportSpecs.selectedColumns();
+		const gp = ReportSpecs.activePreset();
+		if (gp && gp.grain === "bill") return ["bill_id", "virtual_account_id"];
 		if (ReportSpecs.usesBillLevel()) {
 			return ["bill_id", "virtual_account_id", "utility_type"];
 		}
@@ -324,6 +455,19 @@ export default {
 
 	feedCte: () => {
 		const cid = ReportSpecs.customerIdSql();
+		const lp = ReportSpecs.activePreset();
+		if (lp && lp.source === "lineItems") {
+			return "SELECT li.bill_id, li.bill_record_id, li.virtual_account_id, li.location_id,"
+				+ " li.vendor_code, li.customer_id, li.statement_date, li.bill_type,"
+				+ " li.commodity AS utility_type, li.start_date, li.end_date,"
+				+ " date_trunc('month', li.start_date)::date AS time_period,"
+				+ " (li.end_date - li.start_date + 1) AS days_of_service,"
+				+ " li.charge AS total_charges, li.usage AS total_consumption,"
+				+ " li.uom AS total_consumption_uom, li.description AS line_description,"
+				+ " li.code AS line_code, li.category AS line_category, li.value AS line_value"
+				+ " FROM bill_management_v2.analytics_billing_line_items li"
+				+ ` WHERE li.customer_id = ${cid} AND li.type <> 'U'`;
+		}
 		const src = `FROM bill_management_v2.analytics_monthly_feed WHERE customer_id = ${cid}`;
 		const keys = ReportSpecs.feedKeys();
 		if (!keys) return `SELECT * ${src}`;
@@ -345,6 +489,21 @@ export default {
 	usesGlRows: () =>
 		ReportSpecs.selectedColumns().some(o => ReportSpecs.GL_ROW_FIELDS.indexOf(o.value) >= 0),
 
+	BILL_RECORD_FIELDS: ["vendorInvoice", "dueDate", "receiptDate"],
+
+	LATE_FEE_FIELDS: ["billDate", "billAmount", "lateFeeAmount", "prevBillDate",
+		"prevBillAmount", "prevBillReceiptDate", "prevBillDueDate", "daysUntilDue", "prevBillConsolidatedDate",
+		"lateFeeCharged", "lateFeeRecouped", "lateFeePct", "recoupedPct"],
+
+	usesLateFee: () => {
+		const p = ReportSpecs.activePreset();
+		if (p && p.lateFees) return true;
+		return ReportSpecs.selectedColumns().some(o => ReportSpecs.LATE_FEE_FIELDS.indexOf(o.value) >= 0);
+	},
+
+	usesBillRecord: () =>
+		ReportSpecs.selectedColumns().some(o => ReportSpecs.BILL_RECORD_FIELDS.indexOf(o.value) >= 0),
+
 	fromClause: () => {
 		let sql = ReportSpecs.baseFrom;
 		if (ReportSpecs.usesGlRows()) {
@@ -353,6 +512,14 @@ export default {
 		if (ReportSpecs.usesBillLevel()) {
 			sql += "\n\t\tLEFT JOIN bill_history ah ON ah.bill_id = amf.bill_id AND ah.virtual_account_id = amf.virtual_account_id"
 				+ " AND upper(btrim(ah.commodity)) = upper(btrim(amf.utility_type))";
+		}
+		if (ReportSpecs.usesBillRecord()) {
+			sql += "\n\t\tLEFT JOIN bill_management_v2.bill_records br ON br.id = amf.bill_record_id";
+		}
+		if (ReportSpecs.usesLateFee()) {
+			sql += "\n\t\tLEFT JOIN lf_seq lf ON lf.virtual_account_id = amf.virtual_account_id AND lf.bill_id = amf.bill_id"
+				+ "\n\t\tLEFT JOIN bill_management_v2.bill_records pbr ON pbr.id = lf.prev_bill_record_id"
+			+ "\n\t\tLEFT JOIN bill_management_v2.batches pbb ON pbb.id = pbr.batch_id";
 		}
 
 		ReportSpecs.accountAttrColumns().forEach(o => {
@@ -469,7 +636,9 @@ export default {
 
 		const order = [];
 		const byGroup = {};
+		const activeSource = (ReportSpecs.activePreset() || {}).source || null;
 		ReportSpecs.visibleFieldOptions.forEach(f => {
+			if (f.source && f.source !== activeSource) return;
 			if (!inScope(f.value)) return;
 			const g = f.group || "Other";
 			if (!byGroup[g]) { byGroup[g] = []; order.push(g); }
@@ -569,6 +738,9 @@ export default {
 			if (!excludeField) return false;
 			return Array.isArray(aliases) ? aliases.indexOf(excludeField) >= 0 : aliases === excludeField;
 		};
+
+		const preset = ReportSpecs.activePreset();
+		if (preset && preset.where) parts.push(`AND ${preset.where}`);
 
 		const dateCol = ReportSpecs.dateFilterColumn();
 		if (StartDate && StartDate.selectedDate) {
@@ -874,6 +1046,9 @@ export default {
 		await storeValue("reportsSortModel", "[]");
 		await storeValue("reportsFilterModel", "{}");
 		await storeValue("reportsRefreshKey", (Number(appsmith.store.reportsRefreshKey) || 0) + 1);
+		await Promise.all([runReport.run(), runReportCount.run()]);
+
+		await storeValue("reportsResponseTs", Date.now());
 	},
 
 	columnOptions: () => {
@@ -1056,7 +1231,8 @@ export default {
 
 	textFields: [
 		"locationNumber", "locationZip", "vendorCode", "accountNumber",
-		"cleanAccountNumber", "meterSerial", "vendorZip"
+		"cleanAccountNumber", "meterSerial", "vendorZip", "locationPhone", "vendorPhone",
+		"vendorInvoice", "billId"
 	],
 
 	_utf8: (str) => {
