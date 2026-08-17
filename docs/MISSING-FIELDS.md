@@ -1046,6 +1046,31 @@ bills — 2.85 records each, versions and pages.
 verification, and releasing all of them would move a total from 9.6% of the client's
 figure to about 10%. The eleven missing months were never received.
 
+### What the reports do about it
+
+Rounding is applied at the aggregate: **Cost to two decimal places**, Usage to three
+matching the client's own reports, and the three rates to four — enough to keep an
+electric rate of 0.0869 distinct from 0.09. Before this, pro-rating a one-time charge
+across thirteen feed rows produced a Cost of `80521.12315384616`, which reads as broken
+whatever it means.
+
+Four things in the source data are **not** corrected, deliberately, and instead carry
+warnings in the field descriptions where a reader meets them:
+
+| What it looks like | Why it is left alone |
+| --- | --- |
+| 684,016 CCF of water at one mall — 511 million gallons | The reading's scale is wrong at source. Rescaling by 100 or 748 would be a guess dressed as a fix, and this file exists because guesses have produced wrong finance numbers here before. |
+| 156,141 of electricity with no kWh at all | The charge is real and the reading is absent. Inventing a denominator would be worse than a blank rate. |
+| 369 per CCF of sewer on 7.32 CCF | Correct arithmetic on two autumn months. Suppressing it would hide a real thin-data condition. |
+| Water and Sewer carrying identical usage | Sewer is billed off the water meter, so this is how the utility bills. It is a real reading, not a duplicate to be deleted. |
+
+The last one is the trap worth naming, because it is invisible: **usage is not additive
+across service types.** On about half this customer's sites Water and Sewer carry the
+same reading, so totalling usage counts the same water twice. Engie's own tab blanks
+sewer usage entirely, which is the convention that avoids it. This report keeps the
+figure — it is real, and blanking it on the sites where the two genuinely differ would
+destroy data — and says so on the Usage column instead.
+
 ### What this means for the reports
 
 The Annual Use-Cost reconciliation reads 9.6% of the client's annual cost across the
