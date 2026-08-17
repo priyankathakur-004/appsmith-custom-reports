@@ -88,7 +88,7 @@ export default {
 
 		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Commodity the account is billed for, spelled out the way the client's reports write it — UBM stores NATURALGAS, this reports Natural Gas. Note their reports also use this column for charge categories (Tax, Late Charges, Misc Charges), which UBM does not model as service types at all.", sql: "CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 'Electric' WHEN 'WATER' THEN 'Water' WHEN 'SEWER' THEN 'Sewer' WHEN 'NATURALGAS' THEN 'Natural Gas' WHEN 'FIREPROTECTION' THEN 'Fire Protection' WHEN 'STORMWATER' THEN 'Storm Water' WHEN 'IRRIGATION' THEN 'Irrigation' WHEN 'LIGHTING' THEN 'Lighting' WHEN 'REFUSE' THEN 'Refuse' WHEN 'SOLARPV' THEN 'Solar PV' WHEN 'CHILLEDWATER' THEN 'Chilled Water' WHEN 'PROPANE' THEN 'Propane' ELSE amf.utility_type END AS \"utilityType\"" },
 
-		{ group: "Usage", value: "uom", label: "Unit of Measure", description: "Unit of measure for consumption (e.g. CCF, KWH)", sql: "amf.total_consumption_uom AS \"uom\"" },
+		{ group: "Usage", dimension: true, value: "uom", label: "Unit of Measure", description: "Unit of measure for consumption (e.g. CCF, KWH)", sql: "amf.total_consumption_uom AS \"uom\"" },
 		{ group: "Usage", value: "totalConsumption", label: "Total Consumption", description: "Total metered consumption", sql: "amf.total_consumption AS \"totalConsumption\"" },
 		{ group: "Usage", value: "usagePerDay", label: "Usage per Day", description: "Total consumption divided by days of service, for this row's slice of the bill. Derived — UBM stores no per-day usage. Blank where days of service is zero.", sql: "(amf.total_consumption / NULLIF(amf.days_of_service, 0)) AS \"usagePerDay\"" },
 		{ group: "Usage", value: "totalGenConsumption", label: "Generation Consumption", description: "On-site generation consumption", sql: "amf.total_gen_consumption AS \"totalGenConsumption\"" },
@@ -115,6 +115,12 @@ export default {
 		{ group: "Charges", value: "totalChargesGeneration", label: "Generation Charges", description: "Monetary value for generation charges.", sql: "amf.total_charges_generation AS \"totalChargesGeneration\"" },
 		{ group: "Charges", value: "totalChargesCommodity", label: "Commodity Charges", description: "Monetary value for commodity charges.", sql: "amf.total_charges_commodity AS \"totalChargesCommodity\"" },
 		{ group: "Charges", value: "totalChargesBilledUse", label: "Billed Use Charges", description: "Monetary value for billed usage subcharges.", sql: "amf.total_charges_billeduse AS \"totalChargesBilledUse\"" },
+
+		{ group: "Totals", measure: true, value: "sumCharges", label: "Cost", description: "Total charges added up across every bill in the group. Tax is included, matching the client's own Tax = Include setting. One-time charges are not excluded: the feed carries no one-time-charge flag, and the client runs these reports with One Time Charges = Exclude, so this total reads higher than theirs by whatever those charges come to.", sql: "SUM(amf.total_charges) AS \"sumCharges\"" },
+		{ group: "Totals", measure: true, value: "sumConsumption", label: "Usage", description: "Metered consumption added up across every bill in the group. Only meaningful where the group is one unit of measure — adding kWh to Therms is not a quantity — which is why the summary reports group by Unit of Measure.", sql: "SUM(amf.total_consumption) AS \"sumConsumption\"" },
+		{ group: "Totals", measure: true, value: "costPerUnit", label: "Cost per Unit", description: "The group's total cost divided by its total usage — SUM(charges) / SUM(usage), the blended rate. Not the average of the individual bills' rates, which would weight a small bill the same as a large one. Blank where the group consumed nothing.", sql: "(SUM(amf.total_charges) / NULLIF(SUM(amf.total_consumption), 0)) AS \"costPerUnit\"" },
+		{ group: "Totals", measure: true, value: "costPerSqft", label: "Cost per SqFt", description: "The group's total cost divided by the site's floor area. Source: locations.square_feet, read as a maximum so the figure is right whether or not Square Feet is shown as a column of its own. Blank where UBM holds no area for the site.", sql: "(SUM(amf.total_charges) / NULLIF(MAX(l.square_feet), 0)) AS \"costPerSqft\"" },
+		{ group: "Totals", measure: true, value: "usagePerSqft", label: "Usage per SqFt", description: "The group's total usage divided by the site's floor area, in whatever unit the group is measured in. Same area source as Cost per SqFt.", sql: "(SUM(amf.total_consumption) / NULLIF(MAX(l.square_feet), 0)) AS \"usagePerSqft\"" },
 
 		{ group: "Charges (time of use)", value: "chargesConsumptionOnpeak", label: "Consumption Charges (On-Peak)", description: "Monetary value for onpeak consumption charges.", sql: "amf.total_charges_consumption_onpeak AS \"chargesConsumptionOnpeak\"" },
 		{ group: "Charges (time of use)", value: "chargesConsumptionMidpeak", label: "Consumption Charges (Mid-Peak)", description: "Monetary value for midpeak consumption charges.", sql: "amf.total_charges_consumption_midpeak AS \"chargesConsumptionMidpeak\"" },
@@ -151,6 +157,16 @@ export default {
 			{ attr: "^gl\\s*code", label: "Customer GL Number" },
 			"locationAddress", "billServiceCost", "billBeginDate", "billEndDate", "billQuantity"
 		];
+		const summaryExtra = [
+			"locationAddress", "locationCity", "locationState", "locationZip",
+			"locationCountry", "locationStatus", "squareFeet",
+			"vendor", "vendorCode", "vendorAddress1", "vendorAddress2", "vendorCity",
+			"vendorState", "vendorZip", "vendorCountry",
+			"accountNumber", "summaryAccount", "cleanAccountNumber", "meterSerial",
+			"glCode", "glAllocation",
+			"costPerSqft", "usagePerSqft"
+		];
+
 		const dup = (value, label, service) => ({
 			value: value,
 			label: label,
@@ -323,6 +339,49 @@ export default {
 				filters: {}
 			},
 
+			{
+				value: "annualUseCost",
+				label: "Annual Use-Cost",
+				groupBy: true,
+				columns: [
+					"location", "locationNumber", "utilityType", "uom",
+					"sumConsumption", "sumCharges", "costPerUnit"
+				],
+
+				availableExtra: summaryExtra,
+				filters: {}
+			},
+
+			{
+				value: "useCostTrendline",
+				label: "Use Cost Analysis - Trendline",
+				groupBy: true,
+				columns: [
+					"location", "locationNumber", "month", "sumCharges",
+					"utilityType", "uom", "sumConsumption", "costPerUnit"
+				],
+
+				availableExtra: summaryExtra,
+				filters: {}
+			},
+
+			{
+				value: "indexTrendline",
+				label: "Index Report - Trendline",
+				groupBy: true,
+				columns: [
+					"location", "locationNumber", "squareFeet", "month",
+					"utilityType", "costPerSqft", "usagePerSqft"
+				],
+
+				availableExtra: [
+					"locationAddress", "locationCity", "locationState", "locationZip",
+					"locationCountry", "locationStatus",
+					"uom", "sumCharges", "sumConsumption", "costPerUnit"
+				],
+				filters: {}
+			},
+
 			dup("water", "Water", "^\\s*(water|sewer)\\s*$"),
 			dup("gas", "Gas", "^\\s*(natural\\s*gas|gas)\\s*$"),
 			dup("electric", "Electric", "^\\s*electric(ity)?\\s*$")
@@ -335,6 +394,24 @@ export default {
 		const presets = ReportSpecs.reportPresets();
 		const v = (typeof ReportSelect !== "undefined" && ReportSelect.selectedOptionValue) || "custom";
 		return presets.find(p => p.value === v) || presets[0];
+	},
+
+	aggregates: () => !!(ReportSpecs.activePreset() || {}).groupBy,
+
+	measureFields: () => ReportSpecs.visibleFieldOptions.filter(f => f.measure).map(f => f.value),
+
+	isPerBillFigure: (f) =>
+		!f.measure && !f.dimension && /^(Usage|Charges|Weather)/.test(String(f.group || "")),
+
+	groupByClause: () => {
+		if (!ReportSpecs.aggregates()) return "";
+		const keys = [];
+		ReportSpecs.selectedColumns().forEach((o, i) => {
+			if (!o.measure) keys.push(i + 1);
+		});
+		const having = ReportSpecs._gridClauses(null, true);
+		return (keys.length ? `GROUP BY ${keys.join(", ")}` : "")
+			+ (having.length ? ` HAVING ${having.join(" AND ")}` : "");
 	},
 
 	_attrNames: () => {
@@ -442,6 +519,8 @@ export default {
 	feedKeys: () => {
 		const shown = ReportSpecs.selectedColumns();
 		const gp = ReportSpecs.activePreset();
+
+		if (ReportSpecs.aggregates()) return null;
 		if (gp && gp.grain === "bill") return ["bill_id", "virtual_account_id"];
 		if (ReportSpecs.usesBillLevel()) {
 			return ["bill_id", "virtual_account_id", "utility_type"];
@@ -552,7 +631,9 @@ export default {
 		const picked = (Array.isArray(model) ? model : []).filter(s => s && known.indexOf(s.colId) >= 0);
 		const terms = picked.map(s => `"${s.colId}" ${s.sort === "desc" ? "DESC" : "ASC"}`);
 		const cols = ReportSpecs.selectedColumns();
-		const varies = cols.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")));
+
+		const varies = !ReportSpecs.aggregates()
+			&& cols.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")));
 		if (varies) {
 			return terms.length > 0
 				? `${terms.join(", ")}, ${ReportSpecs.orderByClause}`
@@ -560,7 +641,9 @@ export default {
 		}
 		const seen = {};
 		picked.forEach(s => { seen[s.colId] = true; });
+
 		cols.forEach(o => {
+			if (o.measure) return;
 			if (!seen[o.value]) { seen[o.value] = true; terms.push(`"${o.value}"`); }
 		});
 		return terms.length > 0 ? terms.join(", ") : "1";
@@ -637,8 +720,12 @@ export default {
 		const order = [];
 		const byGroup = {};
 		const activeSource = (ReportSpecs.activePreset() || {}).source || null;
+		const agg = ReportSpecs.aggregates();
 		ReportSpecs.visibleFieldOptions.forEach(f => {
 			if (f.source && f.source !== activeSource) return;
+
+			if (f.measure && !agg) return;
+			if (agg && ReportSpecs.isPerBillFigure(f)) return;
 			if (!inScope(f.value)) return;
 			const g = f.group || "Other";
 			if (!byGroup[g]) { byGroup[g] = []; order.push(g); }
@@ -712,6 +799,8 @@ export default {
 		const varies = cols.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")));
 		const exprs = cols.map(o => o.sql);
 		const sql = exprs.length > 0 ? exprs.join(", ") : "1 AS placeholder";
+
+		if (ReportSpecs.aggregates()) return sql;
 		return varies ? sql : `DISTINCT ${sql}`;
 	},
 
@@ -843,8 +932,15 @@ export default {
 		}
 
 		if (!includeGrid) return parts.join(" ");
+		ReportSpecs._gridClauses(excludeField, false).forEach(c => parts.push("AND " + c));
+
+		return parts.join(" ");
+	},
+
+	_gridClauses: (excludeField, wantMeasures) => {
 		let gridModel = {};
 		try { gridModel = JSON.parse(appsmith.store.reportsFilterModel || "{}"); } catch (e) { gridModel = {}; }
+		const isMeasure = (field) => ReportSpecs.measureFields().indexOf(field) >= 0;
 		const rawExpr = (fieldValue) => {
 			const o = ReportSpecs.allFieldOptions().find(x => x.value === fieldValue);
 			if (!o) return null;
@@ -908,15 +1004,16 @@ export default {
 			}
 			return oneCond(expr, f);
 		};
+		const out = [];
 		Object.keys(gridModel || {}).forEach(field => {
 			if (field === excludeField) return;
+			if (isMeasure(field) !== !!wantMeasures) return;
 			const expr = rawExpr(field);
 			if (!expr) return;
 			const clause = buildCond(expr, gridModel[field]);
-			if (clause) parts.push("AND " + clause);
+			if (clause) out.push(clause);
 		});
-
-		return parts.join(" ");
+		return out;
 	},
 
 	fetchPage: async () => {

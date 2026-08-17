@@ -775,6 +775,224 @@ invoice our row count lands at roughly double theirs. That shape is the bill-gra
 one the DUP presets already have, and would be a different report rather than a fix
 to this one.
 
+## The five summary reports need aggregation, not subtotals
+
+Scoped 2026-08-17 from the client's own tabs. The working description of these five was
+"grouping and subtotals" — a grouped report with detail rows and a subtotal line under
+each group. **None of them is that shape.** Every one is a flat table of one row per
+group, with no detail rows underneath and no subtotal line anywhere:
+
+| Report | One row per | Figures |
+| --- | --- | --- |
+| Annual Use-Cost | site, service type, unit | usage, cost, cost per unit |
+| Use Cost Analysis – Trendline | site, month, service type, unit | usage, cost, cost per unit |
+| Index Report – Trendline | site, sq ft, month, service type | cost per sq ft, usage per sq ft |
+| Use Cost Analysis – Year over Year | site, service type, unit, calendar month | the same three, pivoted across two years, plus % variance |
+| Index Report – Year over Year | site, sq ft, service type, calendar month | the same two, pivoted across two years, plus % variance |
+
+So the feature is `GROUP BY` with `SUM`, and three of the five need nothing beyond it.
+The two Year over Year reports need one more thing on top — a pivot that puts each year
+in its own column.
+
+**Three are built: Annual Use-Cost, Use Cost Analysis – Trendline, Index Report –
+Trendline.** A preset carrying `groupBy: true` groups on every column it shows that is
+not a total. Five totals were added — Cost, Usage, Cost per Unit, Cost per SqFt, Usage
+per SqFt — and they are the only fields offered on a grouped report, alongside the
+existing dimensions. Six things had to change around them, and each is a way the report
+could have been quietly wrong rather than broken:
+
+- **The feed must not be deduplicated first.** `feedCte()` normally emits `DISTINCT ON
+  (virtual_account_id, …)` when no per-month column is shown. A summary shows no
+  per-month column, so without an exception it would have summed one month per account.
+  That reads as a plausible number, not an error.
+- **Ratios are computed after the sum, not averaged.** Cost per Unit is
+  `SUM(charges) / SUM(usage)` — the blended rate. Averaging the per-bill rates would
+  weight a $12 bill the same as a $12,000 one.
+- **`GROUP BY` is written by ordinal.** Several column expressions are long `CASE`
+  blocks; repeating them verbatim in the `GROUP BY` is one transcription slip away from
+  a report that regroups on something else and still returns rows.
+- **Grid filters on a total go to `HAVING`.** `SUM(...) > 1000` in a `WHERE` is a
+  Postgres error, so a user filtering the Cost column would have broken the report.
+- **`ORDER BY` falls back to the report's own aliases.** The usual
+  `l.id, amf.time_period` fallback names columns that are not grouping keys.
+- **Per-bill figures are hidden from the picker.** Ticking Total Charges beside the
+  totals would make it a grouping key and split the summary back into the rows the
+  totals had just collapsed. Unit of Measure is the exception — it sits in the Usage
+  group but is a label, and the reports group on it.
+
+**Unit of Measure is a grouping key on purpose.** Without it a site billed in two units
+would have kWh added to Therms under one Usage figure. Whether that ever happens here is
+not known and is worth measuring — the query is below.
+
+### What will not reconcile against their tabs, and why
+
+**One Time Charges are excluded on all five of their reports and cannot be excluded on
+ours.** Every one of the five tabs is run with `One Time Charges = Exclude`, and there
+is no one-time-charge flag anywhere on the feed — `total_charges_other` is the nearest
+column and it is a charge bucket, not a marker. So our Cost reads high by whatever those
+charges come to, on every row of every one of these reports. This is the same shape as
+the Tax question already recorded for Invoice by Date, and it is the first thing to put
+to Engie: **which line items count as one-time charges, and can UBM identify them.**
+Until that is answered these totals should not be compared to theirs figure for figure.
+
+Two of their settings do line up and need no work: `Tax = Include` matches, since
+`total_charges` includes tax; `Normalization Type = Actual` matches, since the feed is
+actual. `Billing Complete = All` means no filter at all.
+
+The rest is the coverage already recorded in this file — the summary pseudo-sites they
+report on and UBM does not have, and the per-site staleness. Their Annual Use-Cost
+covers April 2025 to March 2026 and their trendlines December 2025 to March 2026, so
+site 0115, which stops at 2025-10-16, contributes nothing to any of them.
+
+### The Year over Year pivot, and the one decision it needs
+
+Both YOY reports put a year in each column heading — `2025`, `2026`, `% VARIANCE` — and
+column names taken from data are the one thing this builder cannot do: the grid, the
+sort model and the export all read a fixed column list from `selectedColumns()`.
+
+The way through is relative naming rather than dynamic columns: **Prior Year**, **This
+Year**, **% Variance**, with the year taken from the report's To-month filter and the
+figures built as `SUM(...) FILTER (WHERE year = …)`. The column list stays static, so
+grid, filter, sort and export need no change at all, and the header can carry the actual
+year through the rename mechanism already in the app.
+
+That reproduces both tabs as their Visible Fields lists specify them — one year pair,
+three columns per measure. Worth noting before it is built: **their rendered Use Cost
+YOY tab shows two pairs** (2024/2025 beside 2025/2026) where its own field list shows
+one, and their Index YOY tab shows one. The field list is the specification, so one pair
+is what to build, but the discrepancy is worth putting to them in the same message as
+the one-time-charges question.
+
+## Saving Detail cannot be built
+
+Checked against the schema on 2026-08-17. **UBM holds no savings data of any kind.**
+Not an unmapped column — nothing. No relation and no column anywhere in the schema
+contains `saving`, `avoided`, `recovered`, `waived`, `benefit` or `opportunity`:
+
+```
+cut -d'|' -f1 docs/ubm-columns.txt | grep -iE "saving|avoid|recover|waiv|benefit"   → nothing
+grep -ioE "[a-z_]*(saving|recovered|waived|avoided)[a-z_]*" docs/ubm-columns.txt    → nothing
+```
+
+Their tab makes plain why. Savings Category is `Recovered` / `Preventative`, Savings Type
+is `Late Fee Waived` / `Fee Waived` / `Regulated Rate Change`, and Amount is what ENGIE
+Impact saved the client by doing something. Engie's own description says as much —
+"the savings gained through services provided by ENGIE Impact". It is a record of their
+service, not of the bills, and UBM holds the bills.
+
+Six of its eleven columns — location name, number and country, vendor name, account
+number, service type — are mapped elsewhere in the app, but there are no savings rows to
+hang them on. Five have no source at all: Savings Period, Savings Category, Savings Type,
+Service Category, Amount.
+
+This one is not a gap to close. If the client needs it, the data has to come from Engie.
+
+## Account Exceptions – Days to Complete cannot be built either
+
+This was the one of the seven that might have been a row lister and buildable today. It
+is a row lister — its Visible Fields are Exception ID, Account Exception Status, Number
+of Days, Account #, Location Name, Start Date and End Date, one row per exception — but
+the object it lists does not exist in UBM.
+
+**There are no account exceptions in the schema.** One relation carries the word:
+`customers_exceptions`, a view whose columns are `items_count, customer_id,
+service_address, account_code, pretty_name, vendor_code, service_zip,
+virtual_account_id, meter_serial, search, client_account, commodity, bill_type,
+provider_vendor_ids, provider_vendors`. That is an account list with a count on it. No
+exception id, no type, no status, no start or end date, no approver, no notes — none of
+the seven columns the report shows except Account #.
+
+**`bill_errors` is the nearest object and it is a different thing.** It carries
+`category, severity, message, validation_check_id, bill_record_id, resolved, created_at`
+— a validation error raised against one bill, with a boolean for whether it was dealt
+with. Resolution is recorded separately in `resolved_errors`, keyed on `bill_meta_id`
+and `validation_check_id` rather than on the error's own id. So it is bill grain where
+the report is account grain, it has no exception type to filter on, no status beyond
+resolved/not, no approver and no completion date. Days to Complete could be forced out
+of `resolved_errors.created_at − bill_errors.created_at`, but it would be days to
+resolve a bill validation error, which is not what the column means.
+
+**The client's own report does not run either.** Their tab says so in the first cell:
+"There are no sample reports for these, the reports would not run without an Account
+Exception Type filter selection, but there were no options to select in the filter."
+So Engie's system holds no exception types for this customer, and there is nothing to
+reconcile against even if UBM did hold the data.
+
+Two things worth confirming with a query before this is reported as closed — whether
+`customers_exceptions` returns anything for this customer, and whether `bill_errors`
+does. Both are below.
+
+## Queries for the summary reports
+
+Five, all for this customer. The first three decide whether the built reports read
+correctly; the last two close out Account Exceptions.
+
+**1. Does a site and service type ever carry more than one unit of measure?** If it does,
+the summary reports split those rows by unit — correct, but it will look like duplication
+to anyone reading it, and it is worth being able to say how often it happens.
+
+```sql
+WITH per_group AS (
+  SELECT amf.location_id, amf.utility_type,
+         count(DISTINCT amf.total_consumption_uom) AS units,
+         string_agg(DISTINCT amf.total_consumption_uom, ' / ' ORDER BY amf.total_consumption_uom) AS list
+  FROM bill_management_v2.analytics_monthly_feed amf
+  WHERE amf.customer_id = <id> AND amf.total_consumption_uom IS NOT NULL
+  GROUP BY amf.location_id, amf.utility_type
+)
+SELECT count(*) AS site_service_pairs,
+       count(*) FILTER (WHERE units > 1) AS with_several_units,
+       string_agg(DISTINCT list, ', ') FILTER (WHERE units > 1) AS which
+FROM per_group;
+```
+
+**2. How many sites have a floor area?** Both Index reports divide by it, and a site with
+no area reports blank on every row. Their own tab has an area for every site shown.
+
+```sql
+SELECT count(*) AS sites,
+       count(*) FILTER (WHERE l.square_feet IS NOT NULL AND l.square_feet > 0) AS with_area,
+       min(l.square_feet) AS smallest, max(l.square_feet) AS largest
+FROM bill_management_v2.locations l
+WHERE l.id IN (SELECT DISTINCT location_id FROM bill_management_v2.analytics_monthly_feed
+               WHERE customer_id = <id>);
+```
+
+**3. Is there anything that identifies a one-time charge?** This is the blocking question
+above. If a line-item category or code separates them, the totals can be made to match
+Engie's; if not, the difference has to be explained to the client instead.
+
+```sql
+SELECT string_agg(x, chr(10) ORDER BY x) AS line_item_shape FROM (
+  SELECT li.category || ' | ' || li.type || ' | ' || li.code
+      || ' | lines=' || count(*)
+      || ' | charge=' || round(sum(li.charge), 2) AS x
+  FROM bill_management_v2.analytics_billing_line_items li
+  WHERE li.customer_id = <id>
+  GROUP BY li.category, li.type, li.code
+  HAVING count(*) > 50
+) s;
+```
+
+**4 and 5. Account exceptions — confirm there is nothing there.** Expect zero from the
+first; whatever the second returns is bill validation errors, not account exceptions.
+
+```sql
+SELECT count(*) AS exception_rows, sum(items_count) AS items
+FROM bill_management_v2.customers_exceptions
+WHERE customer_id = <id>;
+```
+
+```sql
+SELECT count(*) AS bill_errors,
+       count(*) FILTER (WHERE be.resolved) AS resolved,
+       count(DISTINCT be.category) AS categories,
+       string_agg(DISTINCT be.category, ', ') AS which
+FROM bill_management_v2.bill_errors be
+JOIN bill_management_v2.bill_records br ON br.id = be.bill_record_id
+WHERE br.customer_id = <id>;
+```
+
 ## Also found
 
 `location_detail` carries `location_division`, `location_top_group`,

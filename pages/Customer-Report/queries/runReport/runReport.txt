@@ -115,6 +115,7 @@ lf_seq AS (
 SELECT {{ ReportSpecs.selectClause() }}
 FROM {{ ReportSpecs.fromClause() }}
 {{ ReportSpecs.filterClauses() }}
+{{ ReportSpecs.groupByClause() }}
 ORDER BY {{ ReportSpecs.orderBy() }}
 LIMIT {{ Math.max(1, (appsmith.store.reportsPageEnd || 100) - (appsmith.store.reportsPageStart || 0)) }}
 OFFSET {{ Math.max(0, appsmith.store.reportsPageStart || 0) }};

@@ -117,4 +117,5 @@ FROM (
   SELECT {{ ReportSpecs.selectClause() }}
   FROM {{ ReportSpecs.fromClause() }}
   {{ ReportSpecs.filterClauses() }}
+  {{ ReportSpecs.groupByClause() }}
 ) t;
