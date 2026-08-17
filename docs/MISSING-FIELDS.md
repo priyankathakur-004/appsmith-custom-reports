@@ -879,11 +879,25 @@ toggle nets the six non-recurring codes only, held in `ReportSpecs.ONE_TIME_CODE
 `OTH_ADJUSTMENT` — 21.6% of the category.
 
 Reaching them means leaving the feed after all, since `total_charges_other` is category
-grain and the codes are not. Two CTEs do it: `otc_bill` sums the one-time codes per
-bill, `otc_rows` counts the bill's feed rows, and each row nets its pro-rated share —
-the same shape the `lateCharges` field already uses, because the feed splits one bill
-across the months it covers and subtracting the whole bill from each month would
-over-net it.
+grain and the codes are not. Two CTEs do it: `otc_bill` sums the one-time codes per bill
+**and commodity**, `otc_rows` counts that bill and commodity's feed rows, and each row
+nets its pro-rated share — the shape the `lateCharges` field already uses, because the
+feed splits one bill across the months it covers and subtracting the whole bill from each
+month would over-net it.
+
+**Per commodity, not per bill, and that distinction is load-bearing.** Pro-rating is only
+exact when every one of a bill's feed rows lands in the same report group, and these
+reports group by service type. Measured 2026-08-17: of 1,880 bills carrying a one-time
+code, **415 — 22% — span more than one commodity**. Keyed per bill alone, a combined
+water-and-sewer invoice would net only the share sitting on the rows the group happens to
+cover, leaving the row too high by the rest, with no error to show for it. Keyed per bill
+and commodity, each service nets its own fees.
+
+Six of the 1,880 span more than one **site**, which the same argument would say to key on
+as well. It is left out: 0.3% of bills, against the risk that a line item whose
+`location_id` disagrees with the feed's would join to nothing and net nothing at all — a
+silent under-net being exactly what this change set out to fix. Worth revisiting if a
+per-site figure is ever queried.
 
 **`LATEFEE` is deliberately left in.** It sits in the same category and is arguably a
 one-time charge, but this app treats late fees as a first-class thing with their own

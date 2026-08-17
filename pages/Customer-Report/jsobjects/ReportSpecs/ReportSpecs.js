@@ -601,8 +601,8 @@ export default {
 			sql += "\n\t\tLEFT JOIN bill_management_v2.bill_records br ON br.id = amf.bill_record_id";
 		}
 		if (ReportSpecs.excludeOtc()) {
-			sql += "\n\t\tLEFT JOIN otc_bill ob ON ob.bill_id = amf.bill_id"
-				+ "\n\t\tLEFT JOIN otc_rows obn ON obn.bill_id = amf.bill_id";
+			sql += "\n\t\tLEFT JOIN otc_bill ob ON ob.bill_id = amf.bill_id AND ob.commodity = upper(btrim(amf.utility_type))"
+				+ "\n\t\tLEFT JOIN otc_rows obn ON obn.bill_id = amf.bill_id AND obn.commodity = upper(btrim(amf.utility_type))";
 		}
 		if (ReportSpecs.usesLateFee()) {
 			sql += "\n\t\tLEFT JOIN lf_seq lf ON lf.virtual_account_id = amf.virtual_account_id AND lf.bill_id = amf.bill_id"
