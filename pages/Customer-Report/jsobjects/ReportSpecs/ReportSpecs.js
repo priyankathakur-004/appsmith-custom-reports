@@ -347,8 +347,6 @@ export default {
 					"location", "locationNumber", "utilityType", "uom",
 					"sumConsumption", "sumCharges", "costPerUnit"
 				],
-
-				availableExtra: summaryExtra,
 				filters: {}
 			},
 
