@@ -842,12 +842,26 @@ one account, 2026-08-17:
 So an excluding cost is `SUM(total_charges) - COALESCE(SUM(total_charges_other), 0)` —
 feed arithmetic, no line-item join, no grain change, no new CTE.
 
+**It is built as a toggle, not a column**, because that is what Engie's report is: a
+filter, not a field. `Exclude one-time charges` sits beside Reset and Run, off by
+default, and shows only on the grouped reports where a total exists to net. Ticking it
+swaps Cost, Cost per Unit and Cost per SqFt to the net expression, so the *ratio* is
+corrected too rather than a net total sitting over a gross rate. The aliases do not
+change, so the grid, the sort model and the export see the same columns either way.
+
+**Measured across the portfolio, 2026-08-17: Other Charges is 4.4% of cost** — 943,338
+of 21,597,919 over 5,990 bills for April 2025 to March 2026. That is small in total and
+badly concentrated: a single fee line on one irrigation account was 16,926, which is
+1.8% of the whole year's Other Charges in one row. So the exclusion barely moves a
+portfolio figure and decides individual rows outright, which is the argument for having
+it in the app rather than in a footnote.
+
 One caveat before this is treated as equivalent to their filter. `Other Charges` also
 holds passthrough lines, which recur — the same bill carried a `OTH_PASSTHROUGH` of
 23.09 beside the 16,926.00 `OTH_FEE`. Excluding the whole category may exclude a little
-more than Engie does. The question for them is narrow now, and worth asking in these
-words: **does One Time Charges = Exclude drop the whole Other Charges family, or only
-fee-type lines?**
+more than Engie does, though at 4.4% overall the margin is narrow. The question for them
+is narrow now too, and worth asking in these words: **does One Time Charges = Exclude
+drop the whole Other Charges family, or only fee-type lines?**
 
 Two of their settings do line up and need no work: `Tax = Include` matches, since
 
