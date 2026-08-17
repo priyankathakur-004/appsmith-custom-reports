@@ -1090,6 +1090,32 @@ Two things follow:
 Nothing in this app can close the gap. The question for Engie and the UBM team is why
 only one cycle has been received, and it is now specific enough to answer.
 
+## The To Month picker was capped at 31 days
+
+Found 2026-08-17 from a Use Cost Analysis run filtered to December 2025 that returned
+December through May. Every row was on or after the From month and none was bounded
+above, which is the signature of only one half of the range reaching the SQL.
+
+`EndDate.maxDate` was bound to `moment(StartDate.selectedDate).add(31, 'days')`, so the
+To picker would not accept a date more than about a month after the From date. A value
+outside that range leaves `selectedDate` empty while the field still shows the typed
+text, and `filterClauses()` emits the `>=` bound alone — a half-open range that reads as
+a working filter.
+
+The cap dates from the widget's creation, when this app listed a month of invoices at a
+time. It has been wrong since the first report that spans a year. **Any earlier run
+described as April 2025 to March 2026 was in practice April 2025 onwards**, so it may
+have included months after March 2026. For this customer the feed holds almost nothing
+outside October 2025, so the reconciliation figures above are unaffected in substance —
+but the window they were run over was not the window intended.
+
+`maxDate` is now the same far-future constant `StartDate` uses. `minDate` still tracks
+the From date, so To cannot precede From, which is the only constraint worth enforcing.
+
+**And the status line now says when a period is half-open**, because that is what made
+this invisible: a report with one bound set reads exactly like a report with two. It now
+appends *only From Month is set, so this is every month after it, not a period*.
+
 ## Saving Detail cannot be built
 
 Checked against the schema on 2026-08-17. **UBM holds no savings data of any kind.**

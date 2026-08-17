@@ -1193,6 +1193,13 @@ export default {
 		const missing = ReportSpecs.presetMissing();
 		const warn = missing.length ? ` · ⚠️ this customer has no ${missing.join(" / ")} attribute` : "";
 
+		const bounds = [];
+		if (typeof StartDate !== "undefined" && StartDate && StartDate.selectedDate) bounds.push("From");
+		if (typeof EndDate !== "undefined" && EndDate && EndDate.selectedDate) bounds.push("To");
+		const halfOpen = bounds.length === 1
+			? ` · ⚠️ only ${bounds[0]} Month is set, so this is every month ${bounds[0] === "From" ? "after" : "before"} it, not a period`
+			: "";
+
 		const total = ReportSpecs.totalRows();
 		if (total == null) {
 			const chosen = String((CustomerSelect && CustomerSelect.selectedOptionValue) || "").trim();
@@ -1200,7 +1207,7 @@ export default {
 				? `${name}Pick a customer, then click Run${warn}`
 				: `${name}No data loaded — click Run to fetch${warn}`;
 		}
-		if (total > 0) return `${name}${total.toLocaleString()} total rows${warn}`;
+		if (total > 0) return `${name}${total.toLocaleString()} total rows${halfOpen}${warn}`;
 
 		const code = String((CustomerSelect && CustomerSelect.selectedOptionValue) || "").trim();
 		if (code === "") {

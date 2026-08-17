@@ -14,9 +14,6 @@
       "key": "minDate"
     },
     {
-      "key": "maxDate"
-    },
-    {
       "key": "borderRadius"
     }
   ],
@@ -27,9 +24,6 @@
     },
     {
       "key": "minDate"
-    },
-    {
-      "key": "maxDate"
     }
   ],
   "dynamicTriggerPathList": [
@@ -53,7 +47,7 @@
   "labelTextSize": "0.875rem",
   "labelWidth": 5,
   "leftColumn": 13,
-  "maxDate": "{{ StartDate.selectedDate ? moment(StartDate.selectedDate).add(31, 'days').toISOString() : '2121-12-31T18:29:00.000Z' }}",
+  "maxDate": "2121-12-31T18:29:00.000Z",
   "maxDynamicHeight": 9000,
   "minDate": "{{ StartDate.selectedDate ? moment(StartDate.selectedDate).toISOString() : '1920-12-31T18:30:00.000Z' }}",
   "minDynamicHeight": 4,
