@@ -83,6 +83,19 @@ gl_rows AS (
     AND vmeta.attribute_name ~* '^gl\s*(code|alloc)'
   GROUP BY 1, 2
 ),
+otc_bill AS (
+  SELECT li.bill_id, SUM(li.charge) AS otc
+  FROM bill_management_v2.analytics_billing_line_items li
+  WHERE li.customer_id = {{ ReportSpecs.customerIdSql() }}
+    AND li.code IN ({{ ReportSpecs.oneTimeCodesSql() }})
+  GROUP BY li.bill_id
+),
+otc_rows AS (
+  SELECT f.bill_id, COUNT(*) AS feed_rows
+  FROM bill_management_v2.analytics_monthly_feed f
+  WHERE f.customer_id = {{ ReportSpecs.customerIdSql() }}
+  GROUP BY f.bill_id
+),
 lf_bills AS (
   SELECT f.virtual_account_id, f.bill_id,
          MIN(f.bill_record_id)       AS bill_record_id,

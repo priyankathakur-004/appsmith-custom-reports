@@ -845,23 +845,55 @@ feed arithmetic, no line-item join, no grain change, no new CTE.
 **It is built as a toggle, not a column**, because that is what Engie's report is: a
 filter, not a field. `Exclude one-time charges` sits beside Reset and Run, off by
 default, and shows only on the grouped reports where a total exists to net. Ticking it
-swaps Cost, Cost per Unit and Cost per SqFt to the net expression, so the *ratio* is
-corrected too rather than a net total sitting over a gross rate. The aliases do not
-change, so the grid, the sort model and the export see the same columns either way.
+swaps Cost, Cost per Unit and Cost per SqFt, so the *ratio* is corrected too rather than
+a net total sitting over a gross rate. The aliases do not change, so the grid, the sort
+model and the export see the same columns either way.
 
-**Measured across the portfolio, 2026-08-17: Other Charges is 4.4% of cost** — 943,338
-of 21,597,919 over 5,990 bills for April 2025 to March 2026. That is small in total and
-badly concentrated: a single fee line on one irrigation account was 16,926, which is
-1.8% of the whole year's Other Charges in one row. So the exclusion barely moves a
-portfolio figure and decides individual rows outright, which is the argument for having
-it in the app rather than in a footnote.
+**It nets specific charge codes, not the whole Other Charges category.** A first cut
+netted `total_charges_other`, which is wrong, and the run that proved it is worth
+keeping: whole service types went to zero — Storm Water at site 1325 from 14,579.99 to
+nothing, Fire Protection at 3632 from 3,947.36 to nothing — and several rows went *up*,
+0511 Electric by 11,453.66, because credits are booked in the same bucket. Broken down
+by code over April 2025 to March 2026, **78.4% of Other Charges is recurring**:
 
-One caveat before this is treated as equivalent to their filter. `Other Charges` also
-holds passthrough lines, which recur — the same bill carried a `OTH_PASSTHROUGH` of
-23.09 beside the 16,926.00 `OTH_FEE`. Excluding the whole category may exclude a little
-more than Engie does, though at 4.4% overall the margin is narrow. The question for them
-is narrow now too, and worth asking in these words: **does One Time Charges = Exclude
-drop the whole Other Charges family, or only fee-type lines?**
+| Code | Description | Charge | Share |
+| --- | --- | ---: | ---: |
+| `CHG_FACILITYCHARGE` | Facility Charge | 640,065.38 | 41.9% |
+| `OTH_RIDERFEE` | Rider Fee | 380,595.57 | 24.9% |
+| `OTH_FEE` | Fee | 337,281.27 | 22.1% |
+| `OTH_PASSTHROUGH` | Passthrough Charge | 133,456.09 | 8.7% |
+| `OTH_METERRENTAL` | Meter Charge | 85,726.33 | 5.6% |
+| `LATEFEE` | Late Fee | 12,510.42 | 0.8% |
+| `OTH_PENALTY` | Penalty | 491.88 | 0.0% |
+| `OTH_CHARGE` | Service Availability | −41,852.34 | −2.7% |
+| `OTH_DEPOSIT` | Deposit | −9,897.94 | −0.6% |
+| `OTH_ADJUSTMENT` | Adjustment | −9,065.14 | −0.6% |
+| `OTH_CORR_CHARGE` | Corrections | −1,553.32 | −0.1% |
+| `CHG_CHARGE` | Account Level Charge | −431.69 | −0.0% |
+| `OTH_DEPOSITINT` | Deposit Interest | −238.79 | −0.0% |
+
+A facility charge and a rate rider are on every bill. Netting them off is not excluding
+one-time charges, it is deleting two thirds of the fixed cost of running a site. So the
+toggle nets the six non-recurring codes only, held in `ReportSpecs.ONE_TIME_CODES`:
+`OTH_FEE`, `OTH_PENALTY`, `OTH_DEPOSIT`, `OTH_DEPOSITINT`, `OTH_CORR_CHARGE`,
+`OTH_ADJUSTMENT` — 21.6% of the category.
+
+Reaching them means leaving the feed after all, since `total_charges_other` is category
+grain and the codes are not. Two CTEs do it: `otc_bill` sums the one-time codes per
+bill, `otc_rows` counts the bill's feed rows, and each row nets its pro-rated share —
+the same shape the `lateCharges` field already uses, because the feed splits one bill
+across the months it covers and subtracting the whole bill from each month would
+over-net it.
+
+**`LATEFEE` is deliberately left in.** It sits in the same category and is arguably a
+one-time charge, but this app treats late fees as a first-class thing with their own
+report, and netting them out of Cost would put the summary reports at odds with the Late
+Fees tab. It is 0.8% of the category. Worth a decision rather than a default.
+
+The question for Engie is now a short list rather than a concept: **which of these
+thirteen codes does One Time Charges = Exclude remove?** The six above are this app's
+answer, and the two large recurring ones — Facility Charge and Rider Fee — are the ones
+that would move the numbers most if they disagree.
 
 Two of their settings do line up and need no work: `Tax = Include` matches, since
 

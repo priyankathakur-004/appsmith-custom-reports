@@ -116,10 +116,10 @@ export default {
 		{ group: "Charges", value: "totalChargesCommodity", label: "Commodity Charges", description: "Monetary value for commodity charges.", sql: "amf.total_charges_commodity AS \"totalChargesCommodity\"" },
 		{ group: "Charges", value: "totalChargesBilledUse", label: "Billed Use Charges", description: "Monetary value for billed usage subcharges.", sql: "amf.total_charges_billeduse AS \"totalChargesBilledUse\"" },
 
-		{ group: "Totals", measure: true, value: "sumCharges", label: "Cost", description: "Total charges added up across every bill in the group. Tax is included, matching the client's own Tax = Include setting. One-time charges are not excluded: the feed carries no one-time-charge flag, and the client runs these reports with One Time Charges = Exclude, so this total reads higher than theirs by whatever those charges come to.", sql: "SUM(amf.total_charges) AS \"sumCharges\"", sqlExcl: "(SUM(amf.total_charges) - COALESCE(SUM(amf.total_charges_other), 0)) AS \"sumCharges\"" },
+		{ group: "Totals", measure: true, value: "sumCharges", label: "Cost", description: "Total charges added up across every bill in the group. Tax is included, matching the client's own Tax = Include setting. One-time charges are not excluded: the feed carries no one-time-charge flag, and the client runs these reports with One Time Charges = Exclude, so this total reads higher than theirs by whatever those charges come to.", sql: "SUM(amf.total_charges) AS \"sumCharges\"", sqlExcl: "(SUM(amf.total_charges) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)), 0)) AS \"sumCharges\"" },
 		{ group: "Totals", measure: true, value: "sumConsumption", label: "Usage", description: "Metered consumption added up across every bill in the group. Only meaningful where the group is one unit of measure — adding kWh to Therms is not a quantity — which is why the summary reports group by Unit of Measure.", sql: "SUM(amf.total_consumption) AS \"sumConsumption\"" },
-		{ group: "Totals", measure: true, value: "costPerUnit", label: "Cost per Unit", description: "The group's total cost divided by its total usage — SUM(charges) / SUM(usage), the blended rate. Not the average of the individual bills' rates, which would weight a small bill the same as a large one. Blank where the group consumed nothing.", sql: "(SUM(amf.total_charges) / NULLIF(SUM(amf.total_consumption), 0)) AS \"costPerUnit\"", sqlExcl: "((SUM(amf.total_charges) - COALESCE(SUM(amf.total_charges_other), 0)) / NULLIF(SUM(amf.total_consumption), 0)) AS \"costPerUnit\"" },
-		{ group: "Totals", measure: true, value: "costPerSqft", label: "Cost per SqFt", description: "The group's total cost divided by the site's floor area. Source: locations.square_feet, read as a maximum so the figure is right whether or not Square Feet is shown as a column of its own. Blank where UBM holds no area for the site.", sql: "(SUM(amf.total_charges) / NULLIF(MAX(l.square_feet), 0)) AS \"costPerSqft\"", sqlExcl: "((SUM(amf.total_charges) - COALESCE(SUM(amf.total_charges_other), 0)) / NULLIF(MAX(l.square_feet), 0)) AS \"costPerSqft\"" },
+		{ group: "Totals", measure: true, value: "costPerUnit", label: "Cost per Unit", description: "The group's total cost divided by its total usage — SUM(charges) / SUM(usage), the blended rate. Not the average of the individual bills' rates, which would weight a small bill the same as a large one. Blank where the group consumed nothing.", sql: "(SUM(amf.total_charges) / NULLIF(SUM(amf.total_consumption), 0)) AS \"costPerUnit\"", sqlExcl: "((SUM(amf.total_charges) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)), 0)) / NULLIF(SUM(amf.total_consumption), 0)) AS \"costPerUnit\"" },
+		{ group: "Totals", measure: true, value: "costPerSqft", label: "Cost per SqFt", description: "The group's total cost divided by the site's floor area. Source: locations.square_feet, read as a maximum so the figure is right whether or not Square Feet is shown as a column of its own. Blank where UBM holds no area for the site.", sql: "(SUM(amf.total_charges) / NULLIF(MAX(l.square_feet), 0)) AS \"costPerSqft\"", sqlExcl: "((SUM(amf.total_charges) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)), 0)) / NULLIF(MAX(l.square_feet), 0)) AS \"costPerSqft\"" },
 		{ group: "Totals", measure: true, value: "usagePerSqft", label: "Usage per SqFt", description: "The group's total usage divided by the site's floor area, in whatever unit the group is measured in. Same area source as Cost per SqFt.", sql: "(SUM(amf.total_consumption) / NULLIF(MAX(l.square_feet), 0)) AS \"usagePerSqft\"" },
 
 		{ group: "Charges (time of use)", value: "chargesConsumptionOnpeak", label: "Consumption Charges (On-Peak)", description: "Monetary value for onpeak consumption charges.", sql: "amf.total_charges_consumption_onpeak AS \"chargesConsumptionOnpeak\"" },
@@ -600,6 +600,10 @@ export default {
 		if (ReportSpecs.usesBillRecord()) {
 			sql += "\n\t\tLEFT JOIN bill_management_v2.bill_records br ON br.id = amf.bill_record_id";
 		}
+		if (ReportSpecs.excludeOtc()) {
+			sql += "\n\t\tLEFT JOIN otc_bill ob ON ob.bill_id = amf.bill_id"
+				+ "\n\t\tLEFT JOIN otc_rows obn ON obn.bill_id = amf.bill_id";
+		}
 		if (ReportSpecs.usesLateFee()) {
 			sql += "\n\t\tLEFT JOIN lf_seq lf ON lf.virtual_account_id = amf.virtual_account_id AND lf.bill_id = amf.bill_id"
 				+ "\n\t\tLEFT JOIN bill_management_v2.bill_records pbr ON pbr.id = lf.prev_bill_record_id"
@@ -712,6 +716,11 @@ export default {
 		const code = String(v).trim().toLowerCase().replace(/'/g, "''");
 		return `(SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '${code}' AND active IS NOT FALSE LIMIT 1)`;
 	},
+
+	ONE_TIME_CODES: ["OTH_FEE", "OTH_PENALTY", "OTH_DEPOSIT", "OTH_DEPOSITINT",
+		"OTH_CORR_CHARGE", "OTH_ADJUSTMENT"],
+
+	oneTimeCodesSql: () => ReportSpecs.ONE_TIME_CODES.map(c => ReportSpecs._quote(c)).join(","),
 
 	ATTR_PREFIX: "attr:",
 
