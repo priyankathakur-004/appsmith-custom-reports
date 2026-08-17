@@ -997,6 +997,74 @@ Two smaller rows have the same shape and are almost certainly the same cause: 03
   water consumption and they suppress the quantity.
 - Units are UBM's own throughout. See the conversion note above.
 
+## Why nothing reconciles: UBM holds one billing cycle, not twelve
+
+Traced to the bottom on 2026-08-17, and this supersedes every earlier guess in this file
+about how far behind UBM is. It is not a lag, not a per-site staleness, and not anything
+the reports do. **UBM has received about one bill per account for this customer, and the
+reports show it correctly.**
+
+Four measurements, in the order they close the question.
+
+**Every analytics layer agrees, so nothing is being lost downstream.** For April 2025 to
+March 2026:
+
+| Source | Bills | Accounts |
+| --- | ---: | ---: |
+| `analytics_monthly_feed` | 5,799 | 9,121 |
+| `analytics_billing_line_items` | 5,799 | 9,121 |
+| `account_history` | 5,894 | 9,295 |
+
+**One bill per account, measured not inferred.** Of 9,121 accounts with any bill in the
+window, **9,066 have exactly one**; the average is 1.02 and the maximum 11.
+
+**The bills that exist are one month.** Coverage for the four sites that overlap the
+client's Annual Use Cost tab:
+
+| Site | Months with data | Bills | Total cost | Share in October 2025 |
+| --- | ---: | ---: | ---: | ---: |
+| 0145 | 1 | 14 | 203,902 | 100% |
+| 0302 | 5 | 27 | 87,665 | 99% |
+| 0115 | 2 | 32 | 36,794 | 85% |
+| 0344 | 5 | 11 | 40,550 | 14% |
+
+October 2025 is the load. The rest is scraps — 0302's June is one bill worth 17.
+
+**And the processing pipeline is healthy, so the gap is ingestion.** `bill_records` looked
+three times larger than the feed, which raised the hope that invoices were stuck before
+analytics. They are not: a bill record is not a bill, and 17,195 records resolve to 6,024
+bills — 2.85 records each, versions and pages.
+
+| Workflow state | Bill records | Bills | In the feed |
+| --- | ---: | ---: | ---: |
+| `processed` | 16,561 | 5,799 | **5,799** |
+| `data_verification_1` | 589 | 211 | 0 |
+| `data_verification_2` | 8 | 5 | 0 |
+| `integrity_check` | 37 | 9 | 0 |
+
+**Every processed bill reaches analytics — 5,799 of 5,799.** Only 225 bills, 3.7%, sit in
+verification, and releasing all of them would move a total from 9.6% of the client's
+figure to about 10%. The eleven missing months were never received.
+
+### What this means for the reports
+
+The Annual Use-Cost reconciliation reads 9.6% of the client's annual cost across the
+twelve comparable rows, and usage agrees independently. That is the whole discrepancy.
+Two things follow:
+
+- **Rates are usable today, totals are not.** A blended rate is not distorted by a short
+  window, and electric agrees within 3% at three of four sites. Any annual total is short
+  by roughly the same factor everywhere.
+- **The two rate outliers are seasonality, not data quality.** 0115 Electric reads 0.1900
+  in September and 0.1895 in October — steady, so 0.1897 is the real Anchorage
+  shoulder-season rate against a 0.16 twelve-month blend. 0302 Natural Gas holds 13.64
+  therms in September and 4.36 in October; a Missouri mall burns no gas in autumn, so the
+  bill is nearly all fixed charge and the rate goes to 17/therm against an annual 1.51.
+  Both are correct arithmetic on an unrepresentative slice. Neither is worth chasing.
+
+Nothing in this app can close the gap. The question for Engie and the UBM team is why
+only one cycle has been received, and it is now specific enough to answer.
+
 ## Saving Detail cannot be built
 
 Checked against the schema on 2026-08-17. **UBM holds no savings data of any kind.**
