@@ -826,14 +826,30 @@ not known and is worth measuring — the query is below.
 
 ### What will not reconcile against their tabs, and why
 
-**One Time Charges are excluded on all five of their reports and cannot be excluded on
-ours.** Every one of the five tabs is run with `One Time Charges = Exclude`, and there
-is no one-time-charge flag anywhere on the feed — `total_charges_other` is the nearest
-column and it is a charge bucket, not a marker. So our Cost reads high by whatever those
-charges come to, on every row of every one of these reports. This is the same shape as
-the Tax question already recorded for Invoice by Date, and it is the first thing to put
-to Engie: **which line items count as one-time charges, and can UBM identify them.**
-Until that is answered these totals should not be compared to theirs figure for figure.
+**One Time Charges are excluded on all five of their reports, and ours can exclude them
+too.** Every one of the five tabs is run with `One Time Charges = Exclude`. A first pass
+recorded this as unanswerable, on the grounds that `total_charges_other` is a charge
+bucket rather than a marker. That was wrong, and the correction is the useful part:
+**`analytics_monthly_feed.total_charges_other` is exactly the feed's rollup of the
+line-item category `Other Charges`**, which is where the one-time fees sit. Measured on
+one account, 2026-08-17:
+
+| | charges | other | customer | usage |
+| --- | ---: | ---: | ---: | ---: |
+| `analytics_monthly_feed` | 20,212.95 | 16,949.091 | 84.48 | 3,179.379 |
+| `analytics_billing_line_items` | 20,212.95 | 16,949.09 | 84.48 | 3,179.38 |
+
+So an excluding cost is `SUM(total_charges) - COALESCE(SUM(total_charges_other), 0)` —
+feed arithmetic, no line-item join, no grain change, no new CTE.
+
+One caveat before this is treated as equivalent to their filter. `Other Charges` also
+holds passthrough lines, which recur — the same bill carried a `OTH_PASSTHROUGH` of
+23.09 beside the 16,926.00 `OTH_FEE`. Excluding the whole category may exclude a little
+more than Engie does. The question for them is narrow now, and worth asking in these
+words: **does One Time Charges = Exclude drop the whole Other Charges family, or only
+fee-type lines?**
+
+Two of their settings do line up and need no work: `Tax = Include` matches, since
 
 Two of their settings do line up and need no work: `Tax = Include` matches, since
 `total_charges` includes tax; `Normalization Type = Actual` matches, since the feed is
@@ -862,6 +878,64 @@ YOY tab shows two pairs** (2024/2025 beside 2025/2026) where its own field list 
 one, and their Index YOY tab shows one. The field list is the specification, so one pair
 is what to build, but the discrepancy is worth putting to them in the same message as
 the one-time-charges question.
+
+## Annual Use-Cost, reconciled against their tab
+
+Run over April 2025 – March 2026, the window their tab covers, and compared on
+2026-08-17. Their tab holds 24 rows — the two `!0000-` pseudo-sites plus 0115, 0145,
+0302 and 0344 — so 16 rows are genuinely comparable.
+
+**The report's arithmetic is right. UBM holds about a month of the twelve.**
+
+Cost per unit is the column that proves it, because a rate is not distorted by a short
+window:
+
+| Site | Service | Unit | Theirs | Ours | Ours converted |
+| --- | --- | --- | ---: | ---: | ---: |
+| 0344 | Electric | kWh | 0.0900 | 0.0901 | — |
+| 0302 | Electric | kWh | 0.1000 | 0.0978 | — |
+| 0145 | Electric | kWh | 0.1200 | 0.1169 | — |
+| 0115 | Electric | kWh | 0.1600 | 0.1897 | — |
+| 0145 | Water | kGal | 8.1800 | 5.8726 | 7.8511 |
+| 0115 | Water | kGal | 7.8300 | 5.6789 | 7.5921 |
+| 0344 | Irrigation | kGal | 3.6100 | 2.5965 | 3.4713 |
+
+Volume is short by a factor of eleven and the shortfall is uniform: across all 16 shared
+rows theirs totals 3,981,407 against ours 355,850 — **8.9%, about 1.1 months of 12** —
+and usage agrees independently (0145 Electric 9.3%, 0302 Electric 8.9%). All four sites
+sit at the same ratio, so this is not the per-site staleness recorded above; it is the
+one-bill-per-account coverage gap, now measured over a full year rather than inferred
+from the Late Fees `LAG` returning nothing.
+
+**The CCF to kGal factor is confirmed, not assumed.** Engie report water, sewer and
+irrigation in kGal; UBM stores CCF. A line item on one account reads 461,700 against the
+feed's 617.21 CCF for the same account, and 461,700 / 748 = 617.2. So 1 CCF = 748
+gallons exactly, which is what makes the converted column above line up.
+
+**One row of sixteen did not fit, and chasing it is what settled the one-time-charge
+question.** 0145 Irrigation came back at 74.6% of their annual cost on 18.7% of the
+usage — $31.24/kGal against their $5.86. Every other row moved cost and usage together.
+Broken down, the site's five irrigation accounts each held a stable rate across both
+months but disagreed with each other from $5.84 to $41.34 per CCF, which no utility
+prices. One account carried 89% of the cost on 63% of the usage, and its bill was a
+single `OTH_FEE` line of 16,926.00 against 3,286.95 of everything else. Excluding
+`Other Charges` puts that account at $5.29/CCF, in among its siblings at $5.84, $7.43
+and $8.88, and the whole row at $7.96/kGal against their $5.86. The residual is
+plausibly seasonal — the two months UBM holds are September and October, peak irrigation
+in Texas, against their twelve-month blend.
+
+Two smaller rows have the same shape and are almost certainly the same cause: 0302 and
+0145 Natural Gas both carry charges with usage at 0.4% and 0%.
+
+**What differs by design, and needs no work:**
+
+- Fire Protection, Storm Water, Lighting and Refuse appear on ours and not theirs. Their
+  Service Types filter names eleven types and excludes all four.
+- `Other Services` appears on theirs and not ours — 196,204.78 at 0145, 51.92 at 0344.
+  No UBM commodity maps to it.
+- Sewer usage is zero on every row of their tab and real on ours. Sewer is billed off
+  water consumption and they suppress the quantity.
+- Units are UBM's own throughout. See the conversion note above.
 
 ## Saving Detail cannot be built
 
