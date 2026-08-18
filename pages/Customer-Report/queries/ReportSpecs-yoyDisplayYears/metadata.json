@@ -1,6 +1,6 @@
 {
-  "gitSyncId": "6a0ae213387c6535a0660595_f73e7787-4990-4389-8759-49255827bea3",
-  "id": "Customer-Report_ReportSpecs.yoyYears",
+  "gitSyncId": "6a0ae213387c6535a0660595_6b6ee7d8-98d5-406c-81bc-55f52eae8d31",
+  "id": "Customer-Report_ReportSpecs.yoyDisplayYears",
   "pluginId": "js-plugin",
   "pluginType": "JS",
   "unpublishedAction": {
@@ -22,8 +22,8 @@
         "key": "body"
       }
     ],
-    "fullyQualifiedName": "ReportSpecs.yoyYears",
-    "name": "yoyYears",
+    "fullyQualifiedName": "ReportSpecs.yoyDisplayYears",
+    "name": "yoyDisplayYears",
     "pageId": "Customer-Report",
     "runBehaviour": "MANUAL",
     "userSetOnLoad": false

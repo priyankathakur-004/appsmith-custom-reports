@@ -3,7 +3,6 @@
   "alignWidget": "LEFT",
   "animateLoading": true,
   "bottomRow": 40,
-  "bottomRowBeforeCollapse": 40,
   "defaultCheckedState": false,
   "dynamicBindingPathList": [
     {
@@ -41,7 +40,6 @@
   "responsiveBehavior": "hug",
   "rightColumn": 22,
   "topRow": 36,
-  "topRowBeforeCollapse": 36,
   "type": "CHECKBOX_WIDGET",
   "version": 1,
   "widgetId": "otc1excl9k",

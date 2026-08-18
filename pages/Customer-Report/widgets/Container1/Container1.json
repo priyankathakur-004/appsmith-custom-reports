@@ -22,7 +22,7 @@
           "key": "boxShadow"
         }
       ],
-      "dynamicHeight": "AUTO_HEIGHT",
+      "dynamicHeight": "FIXED",
       "flexLayers": [],
       "isLoading": false,
       "isVisible": true,
@@ -56,7 +56,7 @@
       "key": "borderRadius"
     }
   ],
-  "dynamicHeight": "AUTO_HEIGHT",
+  "dynamicHeight": "FIXED",
   "dynamicTriggerPathList": [],
   "flexVerticalAlignment": "stretch",
   "isCanvas": true,

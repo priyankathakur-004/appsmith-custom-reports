@@ -497,30 +497,27 @@ export default {
 	},
 
 	_yoyFields: (spec) => {
-		const years = ReportSpecs.yoyPicked();
-		const list = years.length ? years : [ReportSpecs.yoyYears().current];
+		const years = ReportSpecs.yoyDisplayYears();
 		const out = [];
-		list.forEach(y => {
-			const p = y - 1;
-			const col = (suffix, label, raw, rawExcl) => {
-				const o = {
-					group: "Year over year", measure: true, partOf: spec.value,
-					value: `${spec.value}_${y}_${suffix}`,
-					label: label,
-					description: spec.description,
-					sql: `ROUND(${raw}, ${spec.round}) AS "${spec.value}_${y}_${suffix}"`
-				};
-				if (rawExcl) o.sqlExcl = `ROUND(${rawExcl}, ${spec.round}) AS "${spec.value}_${y}_${suffix}"`;
-				return o;
+		const raw = (yr, excl) => ReportSpecs._yoyRaw(spec.yoy, yr, excl);
+		const costy = ["charges", "rate", "costSqft", "costDay"].indexOf(spec.yoy) >= 0;
+		const col = (value, label, expr, exprExcl, round) => {
+			const o = {
+				group: "Year over year", measure: true, partOf: spec.value,
+				value: value, label: label, description: spec.description,
+				sql: `ROUND(${expr}, ${round}) AS "${value}"`
 			};
-			const raw = (yr, excl) => ReportSpecs._yoyRaw(spec.yoy, yr, excl);
-			const varOf = (excl) => `(${raw(y, excl)} - ${raw(p, excl)}) / NULLIF(${raw(p, excl)}, 0) * 100`;
-			const costy = ["charges", "rate", "costSqft", "costDay"].indexOf(spec.yoy) >= 0;
-			out.push(col("prior", `${spec.label} ${p}`, raw(p, false), costy ? raw(p, true) : null));
-			out.push(col("this", `${spec.label} ${y}`, raw(y, false), costy ? raw(y, true) : null));
-			out.push(Object.assign(col("var", `${spec.label} % Variance ${p}-${y}`, varOf(false), costy ? varOf(true) : null),
-				{ sql: `ROUND(${varOf(false)}, 2) AS "${spec.value}_${y}_var"`,
-				  sqlExcl: costy ? `ROUND(${varOf(true)}, 2) AS "${spec.value}_${y}_var"` : undefined }));
+			if (exprExcl) o.sqlExcl = `ROUND(${exprExcl}, ${round}) AS "${value}"`;
+			return o;
+		};
+		years.forEach((y, i) => {
+			out.push(col(`${spec.value}_${y}`, `${spec.label} ${y}`,
+				raw(y, false), costy ? raw(y, true) : null, spec.round));
+			if (i === 0) return;
+			const p = years[i - 1];
+			const pct = (excl) => `(${raw(y, excl)} - ${raw(p, excl)}) / NULLIF(${raw(p, excl)}, 0) * 100`;
+			out.push(col(`${spec.value}_${p}_${y}_var`, `${spec.label} % Variance ${p}-${y}`,
+				pct(false), costy ? pct(true) : null, 2));
 		});
 		return out;
 	},
@@ -536,15 +533,12 @@ export default {
 	// Two years are picked and the report compares them. Pick one and it compares with
 	// the year after, which is what the client's From Year on its own means. Pick more
 	// than two and the earliest and latest are used, which status() says out loud.
-	yoyYears: () => {
+	yoyDisplayYears: () => {
 		const picked = ReportSpecs.yoyPicked();
-		if (picked.length >= 2) return { prior: picked[0], current: picked[picked.length - 1] };
-		if (picked.length === 1) return { prior: picked[0], current: picked[0] + 1 };
-		const e = (typeof EndDate !== "undefined" && EndDate && EndDate.selectedDate) || null;
-		const st = (typeof StartDate !== "undefined" && StartDate && StartDate.selectedDate) || null;
-		const y = ReportSpecs._yearOf(e) || ReportSpecs._yearOf(st) || new Date().getFullYear();
-		return { current: y, prior: y - 1 };
+		if (picked.length) return picked;
+		return [new Date().getFullYear()];
 	},
+
 
 	isPerBillFigure: (f) =>
 		!f.measure && !f.dimension && /^(Usage|Charges|Weather)/.test(String(f.group || "")),
@@ -1003,8 +997,7 @@ export default {
 
 		const dateCol = ReportSpecs.dateFilterColumn();
 		if (ReportSpecs.isYoy()) {
-			const y = ReportSpecs.yoyYears();
-			parts.push(`AND EXTRACT(YEAR FROM ${dateCol}) IN (${y.prior}, ${y.current})`);
+			parts.push(`AND EXTRACT(YEAR FROM ${dateCol}) IN (${ReportSpecs.yoyDisplayYears().join(", ")})`);
 		} else {
 			if (StartDate && StartDate.selectedDate) {
 				const d = moment(StartDate.selectedDate).startOf("month").format("YYYY-MM-DD");
@@ -1353,10 +1346,6 @@ export default {
 		const warn = missing.length ? ` · ⚠️ this customer has no ${missing.join(" / ")} attribute` : "";
 
 		const bounds = [];
-		const yrs = ReportSpecs.isYoy() ? ReportSpecs.yoyPicked() : [];
-		const yoyWarn = yrs.length > 2
-			? ` · ⚠️ ${yrs.length} years picked; comparing ${yrs[0]} with ${yrs[yrs.length - 1]} and ignoring the rest`
-			: "";
 		if (!ReportSpecs.isYoy()) {
 			if (typeof StartDate !== "undefined" && StartDate && StartDate.selectedDate) bounds.push("From");
 			if (typeof EndDate !== "undefined" && EndDate && EndDate.selectedDate) bounds.push("To");
@@ -1372,7 +1361,7 @@ export default {
 				? `${name}Pick a customer, then click Run${warn}`
 				: `${name}No data loaded — click Run to fetch${warn}`;
 		}
-		if (total > 0) return `${name}${total.toLocaleString()} total rows${halfOpen}${yoyWarn}${warn}`;
+		if (total > 0) return `${name}${total.toLocaleString()} total rows${halfOpen}${warn}`;
 
 		const code = String((CustomerSelect && CustomerSelect.selectedOptionValue) || "").trim();
 		if (code === "") {
