@@ -30,7 +30,7 @@
     "name": "getYears",
     "pageId": "Customer-Report",
     "runBehaviour": "AUTOMATIC",
-    "userSetOnLoad": false,
+    "userSetOnLoad": true,
     "fullyQualifiedName": "getYears"
   }
 }
