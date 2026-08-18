@@ -8,6 +8,22 @@ export default {
 		{ group: "Period", value: "endDate", label: "Service End", description: "Date associated with service end date.", sql: "TO_CHAR(amf.end_date, 'YYYY-MM-DD') AS \"endDate\"" },
 		{ group: "Period", value: "daysOfService", label: "Days of Service", description: "Number of days associated with days of service.", sql: "amf.days_of_service AS \"daysOfService\"" },
 
+		{ group: "Period", dimension: true, value: "monthOfYear", label: "Calendar Month", description: "The month on its own, without the year, so the same month can be compared across years. Numbered as 03 March rather than March alone, for the reason Month reports 2025-12 rather than December, 2025: a name sorts April before December.", sql: "(TO_CHAR(amf.time_period, \'MM\') || \' \' || TO_CHAR(amf.time_period, \'FMMonth\')) AS \"monthOfYear\"" },
+		{ group: "Year over year", measure: true, value: "costPriorYear", label: "Cost $PRIOR$", description: "Total charges in the prior year for this group. Which two years these are comes from the To Month filter: its year is this year, and the one before it is the prior year. The window has to span both for the pair to fill in.", sql: "ROUND(SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 2) AS \"costPriorYear\"", sqlExcl: "ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0)), 2) AS \"costPriorYear\"" },
+		{ group: "Year over year", measure: true, value: "costThisYear", label: "Cost $THIS$", description: "Total charges in this year for this group. Which two years these are comes from the To Month filter: its year is this year, and the one before it is the prior year. The window has to span both for the pair to fill in.", sql: "ROUND(SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$), 2) AS \"costThisYear\"", sqlExcl: "ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$), 0)), 2) AS \"costThisYear\"" },
+		{ group: "Year over year", measure: true, value: "costVariance", label: "Cost % Variance", description: "Percentage change from the prior year to this one. Blank where the prior year has nothing to compare against, which on a window covering only one of the two years is every row.", sql: "ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) - SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$)) / NULLIF(SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0) * 100, 2) AS \"costVariance\"", sqlExcl: "ROUND(((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$), 0)) - (SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0))) / NULLIF((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0)), 0) * 100, 2) AS \"costVariance\"" },
+		{ group: "Year over year", measure: true, value: "usagePriorYear", label: "Usage $PRIOR$", description: "Metered consumption in the prior year for this group. Which two years these are comes from the To Month filter: its year is this year, and the one before it is the prior year. The window has to span both for the pair to fill in.", sql: "ROUND(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 3) AS \"usagePriorYear\"" },
+		{ group: "Year over year", measure: true, value: "usageThisYear", label: "Usage $THIS$", description: "Metered consumption in this year for this group. Which two years these are comes from the To Month filter: its year is this year, and the one before it is the prior year. The window has to span both for the pair to fill in.", sql: "ROUND(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$), 3) AS \"usageThisYear\"" },
+		{ group: "Year over year", measure: true, value: "usageVariance", label: "Usage % Variance", description: "Percentage change from the prior year to this one. Blank where the prior year has nothing to compare against, which on a window covering only one of the two years is every row.", sql: "ROUND((SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) - SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$)) / NULLIF(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0) * 100, 2) AS \"usageVariance\"" },
+		{ group: "Year over year", measure: true, value: "costPerUnitPriorYear", label: "Cost per Unit $PRIOR$", description: "Prior year cost divided by prior year usage - the blended rate for that year alone.", sql: "ROUND(SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) / NULLIF(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0), 4) AS \"costPerUnitPriorYear\"", sqlExcl: "ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0)) / NULLIF(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0), 4) AS \"costPerUnitPriorYear\"" },
+		{ group: "Year over year", measure: true, value: "costPerUnitThisYear", label: "Cost per Unit $THIS$", description: "This year cost divided by this year usage.", sql: "ROUND(SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) / NULLIF(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$), 0), 4) AS \"costPerUnitThisYear\"", sqlExcl: "ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$), 0)) / NULLIF(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$), 0), 4) AS \"costPerUnitThisYear\"" },
+		{ group: "Year over year", measure: true, value: "costPerUnitVariance", label: "Cost per Unit % Variance", description: "Percentage change from the prior year to this one. Blank where the prior year has nothing to compare against, which on a window covering only one of the two years is every row.", sql: "ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) / NULLIF(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$), 0) - SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) / NULLIF(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0)) / NULLIF(SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) / NULLIF(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0), 0) * 100, 2) AS \"costPerUnitVariance\"", sqlExcl: "ROUND(((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$), 0)) / NULLIF(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$), 0) - (SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0)) / NULLIF(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0)) / NULLIF((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0)) / NULLIF(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0), 0) * 100, 2) AS \"costPerUnitVariance\"" },
+		{ group: "Year over year", measure: true, value: "costPerSqftPriorYear", label: "Cost per SqFt $PRIOR$", description: "Prior year cost divided by the site's floor area. Blank where the area is missing or the placeholder 1.", sql: "ROUND(SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS \"costPerSqftPriorYear\"", sqlExcl: "ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0)) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS \"costPerSqftPriorYear\"" },
+		{ group: "Year over year", measure: true, value: "costPerSqftThisYear", label: "Cost per SqFt $THIS$", description: "This year cost divided by the site's floor area.", sql: "ROUND(SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS \"costPerSqftThisYear\"", sqlExcl: "ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$), 0)) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS \"costPerSqftThisYear\"" },
+		{ group: "Year over year", measure: true, value: "costPerSqftVariance", label: "Cost per SqFt % Variance", description: "Percentage change from the prior year to this one. Blank where the prior year has nothing to compare against, which on a window covering only one of the two years is every row.", sql: "ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END - SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END) / NULLIF(SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 0) * 100, 2) AS \"costPerSqftVariance\"", sqlExcl: "ROUND(((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$), 0)) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END - (SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0)) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END) / NULLIF((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$), 0)) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 0) * 100, 2) AS \"costPerSqftVariance\"" },
+		{ group: "Year over year", measure: true, value: "usagePerSqftPriorYear", label: "Usage per SqFt $PRIOR$", description: "Prior year usage divided by the site's floor area.", sql: "ROUND(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS \"usagePerSqftPriorYear\"" },
+		{ group: "Year over year", measure: true, value: "usagePerSqftThisYear", label: "Usage per SqFt $THIS$", description: "This year usage divided by the site's floor area.", sql: "ROUND(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS \"usagePerSqftThisYear\"" },
+		{ group: "Year over year", measure: true, value: "usagePerSqftVariance", label: "Usage per SqFt % Variance", description: "Percentage change from the prior year to this one. Blank where the prior year has nothing to compare against, which on a window covering only one of the two years is every row.", sql: "ROUND((SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $THIS$) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END - SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END) / NULLIF(SUM(amf.total_consumption) FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = $PRIOR$) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 0) * 100, 2) AS \"usagePerSqftVariance\"" },
 		{ group: "Customer", value: "customerName", label: "Customer Name", description: "Name of the customer the report is being run for", sql: "(SELECT cs.name FROM bill_management_v2.customers_search cs WHERE cs.id = amf.customer_id) AS \"customerName\"" },
 
 		{ group: "Location", value: "location", label: "Location", description: "Location name", sql: "l.name AS \"location\"" },
@@ -168,7 +184,8 @@ export default {
 			"vendorState", "vendorZip", "vendorCountry",
 			"accountNumber", "summaryAccount", "cleanAccountNumber", "meterSerial",
 			"glCode", "glAllocation",
-			"costPerSqft", "usagePerSqft"
+			"costPerSqft", "usagePerSqft",
+			"totalCostPerDay", "totalUsagePerDay", "kbtu", "kbtuPerSqft"
 		];
 
 		const dup = (value, label, service) => ({
@@ -385,6 +402,40 @@ export default {
 				filters: {}
 			},
 
+			{
+				value: "useCostYoy",
+				label: "Use Cost Analysis - Year over Year",
+				groupBy: true,
+				columns: [
+					"location", "locationNumber", "monthOfYear", "utilityType", "uom",
+					"costPriorYear", "costThisYear", "costVariance",
+					"usagePriorYear", "usageThisYear", "usageVariance",
+					"costPerUnitPriorYear", "costPerUnitThisYear", "costPerUnitVariance"
+				],
+
+				availableExtra: summaryExtra,
+				filters: {}
+			},
+
+			{
+				value: "indexYoy",
+				label: "Index Report - Year over Year",
+				groupBy: true,
+				columns: [
+					"location", "locationNumber", "squareFeet", "monthOfYear", "utilityType",
+					"costPerSqftPriorYear", "costPerSqftThisYear", "costPerSqftVariance",
+					"usagePerSqftPriorYear", "usagePerSqftThisYear", "usagePerSqftVariance"
+				],
+
+				availableExtra: [
+					"locationAddress", "locationCity", "locationState", "locationZip",
+					"locationCountry",
+					"uom", "sumCharges", "sumConsumption", "costPerUnit",
+					"totalCostPerDay", "totalUsagePerDay", "kbtu", "kbtuPerSqft"
+				],
+				filters: {}
+			},
+
 			dup("water", "Water", "^\\s*(water|sewer)\\s*$"),
 			dup("gas", "Gas", "^\\s*(natural\\s*gas|gas)\\s*$"),
 			dup("electric", "Electric", "^\\s*electric(ity)?\\s*$")
@@ -408,6 +459,29 @@ export default {
 
 	_otcVariant: (o) =>
 		(o && o.sqlExcl && ReportSpecs.excludeOtc()) ? Object.assign({}, o, { sql: o.sqlExcl }) : o,
+
+	_yearOf: (d) => {
+		const m = String(d == null ? "" : d).match(/(\d{4})/);
+		return m ? Number(m[1]) : null;
+	},
+
+	yoyYears: () => {
+		const e = (typeof EndDate !== "undefined" && EndDate && EndDate.selectedDate) || null;
+		const st = (typeof StartDate !== "undefined" && StartDate && StartDate.selectedDate) || null;
+		const y = ReportSpecs._yearOf(e) || ReportSpecs._yearOf(st) || new Date().getFullYear();
+		return { current: y, prior: y - 1 };
+	},
+
+	_yearVariant: (o) => {
+		if (!o || !o.sql || o.sql.indexOf("$") < 0) return o;
+		const y = ReportSpecs.yoyYears();
+		const sub = (v) => String(v).split("$THIS$").join(y.current).split("$PRIOR$").join(y.prior);
+		const out = Object.assign({}, o, { sql: sub(o.sql), label: sub(o.label) });
+		if (o.sqlExcl) out.sqlExcl = sub(o.sqlExcl);
+		return out;
+	},
+
+	_resolveSql: (o) => ReportSpecs._yearVariant(ReportSpecs._otcVariant(o)),
 
 	isPerBillFigure: (f) =>
 		!f.measure && !f.dimension && /^(Usage|Charges|Weather)/.test(String(f.group || "")),
@@ -748,7 +822,7 @@ export default {
 			if (!inScope(f.value)) return;
 			const g = f.group || "Other";
 			if (!byGroup[g]) { byGroup[g] = []; order.push(g); }
-			byGroup[g].push({ label: g + " · " + f.label, value: f.value });
+			byGroup[g].push({ label: g + " · " + ReportSpecs._yearVariant(f).label, value: f.value });
 		});
 		const catalog = [];
 		order.forEach(g => {
@@ -801,7 +875,7 @@ export default {
 				: ReportSpecs.visibleFieldOptions.find(x => x.value === f);
 			if (!o) return;
 
-			const v = ReportSpecs._otcVariant(o);
+			const v = ReportSpecs._resolveSql(o);
 			if (used[v.value]) { used[v.value]++; out.push(Object.assign({}, v, { value: v.value + "_" + used[v.value] })); }
 			else { used[v.value] = 1; out.push(v); }
 		});
@@ -811,7 +885,7 @@ export default {
 	accountAttrColumns: () => ReportSpecs.selectedColumns().filter(o => String(o.value).indexOf("attr_") === 0),
 
 	allFieldOptions: () =>
-		ReportSpecs.visibleFieldOptions.map(ReportSpecs._otcVariant).concat(ReportSpecs.accountAttrColumns()),
+		ReportSpecs.visibleFieldOptions.map(ReportSpecs._resolveSql).concat(ReportSpecs.accountAttrColumns()),
 
 	gridColumns: () => ReportSpecs.selectedColumns().map(o => o.value),
 

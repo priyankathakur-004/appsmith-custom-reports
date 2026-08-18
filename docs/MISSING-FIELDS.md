@@ -920,7 +920,7 @@ report on and UBM does not have, and the per-site staleness. Their Annual Use-Co
 covers April 2025 to March 2026 and their trendlines December 2025 to March 2026, so
 site 0115, which stops at 2025-10-16, contributes nothing to any of them.
 
-### The Year over Year pivot, and the one decision it needs
+### The Year over Year pivot, as built
 
 Both YOY reports put a year in each column heading — `2025`, `2026`, `% VARIANCE` — and
 column names taken from data are the one thing this builder cannot do: the grid, the
@@ -932,12 +932,32 @@ figures built as `SUM(...) FILTER (WHERE year = …)`. The column list stays sta
 grid, filter, sort and export need no change at all, and the header can carry the actual
 year through the rename mechanism already in the app.
 
-That reproduces both tabs as their Visible Fields lists specify them — one year pair,
-three columns per measure. Worth noting before it is built: **their rendered Use Cost
-YOY tab shows two pairs** (2024/2025 beside 2025/2026) where its own field list shows
-one, and their Index YOY tab shows one. The field list is the specification, so one pair
-is what to build, but the discrepancy is worth putting to them in the same message as
-the one-time-charges question.
+Both are built. Each measure becomes three fixed columns — prior year, this year, and the
+percentage change — built as `SUM(...) FILTER (WHERE EXTRACT(YEAR FROM time_period) = …)`.
+**The column labels carry the actual years**, so the report reads `Cost 2025 | Cost 2026 |
+Cost % Variance` against their `2025 | 2026 | % VARIANCE`. The years are substituted into
+both the SQL and the label from `$PRIOR$` / `$THIS$` tokens, the same shape the one-time
+exclusion already uses to swap an expression, so the field list stays static and the grid,
+sort model and export need no change at all.
+
+**The To Month filter decides which year is which.** Its year is this year and the one
+before is the prior year; the window has to span both for a pair to fill in. A window
+covering only one leaves the other column blank, which is honest rather than wrong.
+
+**Calendar Month is a new dimension.** These reports compare the same month across years,
+so the grouping key is the month without the year. It reports `03 March` rather than
+`March`, for the reason `Month` reports `2025-12` rather than `December, 2025`: a bare
+month name sorts April before December.
+
+Their reports also carry an explicit Month filter, which this builder has no equivalent
+for. Setting From and To a year apart gives every month in between, each comparing its own
+two years, with the grid's column filter available to narrow to one. That is more rows
+than their tab shows and the same numbers.
+
+One thing left for them: **their rendered Use Cost YOY tab shows two year pairs**
+(2024/2025 beside 2025/2026) where its own Visible Fields list shows one, and their Index
+YOY tab shows one. The field list is the specification and is what is built. Worth putting
+in the same message as the one-time-charges question.
 
 ## Annual Use-Cost, reconciled against their tab
 
