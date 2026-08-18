@@ -1,0 +1,5 @@
+SELECT DISTINCT EXTRACT(YEAR FROM amf.time_period)::int AS value
+FROM bill_management_v2.analytics_monthly_feed amf
+WHERE amf.customer_id = {{ ReportSpecs.customerIdSql() }}
+  AND amf.time_period IS NOT NULL
+ORDER BY 1 DESC;

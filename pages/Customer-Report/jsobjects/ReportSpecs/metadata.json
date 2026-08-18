@@ -17,7 +17,7 @@
       },
       {
         "name": "FILTER_WIDGETS",
-        "value": "[\"FieldsSelect\", \"StartDate\", \"EndDate\", \"LocationName\", \"StateProvinceSelect\", \"CountrySelect\", \"LocationStatusSelect\", \"AccountNumberSelect\", \"AccountStatusSelect\", \"VendorSelect\", \"ServiceTypesSelect\", \"LocationAttributesSelect\", \"AccountAttributesSelect\", \"AccountAttributeValuesSelect\", \"ExcludeOneTimeCharges\"]"
+        "value": "[\"FieldsSelect\", \"StartDate\", \"EndDate\", \"LocationName\", \"StateProvinceSelect\", \"CountrySelect\", \"LocationStatusSelect\", \"AccountNumberSelect\", \"AccountStatusSelect\", \"VendorSelect\", \"ServiceTypesSelect\", \"LocationAttributesSelect\", \"AccountAttributesSelect\", \"AccountAttributeValuesSelect\", \"ExcludeOneTimeCharges\", \"YearSelect\"]"
       },
       {
         "name": "GL_ROW_FIELDS",

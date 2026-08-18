@@ -167,7 +167,7 @@ export default {
 		"AccountNumberSelect", "AccountStatusSelect",
 		"VendorSelect", "ServiceTypesSelect",
 		"LocationAttributesSelect", "AccountAttributesSelect",
-		"AccountAttributeValuesSelect", "ExcludeOneTimeCharges"
+		"AccountAttributeValuesSelect", "ExcludeOneTimeCharges", "YearSelect"
 	],
 
 	reportPresets: () => {
@@ -406,6 +406,7 @@ export default {
 				value: "useCostYoy",
 				label: "Use Cost Analysis - Year over Year",
 				groupBy: true,
+				yoy: true,
 				columns: [
 					"location", "locationNumber", "monthOfYear", "utilityType", "uom",
 					"costPriorYear", "costThisYear", "costVariance",
@@ -421,6 +422,7 @@ export default {
 				value: "indexYoy",
 				label: "Index Report - Year over Year",
 				groupBy: true,
+				yoy: true,
 				columns: [
 					"location", "locationNumber", "squareFeet", "monthOfYear", "utilityType",
 					"costPerSqftPriorYear", "costPerSqftThisYear", "costPerSqftVariance",
@@ -465,7 +467,14 @@ export default {
 		return m ? Number(m[1]) : null;
 	},
 
+	isYoy: () => !!(ReportSpecs.activePreset() || {}).yoy,
+
+	// The dropdown names the earlier of the two years, matching the client's own
+	// From Year, and the report compares it with the one after.
 	yoyYears: () => {
+		const sel = (typeof YearSelect !== "undefined" && YearSelect && YearSelect.selectedOptionValue) || null;
+		const picked = ReportSpecs._yearOf(sel);
+		if (picked) return { prior: picked, current: picked + 1 };
 		const e = (typeof EndDate !== "undefined" && EndDate && EndDate.selectedDate) || null;
 		const st = (typeof StartDate !== "undefined" && StartDate && StartDate.selectedDate) || null;
 		const y = ReportSpecs._yearOf(e) || ReportSpecs._yearOf(st) || new Date().getFullYear();
@@ -544,6 +553,8 @@ export default {
 	},
 
 	showFilter: (name) => {
+		if (name === "year") return ReportSpecs.isYoy();
+		if (name === "dateRange") return !ReportSpecs.isYoy();
 		if (name === "oneTimeCharges") return ReportSpecs.aggregates();
 		if (name !== "accountAttributes") return true;
 		const avail = ReportSpecs.presetAvailable();
@@ -927,13 +938,18 @@ export default {
 		if (preset && preset.where) parts.push(`AND ${preset.where}`);
 
 		const dateCol = ReportSpecs.dateFilterColumn();
-		if (StartDate && StartDate.selectedDate) {
-			const d = moment(StartDate.selectedDate).startOf("month").format("YYYY-MM-DD");
-			parts.push(`AND ${dateCol} >= '${d}'`);
-		}
-		if (EndDate && EndDate.selectedDate) {
-			const d = moment(EndDate.selectedDate).endOf("month").format("YYYY-MM-DD");
-			parts.push(`AND ${dateCol} <= '${d}'`);
+		if (ReportSpecs.isYoy()) {
+			const y = ReportSpecs.yoyYears();
+			parts.push(`AND EXTRACT(YEAR FROM ${dateCol}) IN (${y.prior}, ${y.current})`);
+		} else {
+			if (StartDate && StartDate.selectedDate) {
+				const d = moment(StartDate.selectedDate).startOf("month").format("YYYY-MM-DD");
+				parts.push(`AND ${dateCol} >= '${d}'`);
+			}
+			if (EndDate && EndDate.selectedDate) {
+				const d = moment(EndDate.selectedDate).endOf("month").format("YYYY-MM-DD");
+				parts.push(`AND ${dateCol} <= '${d}'`);
+			}
 		}
 
 		const states = (typeof StateProvinceSelect !== "undefined" && StateProvinceSelect.selectedOptionValues) || [];
@@ -1273,8 +1289,10 @@ export default {
 		const warn = missing.length ? ` · ⚠️ this customer has no ${missing.join(" / ")} attribute` : "";
 
 		const bounds = [];
-		if (typeof StartDate !== "undefined" && StartDate && StartDate.selectedDate) bounds.push("From");
-		if (typeof EndDate !== "undefined" && EndDate && EndDate.selectedDate) bounds.push("To");
+		if (!ReportSpecs.isYoy()) {
+			if (typeof StartDate !== "undefined" && StartDate && StartDate.selectedDate) bounds.push("From");
+			if (typeof EndDate !== "undefined" && EndDate && EndDate.selectedDate) bounds.push("To");
+		}
 		const halfOpen = bounds.length === 1
 			? ` · ⚠️ only ${bounds[0]} Month is set, so this is every month ${bounds[0] === "From" ? "after" : "before"} it, not a period`
 			: "";

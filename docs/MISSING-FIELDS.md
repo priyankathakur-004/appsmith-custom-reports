@@ -940,9 +940,17 @@ both the SQL and the label from `$PRIOR$` / `$THIS$` tokens, the same shape the 
 exclusion already uses to swap an expression, so the field list stays static and the grid,
 sort model and export need no change at all.
 
-**The To Month filter decides which year is which.** Its year is this year and the one
-before is the prior year; the window has to span both for a pair to fill in. A window
-covering only one leaves the other column blank, which is honest rather than wrong.
+**A Year dropdown drives them, not the date range.** That is how the client's own reports
+work — a From Year rather than a period — and it makes the window self-bounding: the
+report filters to the two years itself, so there is no way to set a range that half-fills
+a pair. The dropdown names the earlier year, matching their From Year, and the report
+compares it with the one after; picking 2025 gives `Cost 2025 | Cost 2026 | % Variance`.
+It defaults to 2025 and is populated from the years the feed actually holds, so a year
+with no data is not offered.
+
+The From and To Month pickers hide on these two reports, since they would do nothing, and
+the Year dropdown hides on every other. A stale date range left over from another report
+is ignored rather than silently narrowing the comparison.
 
 **Calendar Month is a new dimension.** These reports compare the same month across years,
 so the grouping key is the month without the year. It reports `03 March` rather than

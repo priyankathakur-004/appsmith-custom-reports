@@ -15,15 +15,18 @@
     },
     {
       "key": "borderRadius"
+    },
+    {
+      "key": "isVisible"
     }
   ],
   "dynamicHeight": "FIXED",
   "dynamicPropertyPathList": [
     {
-      "key": "isVisible"
+      "key": "minDate"
     },
     {
-      "key": "minDate"
+      "key": "isVisible"
     }
   ],
   "dynamicTriggerPathList": [
@@ -36,7 +39,7 @@
   "isDisabled": false,
   "isLoading": false,
   "isRequired": false,
-  "isVisible": true,
+  "isVisible": "{{ ReportSpecs.showFilter(\"dateRange\") }}",
   "key": "cr_enddate",
   "label": "To Month/Period",
   "labelAlignment": "left",
