@@ -1,16 +1,12 @@
 {
-  "gitSyncId": "6a0ae213387c6535a0660595_4b3a2220-7719-4450-99ed-7180d8f98fc8",
-  "id": "Customer-Report_ReportSpecs._yearVariant",
+  "gitSyncId": "6a0ae213387c6535a0660595_ab2df865-10b4-4909-84fd-39abd61038d8",
+  "id": "Customer-Report_ReportSpecs.yoyAllFields",
   "pluginId": "js-plugin",
   "pluginType": "JS",
   "unpublishedAction": {
     "actionConfiguration": {
       "encodeParamsToggle": true,
-      "jsArguments": [
-        {
-          "name": "o"
-        }
-      ],
+      "jsArguments": [],
       "paginationType": "NONE",
       "timeoutInMillisecond": 10000
     },
@@ -26,8 +22,8 @@
         "key": "body"
       }
     ],
-    "fullyQualifiedName": "ReportSpecs._yearVariant",
-    "name": "_yearVariant",
+    "fullyQualifiedName": "ReportSpecs.yoyAllFields",
+    "name": "yoyAllFields",
     "pageId": "Customer-Report",
     "runBehaviour": "MANUAL",
     "userSetOnLoad": false

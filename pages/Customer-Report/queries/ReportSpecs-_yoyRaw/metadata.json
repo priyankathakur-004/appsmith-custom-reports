@@ -1,6 +1,6 @@
 {
-  "gitSyncId": "6a0ae213387c6535a0660595_b87bda86-3458-47d9-88ca-7953cfa8e3f1",
-  "id": "Customer-Report_ReportSpecs._resolveSql",
+  "gitSyncId": "6a0ae213387c6535a0660595_905095de-8f18-4db6-a386-3f8335882731",
+  "id": "Customer-Report_ReportSpecs._yoyRaw",
   "pluginId": "js-plugin",
   "pluginType": "JS",
   "unpublishedAction": {
@@ -8,7 +8,13 @@
       "encodeParamsToggle": true,
       "jsArguments": [
         {
-          "name": "o"
+          "name": "kind"
+        },
+        {
+          "name": "year"
+        },
+        {
+          "name": "excl"
         }
       ],
       "paginationType": "NONE",
@@ -26,8 +32,8 @@
         "key": "body"
       }
     ],
-    "fullyQualifiedName": "ReportSpecs._resolveSql",
-    "name": "_resolveSql",
+    "fullyQualifiedName": "ReportSpecs._yoyRaw",
+    "name": "_yoyRaw",
     "pageId": "Customer-Report",
     "runBehaviour": "MANUAL",
     "userSetOnLoad": false
