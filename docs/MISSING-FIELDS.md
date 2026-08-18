@@ -1116,6 +1116,58 @@ the From date, so To cannot precede From, which is the only constraint worth enf
 this invisible: a report with one bound set reads exactly like a report with two. It now
 appends *only From Month is set, so this is every month after it, not a period*.
 
+## Do not copy the main app's Supply Only consumption rule
+
+Checked 2026-08-17 after finding the rule in appsmith-ubm-native. Recorded here because
+**our Usage looks wrong beside it and is not**, and the next person to compare the two
+apps will reach for the same one-line "fix".
+
+Every usage query in the native app — `fetch_ma_usage`, `fetch_analytics_data`,
+`fetch_utility_tree_data`, `RC_LocationUsage`, `fetch_location_metrics`, `fetch_ee_energy`,
+across four pages — reads consumption as:
+
+```sql
+SUM(CASE WHEN bill_type = 'Supply Only'
+         THEN COALESCE(total_gen_consumption, 0)
+         ELSE COALESCE(total_consumption, 0) END)
+```
+
+This report sums `total_consumption` unconditionally. Measured for this customer:
+
+| bill_type | Rows | With consumption | With gen consumption | Σ consumption | Σ gen consumption |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Distribution Only | 4,983 | 4,056 | 32 | 90,601,281 | 6,867 |
+| Full Service | 15,720 | 9,370 | 147 | 35,340,940 | 944,992 |
+| Supply Only | 4,671 | **1** | 4,009 | 328,889 | **91,422,638** |
+
+**Distribution Only consumption and Supply Only generation consumption are 99.1% of each
+other.** They are the same electricity: a deregulated account gets two bills, one from
+the supplier for the commodity and one from the utility for delivery, and both state the
+same kWh. Adopting the rule would add both together — consumption up 72%, from
+126,271,110 to 217,364,859, and Cost per Unit halved on every deregulated account.
+
+What this report does is right. It counts the energy once, through the distribution bill,
+while Cost sums the charges on **both** bills. So Cost per Unit is the fully delivered
+rate — supply plus delivery over the kWh delivered — which is the number a reader wants.
+
+**And it is confirmed from outside.** Our electric cost per unit agrees with the client's
+own figures within 3% at three of four comparable sites. Counting the energy twice would
+put us at roughly half their rate; dropping the supply side would put us at double.
+Neither is what happens.
+
+Two consequences worth carrying:
+
+- **A Supply Only row carries cost and no usage of its own.** That is harmless while its
+  distribution partner sits in the same group, which it does on every preset here, since
+  they share location, commodity and month. Grouping by Account # or Bill Type would
+  separate them and produce a cost with no denominator.
+- **It explains some of the charge-without-usage rows.** Where a site shows electricity
+  cost against no kWh at all — 2810 Newport Centre at 156,141 — the distribution half is
+  simply not loaded, which is the same one-cycle coverage recorded above rather than a
+  new fault.
+
+Whether the native app should sum both is a question for that app, not this one.
+
 ## Saving Detail cannot be built
 
 Checked against the schema on 2026-08-17. **UBM holds no savings data of any kind.**
