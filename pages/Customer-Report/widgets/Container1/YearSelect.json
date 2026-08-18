@@ -6,8 +6,7 @@
   "bottomRow": 18,
   "boxShadow": "none",
   "defaultOptionValue": [
-    "2025",
-    "2026"
+    "2025"
   ],
   "dynamicBindingPathList": [
     {
@@ -63,12 +62,12 @@
   "parentColumnSpace": 16,
   "parentId": "ukh00f6t26",
   "parentRowSpace": 10,
-  "placeholderText": "Latest two",
+  "placeholderText": "Pick a year",
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
   "rightColumn": 52,
   "serverSideFiltering": false,
-  "sourceData": "{{ getYears.data }}",
+  "sourceData": "{{ (getYears.data && getYears.data.length) ? getYears.data : Array.from({ length: 6 }, (_, i) => ({ value: String(new Date().getFullYear() - i) })) }}",
   "topRow": 9,
   "type": "MULTI_SELECT_WIDGET_V2",
   "version": 2,
