@@ -3,6 +3,7 @@
   "animateLoading": true,
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
   "bottomRow": 18,
+  "bottomRowBeforeCollapse": 18,
   "boxShadow": "none",
   "defaultOptionValue": "2025",
   "dynamicBindingPathList": [
@@ -64,6 +65,7 @@
   "serverSideFiltering": false,
   "sourceData": "{{ getYears.data }}",
   "topRow": 9,
+  "topRowBeforeCollapse": 9,
   "type": "SELECT_WIDGET",
   "version": 1,
   "widgetId": "yr0sel1x9k",
