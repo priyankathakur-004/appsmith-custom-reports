@@ -1,14 +1,20 @@
 {
   "accentColor": "#0F2A47",
+  "allowSelectAll": true,
   "animateLoading": true,
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
   "bottomRow": 18,
-  "bottomRowBeforeCollapse": 18,
   "boxShadow": "none",
-  "defaultOptionValue": "2025",
+  "defaultOptionValue": [
+    "2025",
+    "2026"
+  ],
   "dynamicBindingPathList": [
     {
       "key": "borderRadius"
+    },
+    {
+      "key": "defaultOptionValue"
     },
     {
       "key": "sourceData"
@@ -36,11 +42,10 @@
   "key": "cr_year",
   "labelAlignment": "left",
   "labelPosition": "Top",
-  "labelStyle": "",
-  "labelText": "Year",
+  "labelText": "Years",
   "labelTextColor": "#0F2A47",
   "labelTextSize": "0.875rem",
-  "labelWidth": "2",
+  "labelWidth": 5,
   "leftColumn": 39,
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 4,
@@ -53,21 +58,20 @@
   "onOptionChange": "{{ ReportSpecs.refreshGrid() }}",
   "optionLabel": "value",
   "optionValue": "value",
-  "originalBottomRow": 18,
-  "originalTopRow": 9,
+  "originalBottomRow": 27,
+  "originalTopRow": 18,
   "parentColumnSpace": 16,
   "parentId": "ukh00f6t26",
   "parentRowSpace": 10,
-  "placeholderText": "Year",
+  "placeholderText": "Latest two",
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
   "rightColumn": 52,
   "serverSideFiltering": false,
   "sourceData": "{{ getYears.data }}",
   "topRow": 9,
-  "topRowBeforeCollapse": 9,
-  "type": "SELECT_WIDGET",
-  "version": 1,
+  "type": "MULTI_SELECT_WIDGET_V2",
+  "version": 2,
   "widgetId": "yr0sel1x9k",
   "widgetName": "YearSelect"
 }

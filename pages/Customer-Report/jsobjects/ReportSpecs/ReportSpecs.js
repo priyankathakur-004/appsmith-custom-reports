@@ -469,12 +469,17 @@ export default {
 
 	isYoy: () => !!(ReportSpecs.activePreset() || {}).yoy,
 
-	// The dropdown names the earlier of the two years, matching the client's own
-	// From Year, and the report compares it with the one after.
+	yoyPicked: () =>
+		((typeof YearSelect !== "undefined" && YearSelect && YearSelect.selectedOptionValues) || [])
+			.map(ReportSpecs._yearOf).filter(y => y).sort((a, b) => a - b),
+
+	// Two years are picked and the report compares them. Pick one and it compares with
+	// the year after, which is what the client's From Year on its own means. Pick more
+	// than two and the earliest and latest are used, which status() says out loud.
 	yoyYears: () => {
-		const sel = (typeof YearSelect !== "undefined" && YearSelect && YearSelect.selectedOptionValue) || null;
-		const picked = ReportSpecs._yearOf(sel);
-		if (picked) return { prior: picked, current: picked + 1 };
+		const picked = ReportSpecs.yoyPicked();
+		if (picked.length >= 2) return { prior: picked[0], current: picked[picked.length - 1] };
+		if (picked.length === 1) return { prior: picked[0], current: picked[0] + 1 };
 		const e = (typeof EndDate !== "undefined" && EndDate && EndDate.selectedDate) || null;
 		const st = (typeof StartDate !== "undefined" && StartDate && StartDate.selectedDate) || null;
 		const y = ReportSpecs._yearOf(e) || ReportSpecs._yearOf(st) || new Date().getFullYear();
@@ -1289,6 +1294,10 @@ export default {
 		const warn = missing.length ? ` · ⚠️ this customer has no ${missing.join(" / ")} attribute` : "";
 
 		const bounds = [];
+		const yrs = ReportSpecs.isYoy() ? ReportSpecs.yoyPicked() : [];
+		const yoyWarn = yrs.length > 2
+			? ` · ⚠️ ${yrs.length} years picked; comparing ${yrs[0]} with ${yrs[yrs.length - 1]} and ignoring the rest`
+			: "";
 		if (!ReportSpecs.isYoy()) {
 			if (typeof StartDate !== "undefined" && StartDate && StartDate.selectedDate) bounds.push("From");
 			if (typeof EndDate !== "undefined" && EndDate && EndDate.selectedDate) bounds.push("To");
@@ -1304,7 +1313,7 @@ export default {
 				? `${name}Pick a customer, then click Run${warn}`
 				: `${name}No data loaded — click Run to fetch${warn}`;
 		}
-		if (total > 0) return `${name}${total.toLocaleString()} total rows${halfOpen}${warn}`;
+		if (total > 0) return `${name}${total.toLocaleString()} total rows${halfOpen}${yoyWarn}${warn}`;
 
 		const code = String((CustomerSelect && CustomerSelect.selectedOptionValue) || "").trim();
 		if (code === "") {
