@@ -24,9 +24,6 @@
   "dynamicPropertyPathList": [
     {
       "key": "minDate"
-    },
-    {
-      "key": "isVisible"
     }
   ],
   "dynamicTriggerPathList": [
