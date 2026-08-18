@@ -1168,6 +1168,50 @@ Two consequences worth carrying:
 
 Whether the native app should sum both is a question for that app, not this one.
 
+## A third of sites carry a floor area of 1
+
+Found 2026-08-17 running Index Report - Trendline. Nine of the twenty-six sites on the
+first page hold `locations.square_feet = 1` — Empire Mall, Woodfield TRAINING, University
+Park Village, Shops at Clearfork, Beverly Center, both Cherry Creek sites, City Creek
+Center and Dolphin Mall — against a real range of 29,140 to 1,251,407 on the other
+seventeen. One square foot is not a small building, it is a placeholder.
+
+Dividing by it returns the cost itself, so the report read:
+
+| Site | Month | Service | Cost per SqFt |
+| --- | --- | --- | ---: |
+| 5600 Beverly Center | 2026-03 | Electric | **292,544.14** |
+| 5037 Woodfield TRAINING | 2025-12 | Electric | **233,865.19** |
+| 5604 City Creek Center | 2026-03 | Electric | **62,231.94** |
+
+**Cost per SqFt, Usage per SqFt and KBTUs per SqFt now treat an area of 1 or less as no
+area**, which is what they already did for zero. The ratio comes back blank rather than
+wrong. This is not the same call as the water readings above, which are left alone: there
+no correction is possible without guessing a scale factor, whereas here the fix is to
+decline to divide by a placeholder, and it fails safe.
+
+**The Square Feet column still shows what UBM holds.** A reader sees `1` beside a blank
+ratio and has the reason in front of them, which is better than a blank with no
+explanation.
+
+Where the area is real it is right: site 0302 reads 556,872 in this report and 556,872 on
+the client's own tab.
+
+Worth measuring across the portfolio before this goes to the UBM team, since the fix
+hides the symptom rather than the cause:
+
+```sql
+SELECT count(*) AS sites,
+       count(*) FILTER (WHERE l.square_feet IS NULL)  AS no_area,
+       count(*) FILTER (WHERE l.square_feet = 0)      AS zero,
+       count(*) FILTER (WHERE l.square_feet = 1)      AS placeholder_one,
+       count(*) FILTER (WHERE l.square_feet > 1)      AS usable,
+       min(l.square_feet) FILTER (WHERE l.square_feet > 1) AS smallest_real
+FROM bill_management_v2.locations l
+WHERE l.id IN (SELECT DISTINCT location_id FROM bill_management_v2.analytics_monthly_feed
+               WHERE customer_id = <id>);
+```
+
 ## Saving Detail cannot be built
 
 Checked against the schema on 2026-08-17. **UBM holds no savings data of any kind.**
