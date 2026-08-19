@@ -652,18 +652,25 @@ export default {
 		const rows = (typeof getAccountAttributesList !== "undefined" && getAccountAttributesList.data) || [];
 		const attrs = (Array.isArray(rows) ? rows : [])
 			.filter(r => r && r.value)
-			.map(r => ({ label: "Account attribute · " + r.value, value: ReportSpecs.ATTR_PREFIX + r.value }))
+			.map(r => ({ label: "Account attribute · " + ReportSpecs.attrDisplayName(r.value), value: ReportSpecs.ATTR_PREFIX + r.value }))
 			.filter(o => inScope(o.value))
 			.sort((a, b) => a.label.localeCompare(b.label));
 		return catalog.concat(attrs);
 	},
 
 	presetAttrLabels: () => {
-		const p = ReportSpecs.activePreset();
-
-		return ((p && p.columns) || [])
-			.filter(c => typeof c !== "string" && c.label && !c.all)
+		const p = ReportSpecs.activePreset() || {};
+		return (p.columns || []).concat(p.availableExtra || [])
+			.filter(c => typeof c !== "string" && c.label)
 			.map(c => ({ re: new RegExp(c.attr, "i"), label: c.label }));
+	},
+
+	// The client's mapping calls this attribute Customer GL Number; UBM calls it
+	// GL Code 1. Show both, so a field named in the spreadsheet is findable in the
+	// dropdown and still traceable back to the attribute it reads.
+	attrDisplayName: (name) => {
+		const hit = ReportSpecs.presetAttrLabels().find(s => s.re.test(name));
+		return (hit && hit.label !== name) ? `${hit.label} (${name})` : name;
 	},
 
 	accountAttrColumn: (pick) => {
@@ -672,7 +679,7 @@ export default {
 		if (alias === "attr_") alias = "attr_unnamed";
 		return {
 			value: alias,
-			label: (ReportSpecs.presetAttrLabels().find(s => s.re.test(name)) || {}).label || name,
+			label: ReportSpecs.attrDisplayName(name),
 			description: "Account attribute: " + name,
 			attrName: name,
 			joinAlias: "av_" + alias,
