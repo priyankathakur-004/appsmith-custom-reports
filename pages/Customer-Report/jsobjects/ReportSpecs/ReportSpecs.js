@@ -180,10 +180,7 @@ export default {
 					"cleanAccountNumber", "meterSerial",
 					"accountCreatedDate", "accountActivityDate",
 
-					"glCode", "glAllocation",
-					{ attr: "^gl\\s*code", label: "Customer GL Number", all: true },
-					{ attr: "gl\\s*desc", label: "GL Description", all: true },
-					{ attr: "gl\\s*alloc", label: "GL % Allocation", all: true }
+					"glCode", "glAllocation"
 				],
 				filters: {}
 			},
@@ -369,6 +366,29 @@ export default {
 		return ReportSpecs._resolveSpecs(p.columns);
 	},
 
+	// What the Visible Columns picker falls back to. Its default has to be a binding,
+	// because picking a report has to change it -- but Appsmith re-applies a widget's
+	// default every time that binding re-evaluates, and a Run or an export does
+	// re-evaluate it. Reading the user's own picks back makes that re-application a
+	// no-op instead of a reset to the report's columns. Switching report or hitting
+	// Reset clears the picks, so those still load the report's own list.
+	columnDefaults: () => {
+		const picks = appsmith.store.reportsColumnPicks;
+		return Array.isArray(picks) ? picks : ReportSpecs.presetColumns();
+	},
+
+	// Not persisted: a reload should hand back the report's own columns, the way it
+	// did before this was stored at all. Persisting it would recreate the stale-state
+	// problem selectPreset() below already had to undo.
+	rememberColumns: async () => {
+		const picked = (typeof FieldsSelect !== "undefined" && FieldsSelect.selectedOptionValues) || [];
+		await storeValue("reportsColumnPicks", Array.isArray(picked) ? picked.slice() : [], false);
+	},
+
+	forgetColumns: async () => {
+		try { await removeValue("reportsColumnPicks"); } catch (e) { /* nothing stored yet */ }
+	},
+
 	presetAvailable: () => {
 		const p = ReportSpecs.activePreset();
 		if (!p || !p.columns) return null;
@@ -426,6 +446,7 @@ export default {
 		// earlier versions persisted to the browser, which outlived the session and
 		// reopened days later on a page whose filters had been reset around it.
 		try { removeValue("reportPreset"); } catch (e) {  }
+		await ReportSpecs.forgetColumns();
 		for (const w of ReportSpecs.FILTER_WIDGETS) {
 			try { resetWidget(w, false); } catch (e) {  }
 		}
@@ -1475,6 +1496,7 @@ export default {
 	},
 
 	reset: async () => {
+		await ReportSpecs.forgetColumns();
 		for (const w of ReportSpecs.FILTER_WIDGETS) {
 			try { resetWidget(w, false); } catch (e) { /* widget may not exist yet */ }
 		}
