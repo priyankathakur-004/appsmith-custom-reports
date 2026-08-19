@@ -385,6 +385,17 @@ export default {
 		await storeValue("reportsColumnPicks", Array.isArray(picked) ? picked.slice() : [], false);
 	},
 
+	// Ticking a column changes the SELECT, so the rows on screen stop matching the
+	// headers above them. runReport re-runs on its own when the clause changes, but
+	// that run never moves reportsResponseTs, and the grid only hands rows to AG Grid
+	// when that timestamp moves -- so the new columns painted empty until Run was
+	// pressed. Go through the path Run uses instead. Same fix, and the same reason,
+	// as switching report needed.
+	pickColumns: async () => {
+		await ReportSpecs.rememberColumns();
+		await ReportSpecs.refreshGrid();
+	},
+
 	forgetColumns: async () => {
 		try { await removeValue("reportsColumnPicks"); } catch (e) { /* nothing stored yet */ }
 	},
