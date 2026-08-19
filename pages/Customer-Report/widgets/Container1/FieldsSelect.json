@@ -5,7 +5,7 @@
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
   "bottomRow": 9,
   "boxShadow": "none",
-  "defaultOptionValue": "{{ ReportSpecs.presetColumns() }}",
+  "defaultOptionValue": "{{ ReportSpecs.columnDefaults() }}",
   "dynamicBindingPathList": [
     {
       "key": "sourceData"
@@ -26,7 +26,11 @@
       "key": "optionValue"
     }
   ],
-  "dynamicTriggerPathList": [],
+  "dynamicTriggerPathList": [
+    {
+      "key": "onOptionChange"
+    }
+  ],
   "isDisabled": false,
   "isFilterable": true,
   "isLoading": false,
@@ -49,6 +53,7 @@
   "mobileRightColumn": 30,
   "mobileTopRow": 39,
   "needsErrorInfo": false,
+  "onOptionChange": "{{ ReportSpecs.rememberColumns() }}",
   "optionLabel": "label",
   "optionValue": "value",
   "originalBottomRow": 9,
