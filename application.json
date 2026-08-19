@@ -4,7 +4,10 @@
     "appPositioning": {
       "type": "FIXED"
     },
-    "navigationSetting": {},
+    "navigationSetting": {
+      "showNavbar": false,
+      "showSignIn": false
+    },
     "themeSetting": {
       "appMaxWidth": "LARGE",
       "density": 1.0,
@@ -35,7 +38,10 @@
     "appPositioning": {
       "type": "FIXED"
     },
-    "navigationSetting": {},
+    "navigationSetting": {
+      "showNavbar": false,
+      "showSignIn": false
+    },
     "themeSetting": {
       "appMaxWidth": "LARGE",
       "density": 1.0,
