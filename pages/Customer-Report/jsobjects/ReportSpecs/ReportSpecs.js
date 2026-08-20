@@ -77,6 +77,7 @@ export default {
 		{ group: "Late fee", value: "daysUntilDue", label: "Days Until Due", description: "Days between receiving the previous bill and its due date — due date minus receipt date. The arithmetic is confirmed: it reproduces all 59 rows of the client's own Late Fees tab exactly. But it inherits the receipt date, which is not reliable here. Not reliable for this customer: 21,611 bills carry only 20 distinct received_on values, about 1,080 sharing each, and 92.8% are dated as received after they were already due. It is a bulk-load stamp on backfilled bills, genuine only on bills processed live. Measured 2026-08-13. So the column computes correctly and means nothing wherever that date is a load stamp, which is most of them.", sql: "(pbr.due_date::date - pbr.received_on::date) AS \"daysUntilDue\"" },
 
 		{ group: "Bill record", value: "billId", label: "Engie Insight Bill ID", description: "UBM's own id for the bill behind this row. Source: analytics_monthly_feed.bill_id, no join needed.", sql: "amf.bill_id AS \"billId\"" },
+		{ group: "Bill record", value: "billPdf", label: "Invoice PDF", description: "Link to the scanned bill, as an https URL that opens in a new tab. Source: bill_files.path for the bill's application/pdf file, a Google Cloud Storage object with the gs:// prefix rewritten to https://storage.googleapis.com/. A bill also carries a text/csv of its readings under observations/, which this ignores. Blank where UBM holds no PDF for the bill — the report builds the link, it does not check the file is reachable.", sql: "replace(bfile.path, 'gs://', 'https://storage.googleapis.com/') AS \"billPdf\"" },
 		{ group: "Bill record", value: "vendorInvoice", label: "Vendor Invoice #", description: "Invoice number as the vendor wrote it. Source: bill_records.invoice_number, joined on the feed's own bill_record_id, so one bill record per row and no row multiplication.", sql: "br.invoice_number AS \"vendorInvoice\"" },
 		{ group: "Bill record", value: "dueDate", label: "Due Date", description: "Date the bill was due. Source: bill_records.due_date.", sql: "TO_CHAR(br.due_date, 'YYYY-MM-DD') AS \"dueDate\"" },
 		{ group: "Bill record", value: "receiptDate", label: "Receipt Date", description: "Date the bill was received. Source: bill_records.received_on. Not reliable for this customer: 21,611 bills carry only 20 distinct received_on values, about 1,080 sharing each, and 92.8% are dated as received after they were already due. It is a bulk-load stamp on backfilled bills, genuine only on bills processed live. Measured 2026-08-13.", sql: "TO_CHAR(br.received_on, 'YYYY-MM-DD') AS \"receiptDate\"" },
@@ -547,6 +548,15 @@ export default {
 		}
 		if (ReportSpecs.usesBillRecord()) {
 			sql += "\n\t\tLEFT JOIN bill_management_v2.bill_records br ON br.id = amf.bill_record_id";
+		}
+		if (ReportSpecs.selectedColumns().some(o => o.value === "billPdf")) {
+			// A bill carries several files — measured: the scan under files/ next to
+			// a text/csv of the readings under observations/ — so the type filter is what
+			// makes this the PDF rather than whichever row sorted first. LIMIT 1 keeps a
+			// bill with more than one scan from turning one report row into several.
+			sql += "\n\t\tLEFT JOIN LATERAL (SELECT bf.path FROM bill_management_v2.bill_files bf"
+				+ " WHERE bf.bill_id = amf.bill_id AND lower(bf.content_type) LIKE 'application/pdf%'"
+				+ " ORDER BY bf.id LIMIT 1) bfile ON TRUE";
 		}
 		if (ReportSpecs.usesLateFee()) {
 			sql += "\n\t\tLEFT JOIN lf_seq lf ON lf.virtual_account_id = amf.virtual_account_id AND lf.bill_id = amf.bill_id"
@@ -1271,7 +1281,7 @@ export default {
 	textFields: [
 		"locationNumber", "locationZip", "vendorCode", "accountNumber",
 		"cleanAccountNumber", "meterSerial", "vendorZip", "locationPhone", "vendorPhone",
-		"vendorInvoice", "billId"
+		"vendorInvoice", "billId", "billPdf"
 	],
 
 	_utf8: (str) => {
