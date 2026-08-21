@@ -220,10 +220,7 @@ export default {
 					"cleanAccountNumber", "meterSerial",
 					"accountCreatedDate", "accountActivityDate",
 
-					"glCode", "glAllocation",
-					{ attr: "^gl\\s*code", label: "Customer GL Number", all: true },
-					{ attr: "gl\\s*desc", label: "GL Description", all: true },
-					{ attr: "gl\\s*alloc", label: "GL % Allocation", all: true }
+					"glCode", "glAllocation"
 				],
 				filters: {}
 			},
@@ -586,6 +583,40 @@ export default {
 		return ReportSpecs._resolveSpecs(p.columns);
 	},
 
+	// What the Visible Columns picker falls back to. Its default has to be a binding,
+	// because picking a report has to change it -- but Appsmith re-applies a widget's
+	// default every time that binding re-evaluates, and a Run or an export does
+	// re-evaluate it. Reading the user's own picks back makes that re-application a
+	// no-op instead of a reset to the report's columns. Switching report or hitting
+	// Reset clears the picks, so those still load the report's own list.
+	columnDefaults: () => {
+		const picks = appsmith.store.reportsColumnPicks;
+		return Array.isArray(picks) ? picks : ReportSpecs.presetColumns();
+	},
+
+	// Not persisted: a reload should hand back the report's own columns, the way it
+	// did before this was stored at all. Persisting it would recreate the stale-state
+	// problem selectPreset() below already had to undo.
+	rememberColumns: async () => {
+		const picked = (typeof FieldsSelect !== "undefined" && FieldsSelect.selectedOptionValues) || [];
+		await storeValue("reportsColumnPicks", Array.isArray(picked) ? picked.slice() : [], false);
+	},
+
+	// Ticking a column changes the SELECT, so the rows on screen stop matching the
+	// headers above them. runReport re-runs on its own when the clause changes, but
+	// that run never moves reportsResponseTs, and the grid only hands rows to AG Grid
+	// when that timestamp moves -- so the new columns painted empty until Run was
+	// pressed. Go through the path Run uses instead. Same fix, and the same reason,
+	// as switching report needed.
+	pickColumns: async () => {
+		await ReportSpecs.rememberColumns();
+		await ReportSpecs.refreshGrid();
+	},
+
+	forgetColumns: async () => {
+		try { await removeValue("reportsColumnPicks"); } catch (e) { /* nothing stored yet */ }
+	},
+
 	presetAvailable: () => {
 		const p = ReportSpecs.activePreset();
 		if (!p || !p.columns) return null;
@@ -646,6 +677,7 @@ export default {
 		// earlier versions persisted to the browser, which outlived the session and
 		// reopened days later on a page whose filters had been reset around it.
 		try { removeValue("reportPreset"); } catch (e) {  }
+		await ReportSpecs.forgetColumns();
 		for (const w of ReportSpecs.FILTER_WIDGETS) {
 			try { resetWidget(w, false); } catch (e) {  }
 		}
@@ -892,18 +924,25 @@ export default {
 		const rows = (typeof getAccountAttributesList !== "undefined" && getAccountAttributesList.data) || [];
 		const attrs = (Array.isArray(rows) ? rows : [])
 			.filter(r => r && r.value)
-			.map(r => ({ label: "Account attribute · " + r.value, value: ReportSpecs.ATTR_PREFIX + r.value }))
+			.map(r => ({ label: "Account attribute · " + ReportSpecs.attrDisplayName(r.value), value: ReportSpecs.ATTR_PREFIX + r.value }))
 			.filter(o => inScope(o.value))
 			.sort((a, b) => a.label.localeCompare(b.label));
 		return catalog.concat(attrs);
 	},
 
 	presetAttrLabels: () => {
-		const p = ReportSpecs.activePreset();
-
-		return ((p && p.columns) || [])
-			.filter(c => typeof c !== "string" && c.label && !c.all)
+		const p = ReportSpecs.activePreset() || {};
+		return (p.columns || []).concat(p.availableExtra || [])
+			.filter(c => typeof c !== "string" && c.label)
 			.map(c => ({ re: new RegExp(c.attr, "i"), label: c.label }));
+	},
+
+	// The client's mapping calls this attribute Customer GL Number; UBM calls it
+	// GL Code 1. Show both, so a field named in the spreadsheet is findable in the
+	// dropdown and still traceable back to the attribute it reads.
+	attrDisplayName: (name) => {
+		const hit = ReportSpecs.presetAttrLabels().find(s => s.re.test(name));
+		return (hit && hit.label !== name) ? `${hit.label} (${name})` : name;
 	},
 
 	accountAttrColumn: (pick) => {
@@ -912,7 +951,7 @@ export default {
 		if (alias === "attr_") alias = "attr_unnamed";
 		return {
 			value: alias,
-			label: (ReportSpecs.presetAttrLabels().find(s => s.re.test(name)) || {}).label || name,
+			label: ReportSpecs.attrDisplayName(name),
 			description: "Account attribute: " + name,
 			attrName: name,
 			joinAlias: "av_" + alias,
@@ -1742,6 +1781,7 @@ export default {
 	},
 
 	reset: async () => {
+		await ReportSpecs.forgetColumns();
 		for (const w of ReportSpecs.FILTER_WIDGETS) {
 			try { resetWidget(w, false); } catch (e) { /* widget may not exist yet */ }
 		}
