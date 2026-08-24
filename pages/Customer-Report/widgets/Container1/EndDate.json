@@ -14,22 +14,16 @@
       "key": "minDate"
     },
     {
-      "key": "maxDate"
+      "key": "borderRadius"
     },
     {
-      "key": "borderRadius"
+      "key": "isVisible"
     }
   ],
   "dynamicHeight": "FIXED",
   "dynamicPropertyPathList": [
     {
-      "key": "isVisible"
-    },
-    {
       "key": "minDate"
-    },
-    {
-      "key": "maxDate"
     }
   ],
   "dynamicTriggerPathList": [
@@ -42,7 +36,7 @@
   "isDisabled": false,
   "isLoading": false,
   "isRequired": false,
-  "isVisible": true,
+  "isVisible": "{{ ReportSpecs.showFilter(\"dateRange\") }}",
   "key": "cr_enddate",
   "label": "To Month/Period",
   "labelAlignment": "left",
@@ -52,16 +46,16 @@
   "labelTextColor": "#0F2A47",
   "labelTextSize": "0.875rem",
   "labelWidth": 5,
-  "leftColumn": 13,
-  "maxDate": "{{ StartDate.selectedDate ? moment(StartDate.selectedDate).add(31, 'days').toISOString() : '2121-12-31T18:29:00.000Z' }}",
+  "leftColumn": 52,
+  "maxDate": "2121-12-31T18:29:00.000Z",
   "maxDynamicHeight": 9000,
   "minDate": "{{ StartDate.selectedDate ? moment(StartDate.selectedDate).toISOString() : '1920-12-31T18:30:00.000Z' }}",
   "minDynamicHeight": 4,
   "minWidth": 240,
-  "mobileBottomRow": 30,
-  "mobileLeftColumn": 15,
-  "mobileRightColumn": 30,
-  "mobileTopRow": 23,
+  "mobileBottomRow": 18,
+  "mobileLeftColumn": 52,
+  "mobileRightColumn": 64,
+  "mobileTopRow": 9,
   "needsErrorInfo": false,
   "onDateSelected": "{{ ReportSpecs.refreshGrid() }}",
   "originalBottomRow": 18,
@@ -71,7 +65,7 @@
   "parentRowSpace": 10,
   "renderMode": "CANVAS",
   "responsiveBehavior": "fill",
-  "rightColumn": 26,
+  "rightColumn": 64,
   "shortcuts": false,
   "timePrecision": "minute",
   "topRow": 9,

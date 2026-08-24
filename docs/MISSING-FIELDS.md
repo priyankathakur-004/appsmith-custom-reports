@@ -775,6 +775,601 @@ invoice our row count lands at roughly double theirs. That shape is the bill-gra
 one the DUP presets already have, and would be a different report rather than a fix
 to this one.
 
+## The five summary reports need aggregation, not subtotals
+
+Scoped 2026-08-17 from the client's own tabs. The working description of these five was
+"grouping and subtotals" — a grouped report with detail rows and a subtotal line under
+each group. **None of them is that shape.** Every one is a flat table of one row per
+group, with no detail rows underneath and no subtotal line anywhere:
+
+| Report | One row per | Figures |
+| --- | --- | --- |
+| Annual Use-Cost | site, service type, unit | usage, cost, cost per unit |
+| Use Cost Analysis – Trendline | site, month, service type, unit | usage, cost, cost per unit |
+| Index Report – Trendline | site, sq ft, month, service type | cost per sq ft, usage per sq ft |
+| Use Cost Analysis – Year over Year | site, service type, unit, calendar month | the same three, pivoted across two years, plus % variance |
+| Index Report – Year over Year | site, sq ft, service type, calendar month | the same two, pivoted across two years, plus % variance |
+
+So the feature is `GROUP BY` with `SUM`, and three of the five need nothing beyond it.
+The two Year over Year reports need one more thing on top — a pivot that puts each year
+in its own column.
+
+**Three are built: Annual Use-Cost, Use Cost Analysis – Trendline, Index Report –
+Trendline.** A preset carrying `groupBy: true` groups on every column it shows that is
+not a total. Five totals were added — Cost, Usage, Cost per Unit, Cost per SqFt, Usage
+per SqFt — and they are the only fields offered on a grouped report, alongside the
+existing dimensions. Six things had to change around them, and each is a way the report
+could have been quietly wrong rather than broken:
+
+- **The feed must not be deduplicated first.** `feedCte()` normally emits `DISTINCT ON
+  (virtual_account_id, …)` when no per-month column is shown. A summary shows no
+  per-month column, so without an exception it would have summed one month per account.
+  That reads as a plausible number, not an error.
+- **Ratios are computed after the sum, not averaged.** Cost per Unit is
+  `SUM(charges) / SUM(usage)` — the blended rate. Averaging the per-bill rates would
+  weight a $12 bill the same as a $12,000 one.
+- **`GROUP BY` is written by ordinal.** Several column expressions are long `CASE`
+  blocks; repeating them verbatim in the `GROUP BY` is one transcription slip away from
+  a report that regroups on something else and still returns rows.
+- **Grid filters on a total go to `HAVING`.** `SUM(...) > 1000` in a `WHERE` is a
+  Postgres error, so a user filtering the Cost column would have broken the report.
+- **`ORDER BY` falls back to the report's own aliases.** The usual
+  `l.id, amf.time_period` fallback names columns that are not grouping keys.
+- **Per-bill figures are hidden from the picker.** Ticking Total Charges beside the
+  totals would make it a grouping key and split the summary back into the rows the
+  totals had just collapsed. Unit of Measure is the exception — it sits in the Usage
+  group but is a label, and the reports group on it.
+
+**Unit of Measure is a grouping key on purpose.** Without it a site billed in two units
+would have kWh added to Therms under one Usage figure. Whether that ever happens here is
+not known and is worth measuring — the query is below.
+
+### What will not reconcile against their tabs, and why
+
+**One Time Charges are excluded on all five of their reports, and ours can exclude them
+too.** Every one of the five tabs is run with `One Time Charges = Exclude`. A first pass
+recorded this as unanswerable, on the grounds that `total_charges_other` is a charge
+bucket rather than a marker. That was wrong, and the correction is the useful part:
+**`analytics_monthly_feed.total_charges_other` is exactly the feed's rollup of the
+line-item category `Other Charges`**, which is where the one-time fees sit. Measured on
+one account, 2026-08-17:
+
+| | charges | other | customer | usage |
+| --- | ---: | ---: | ---: | ---: |
+| `analytics_monthly_feed` | 20,212.95 | 16,949.091 | 84.48 | 3,179.379 |
+| `analytics_billing_line_items` | 20,212.95 | 16,949.09 | 84.48 | 3,179.38 |
+
+So an excluding cost is `SUM(total_charges) - COALESCE(SUM(total_charges_other), 0)` —
+feed arithmetic, no line-item join, no grain change, no new CTE.
+
+**It is built as a toggle, not a column**, because that is what Engie's report is: a
+filter, not a field. `Exclude one-time charges` sits beside Reset and Run, off by
+default, and shows only on the grouped reports where a total exists to net. Ticking it
+swaps Cost, Cost per Unit and Cost per SqFt, so the *ratio* is corrected too rather than
+a net total sitting over a gross rate. The aliases do not change, so the grid, the sort
+model and the export see the same columns either way.
+
+**It nets specific charge codes, not the whole Other Charges category.** A first cut
+netted `total_charges_other`, which is wrong, and the run that proved it is worth
+keeping: whole service types went to zero — Storm Water at site 1325 from 14,579.99 to
+nothing, Fire Protection at 3632 from 3,947.36 to nothing — and several rows went *up*,
+0511 Electric by 11,453.66, because credits are booked in the same bucket. Broken down
+by code over April 2025 to March 2026, **78.4% of Other Charges is recurring**:
+
+| Code | Description | Charge | Share |
+| --- | --- | ---: | ---: |
+| `CHG_FACILITYCHARGE` | Facility Charge | 640,065.38 | 41.9% |
+| `OTH_RIDERFEE` | Rider Fee | 380,595.57 | 24.9% |
+| `OTH_FEE` | Fee | 337,281.27 | 22.1% |
+| `OTH_PASSTHROUGH` | Passthrough Charge | 133,456.09 | 8.7% |
+| `OTH_METERRENTAL` | Meter Charge | 85,726.33 | 5.6% |
+| `LATEFEE` | Late Fee | 12,510.42 | 0.8% |
+| `OTH_PENALTY` | Penalty | 491.88 | 0.0% |
+| `OTH_CHARGE` | Service Availability | −41,852.34 | −2.7% |
+| `OTH_DEPOSIT` | Deposit | −9,897.94 | −0.6% |
+| `OTH_ADJUSTMENT` | Adjustment | −9,065.14 | −0.6% |
+| `OTH_CORR_CHARGE` | Corrections | −1,553.32 | −0.1% |
+| `CHG_CHARGE` | Account Level Charge | −431.69 | −0.0% |
+| `OTH_DEPOSITINT` | Deposit Interest | −238.79 | −0.0% |
+
+A facility charge and a rate rider are on every bill. Netting them off is not excluding
+one-time charges, it is deleting two thirds of the fixed cost of running a site. So the
+toggle nets the six non-recurring codes only, held in `ReportSpecs.ONE_TIME_CODES`:
+`OTH_FEE`, `OTH_PENALTY`, `OTH_DEPOSIT`, `OTH_DEPOSITINT`, `OTH_CORR_CHARGE`,
+`OTH_ADJUSTMENT` — 21.6% of the category.
+
+Reaching them means leaving the feed after all, since `total_charges_other` is category
+grain and the codes are not. Two CTEs do it: `otc_bill` sums the one-time codes per bill
+**and commodity**, `otc_rows` counts that bill and commodity's feed rows, and each row
+nets its pro-rated share — the shape the `lateCharges` field already uses, because the
+feed splits one bill across the months it covers and subtracting the whole bill from each
+month would over-net it.
+
+**Per commodity, not per bill, and that distinction is load-bearing.** Pro-rating is only
+exact when every one of a bill's feed rows lands in the same report group, and these
+reports group by service type. Measured 2026-08-17: of 1,880 bills carrying a one-time
+code, **415 — 22% — span more than one commodity**. Keyed per bill alone, a combined
+water-and-sewer invoice would net only the share sitting on the rows the group happens to
+cover, leaving the row too high by the rest, with no error to show for it. Keyed per bill
+and commodity, each service nets its own fees.
+
+Six of the 1,880 span more than one **site**, which the same argument would say to key on
+as well. It is left out: 0.3% of bills, against the risk that a line item whose
+`location_id` disagrees with the feed's would join to nothing and net nothing at all — a
+silent under-net being exactly what this change set out to fix. Worth revisiting if a
+per-site figure is ever queried.
+
+**`LATEFEE` is deliberately left in.** It sits in the same category and is arguably a
+one-time charge, but this app treats late fees as a first-class thing with their own
+report, and netting them out of Cost would put the summary reports at odds with the Late
+Fees tab. It is 0.8% of the category. Worth a decision rather than a default.
+
+The question for Engie is now a short list rather than a concept: **which of these
+thirteen codes does One Time Charges = Exclude remove?** The six above are this app's
+answer, and the two large recurring ones — Facility Charge and Rider Fee — are the ones
+that would move the numbers most if they disagree.
+
+Two of their settings do line up and need no work: `Tax = Include` matches, since
+
+Two of their settings do line up and need no work: `Tax = Include` matches, since
+`total_charges` includes tax; `Normalization Type = Actual` matches, since the feed is
+actual. `Billing Complete = All` means no filter at all.
+
+The rest is the coverage already recorded in this file — the summary pseudo-sites they
+report on and UBM does not have, and the per-site staleness. Their Annual Use-Cost
+covers April 2025 to March 2026 and their trendlines December 2025 to March 2026, so
+site 0115, which stops at 2025-10-16, contributes nothing to any of them.
+
+### The Year over Year pivot, as built
+
+Both YOY reports put a year in each column heading — `2025`, `2026`, `% VARIANCE` — and
+column names taken from data are the one thing this builder cannot do: the grid, the
+sort model and the export all read a fixed column list from `selectedColumns()`.
+
+The way through is relative naming rather than dynamic columns: **Prior Year**, **This
+Year**, **% Variance**, with the year taken from the report's To-month filter and the
+figures built as `SUM(...) FILTER (WHERE year = …)`. The column list stays static, so
+grid, filter, sort and export need no change at all, and the header can carry the actual
+year through the rename mechanism already in the app.
+
+Both are built. Each measure becomes three fixed columns — prior year, this year, and the
+percentage change — built as `SUM(...) FILTER (WHERE EXTRACT(YEAR FROM time_period) = …)`.
+**The column labels carry the actual years**, so the report reads `Cost 2025 | Cost 2026 |
+Cost % Variance` against their `2025 | 2026 | % VARIANCE`. The years are substituted into
+both the SQL and the label from `$PRIOR$` / `$THIS$` tokens, the same shape the one-time
+exclusion already uses to swap an expression, so the field list stays static and the grid,
+sort model and export need no change at all.
+
+**A Year dropdown drives them, not the date range.** That is how the client's own reports
+work — a From Year rather than a period — and it makes the window self-bounding: the
+report filters to the two years itself, so there is no way to set a range that half-fills
+a pair. The dropdown names the earlier year, matching their From Year, and the report
+compares it with the one after; picking 2025 gives `Cost 2025 | Cost 2026 | % Variance`.
+It defaults to 2025 and is populated from the years the feed actually holds, so a year
+with no data is not offered.
+
+The From and To Month pickers hide on these two reports, since they would do nothing, and
+the Year dropdown hides on every other. A stale date range left over from another report
+is ignored rather than silently narrowing the comparison.
+
+**Calendar Month is a new dimension.** These reports compare the same month across years,
+so the grouping key is the month without the year. It reports `03 March` rather than
+`March`, for the reason `Month` reports `2025-12` rather than `December, 2025`: a bare
+month name sorts April before December.
+
+Their reports also carry an explicit Month filter, which this builder has no equivalent
+for. Setting From and To a year apart gives every month in between, each comparing its own
+two years, with the grid's column filter available to narrow to one. That is more rows
+than their tab shows and the same numbers.
+
+One thing left for them: **their rendered Use Cost YOY tab shows two year pairs**
+(2024/2025 beside 2025/2026) where its own Visible Fields list shows one, and their Index
+YOY tab shows one. The field list is the specification and is what is built. Worth putting
+in the same message as the one-time-charges question.
+
+## Annual Use-Cost, reconciled against their tab
+
+Run over April 2025 – March 2026, the window their tab covers, and compared on
+2026-08-17. Their tab holds 24 rows — the two `!0000-` pseudo-sites plus 0115, 0145,
+0302 and 0344 — so 16 rows are genuinely comparable.
+
+**The report's arithmetic is right. UBM holds about a month of the twelve.**
+
+Cost per unit is the column that proves it, because a rate is not distorted by a short
+window:
+
+| Site | Service | Unit | Theirs | Ours | Ours converted |
+| --- | --- | --- | ---: | ---: | ---: |
+| 0344 | Electric | kWh | 0.0900 | 0.0901 | — |
+| 0302 | Electric | kWh | 0.1000 | 0.0978 | — |
+| 0145 | Electric | kWh | 0.1200 | 0.1169 | — |
+| 0115 | Electric | kWh | 0.1600 | 0.1897 | — |
+| 0145 | Water | kGal | 8.1800 | 5.8726 | 7.8511 |
+| 0115 | Water | kGal | 7.8300 | 5.6789 | 7.5921 |
+| 0344 | Irrigation | kGal | 3.6100 | 2.5965 | 3.4713 |
+
+Volume is short by a factor of eleven and the shortfall is uniform: across all 16 shared
+rows theirs totals 3,981,407 against ours 355,850 — **8.9%, about 1.1 months of 12** —
+and usage agrees independently (0145 Electric 9.3%, 0302 Electric 8.9%). All four sites
+sit at the same ratio, so this is not the per-site staleness recorded above; it is the
+one-bill-per-account coverage gap, now measured over a full year rather than inferred
+from the Late Fees `LAG` returning nothing.
+
+**The CCF to kGal factor is confirmed, not assumed.** Engie report water, sewer and
+irrigation in kGal; UBM stores CCF. A line item on one account reads 461,700 against the
+feed's 617.21 CCF for the same account, and 461,700 / 748 = 617.2. So 1 CCF = 748
+gallons exactly, which is what makes the converted column above line up.
+
+**One row of sixteen did not fit, and chasing it is what settled the one-time-charge
+question.** 0145 Irrigation came back at 74.6% of their annual cost on 18.7% of the
+usage — $31.24/kGal against their $5.86. Every other row moved cost and usage together.
+Broken down, the site's five irrigation accounts each held a stable rate across both
+months but disagreed with each other from $5.84 to $41.34 per CCF, which no utility
+prices. One account carried 89% of the cost on 63% of the usage, and its bill was a
+single `OTH_FEE` line of 16,926.00 against 3,286.95 of everything else. Excluding
+`Other Charges` puts that account at $5.29/CCF, in among its siblings at $5.84, $7.43
+and $8.88, and the whole row at $7.96/kGal against their $5.86. The residual is
+plausibly seasonal — the two months UBM holds are September and October, peak irrigation
+in Texas, against their twelve-month blend.
+
+Two smaller rows have the same shape and are almost certainly the same cause: 0302 and
+0145 Natural Gas both carry charges with usage at 0.4% and 0%.
+
+**What differs by design, and needs no work:**
+
+- Fire Protection, Storm Water, Lighting and Refuse appear on ours and not theirs. Their
+  Service Types filter names eleven types and excludes all four.
+- `Other Services` appears on theirs and not ours — 196,204.78 at 0145, 51.92 at 0344.
+  No UBM commodity maps to it.
+- Sewer usage is zero on every row of their tab and real on ours. Sewer is billed off
+  water consumption and they suppress the quantity.
+- Units are UBM's own throughout. See the conversion note above.
+
+## Why nothing reconciles: UBM holds one billing cycle, not twelve
+
+Traced to the bottom on 2026-08-17, and this supersedes every earlier guess in this file
+about how far behind UBM is. It is not a lag, not a per-site staleness, and not anything
+the reports do. **UBM has received about one bill per account for this customer, and the
+reports show it correctly.**
+
+Four measurements, in the order they close the question.
+
+**Every analytics layer agrees, so nothing is being lost downstream.** For April 2025 to
+March 2026:
+
+| Source | Bills | Accounts |
+| --- | ---: | ---: |
+| `analytics_monthly_feed` | 5,799 | 9,121 |
+| `analytics_billing_line_items` | 5,799 | 9,121 |
+| `account_history` | 5,894 | 9,295 |
+
+**One bill per account, measured not inferred.** Of 9,121 accounts with any bill in the
+window, **9,066 have exactly one**; the average is 1.02 and the maximum 11.
+
+**The bills that exist are one month.** Coverage for the four sites that overlap the
+client's Annual Use Cost tab:
+
+| Site | Months with data | Bills | Total cost | Share in October 2025 |
+| --- | ---: | ---: | ---: | ---: |
+| 0145 | 1 | 14 | 203,902 | 100% |
+| 0302 | 5 | 27 | 87,665 | 99% |
+| 0115 | 2 | 32 | 36,794 | 85% |
+| 0344 | 5 | 11 | 40,550 | 14% |
+
+October 2025 is the load. The rest is scraps — 0302's June is one bill worth 17.
+
+**And the processing pipeline is healthy, so the gap is ingestion.** `bill_records` looked
+three times larger than the feed, which raised the hope that invoices were stuck before
+analytics. They are not: a bill record is not a bill, and 17,195 records resolve to 6,024
+bills — 2.85 records each, versions and pages.
+
+| Workflow state | Bill records | Bills | In the feed |
+| --- | ---: | ---: | ---: |
+| `processed` | 16,561 | 5,799 | **5,799** |
+| `data_verification_1` | 589 | 211 | 0 |
+| `data_verification_2` | 8 | 5 | 0 |
+| `integrity_check` | 37 | 9 | 0 |
+
+**Every processed bill reaches analytics — 5,799 of 5,799.** Only 225 bills, 3.7%, sit in
+verification, and releasing all of them would move a total from 9.6% of the client's
+figure to about 10%. The eleven missing months were never received.
+
+### What the reports do about it
+
+Rounding is applied at the aggregate: **Cost to two decimal places**, Usage to three
+matching the client's own reports, and the three rates to four — enough to keep an
+electric rate of 0.0869 distinct from 0.09. Before this, pro-rating a one-time charge
+across thirteen feed rows produced a Cost of `80521.12315384616`, which reads as broken
+whatever it means.
+
+Four things in the source data are **not** corrected, deliberately, and instead carry
+warnings in the field descriptions where a reader meets them:
+
+| What it looks like | Why it is left alone |
+| --- | --- |
+| 684,016 CCF of water at one mall — 511 million gallons | The reading's scale is wrong at source. Rescaling by 100 or 748 would be a guess dressed as a fix, and this file exists because guesses have produced wrong finance numbers here before. |
+| 156,141 of electricity with no kWh at all | The charge is real and the reading is absent. Inventing a denominator would be worse than a blank rate. |
+| 369 per CCF of sewer on 7.32 CCF | Correct arithmetic on two autumn months. Suppressing it would hide a real thin-data condition. |
+| Water and Sewer carrying identical usage | Sewer is billed off the water meter, so this is how the utility bills. It is a real reading, not a duplicate to be deleted. |
+
+The last one is the trap worth naming, because it is invisible: **usage is not additive
+across service types.** On about half this customer's sites Water and Sewer carry the
+same reading, so totalling usage counts the same water twice. Engie's own tab blanks
+sewer usage entirely, which is the convention that avoids it. This report keeps the
+figure — it is real, and blanking it on the sites where the two genuinely differ would
+destroy data — and says so on the Usage column instead.
+
+### What this means for the reports
+
+The Annual Use-Cost reconciliation reads 9.6% of the client's annual cost across the
+twelve comparable rows, and usage agrees independently. That is the whole discrepancy.
+Two things follow:
+
+- **Rates are usable today, totals are not.** A blended rate is not distorted by a short
+  window, and electric agrees within 3% at three of four sites. Any annual total is short
+  by roughly the same factor everywhere.
+- **The two rate outliers are seasonality, not data quality.** 0115 Electric reads 0.1900
+  in September and 0.1895 in October — steady, so 0.1897 is the real Anchorage
+  shoulder-season rate against a 0.16 twelve-month blend. 0302 Natural Gas holds 13.64
+  therms in September and 4.36 in October; a Missouri mall burns no gas in autumn, so the
+  bill is nearly all fixed charge and the rate goes to 17/therm against an annual 1.51.
+  Both are correct arithmetic on an unrepresentative slice. Neither is worth chasing.
+
+Nothing in this app can close the gap. The question for Engie and the UBM team is why
+only one cycle has been received, and it is now specific enough to answer.
+
+## The To Month picker was capped at 31 days
+
+Found 2026-08-17 from a Use Cost Analysis run filtered to December 2025 that returned
+December through May. Every row was on or after the From month and none was bounded
+above, which is the signature of only one half of the range reaching the SQL.
+
+`EndDate.maxDate` was bound to `moment(StartDate.selectedDate).add(31, 'days')`, so the
+To picker would not accept a date more than about a month after the From date. A value
+outside that range leaves `selectedDate` empty while the field still shows the typed
+text, and `filterClauses()` emits the `>=` bound alone — a half-open range that reads as
+a working filter.
+
+The cap dates from the widget's creation, when this app listed a month of invoices at a
+time. It has been wrong since the first report that spans a year. **Any earlier run
+described as April 2025 to March 2026 was in practice April 2025 onwards**, so it may
+have included months after March 2026. For this customer the feed holds almost nothing
+outside October 2025, so the reconciliation figures above are unaffected in substance —
+but the window they were run over was not the window intended.
+
+`maxDate` is now the same far-future constant `StartDate` uses. `minDate` still tracks
+the From date, so To cannot precede From, which is the only constraint worth enforcing.
+
+**And the status line now says when a period is half-open**, because that is what made
+this invisible: a report with one bound set reads exactly like a report with two. It now
+appends *only From Month is set, so this is every month after it, not a period*.
+
+## Do not copy the main app's Supply Only consumption rule
+
+Checked 2026-08-17 after finding the rule in appsmith-ubm-native. Recorded here because
+**our Usage looks wrong beside it and is not**, and the next person to compare the two
+apps will reach for the same one-line "fix".
+
+Every usage query in the native app — `fetch_ma_usage`, `fetch_analytics_data`,
+`fetch_utility_tree_data`, `RC_LocationUsage`, `fetch_location_metrics`, `fetch_ee_energy`,
+across four pages — reads consumption as:
+
+```sql
+SUM(CASE WHEN bill_type = 'Supply Only'
+         THEN COALESCE(total_gen_consumption, 0)
+         ELSE COALESCE(total_consumption, 0) END)
+```
+
+This report sums `total_consumption` unconditionally. Measured for this customer:
+
+| bill_type | Rows | With consumption | With gen consumption | Σ consumption | Σ gen consumption |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Distribution Only | 4,983 | 4,056 | 32 | 90,601,281 | 6,867 |
+| Full Service | 15,720 | 9,370 | 147 | 35,340,940 | 944,992 |
+| Supply Only | 4,671 | **1** | 4,009 | 328,889 | **91,422,638** |
+
+**Distribution Only consumption and Supply Only generation consumption are 99.1% of each
+other.** They are the same electricity: a deregulated account gets two bills, one from
+the supplier for the commodity and one from the utility for delivery, and both state the
+same kWh. Adopting the rule would add both together — consumption up 72%, from
+126,271,110 to 217,364,859, and Cost per Unit halved on every deregulated account.
+
+What this report does is right. It counts the energy once, through the distribution bill,
+while Cost sums the charges on **both** bills. So Cost per Unit is the fully delivered
+rate — supply plus delivery over the kWh delivered — which is the number a reader wants.
+
+**And it is confirmed from outside.** Our electric cost per unit agrees with the client's
+own figures within 3% at three of four comparable sites. Counting the energy twice would
+put us at roughly half their rate; dropping the supply side would put us at double.
+Neither is what happens.
+
+Two consequences worth carrying:
+
+- **A Supply Only row carries cost and no usage of its own.** That is harmless while its
+  distribution partner sits in the same group, which it does on every preset here, since
+  they share location, commodity and month. Grouping by Account # or Bill Type would
+  separate them and produce a cost with no denominator.
+- **It explains some of the charge-without-usage rows.** Where a site shows electricity
+  cost against no kWh at all — 2810 Newport Centre at 156,141 — the distribution half is
+  simply not loaded, which is the same one-cycle coverage recorded above rather than a
+  new fault.
+
+Whether the native app should sum both is a question for that app, not this one.
+
+## A third of sites carry a floor area of 1
+
+Found 2026-08-17 running Index Report - Trendline. Nine of the twenty-six sites on the
+first page hold `locations.square_feet = 1` — Empire Mall, Woodfield TRAINING, University
+Park Village, Shops at Clearfork, Beverly Center, both Cherry Creek sites, City Creek
+Center and Dolphin Mall — against a real range of 29,140 to 1,251,407 on the other
+seventeen. One square foot is not a small building, it is a placeholder.
+
+Dividing by it returns the cost itself, so the report read:
+
+| Site | Month | Service | Cost per SqFt |
+| --- | --- | --- | ---: |
+| 5600 Beverly Center | 2026-03 | Electric | **292,544.14** |
+| 5037 Woodfield TRAINING | 2025-12 | Electric | **233,865.19** |
+| 5604 City Creek Center | 2026-03 | Electric | **62,231.94** |
+
+**Cost per SqFt, Usage per SqFt and KBTUs per SqFt now treat an area of 1 or less as no
+area**, which is what they already did for zero. The ratio comes back blank rather than
+wrong. This is not the same call as the water readings above, which are left alone: there
+no correction is possible without guessing a scale factor, whereas here the fix is to
+decline to divide by a placeholder, and it fails safe.
+
+**The Square Feet column still shows what UBM holds.** A reader sees `1` beside a blank
+ratio and has the reason in front of them, which is better than a blank with no
+explanation.
+
+Where the area is real it is right: site 0302 reads 556,872 in this report and 556,872 on
+the client's own tab.
+
+Worth measuring across the portfolio before this goes to the UBM team, since the fix
+hides the symptom rather than the cause:
+
+```sql
+SELECT count(*) AS sites,
+       count(*) FILTER (WHERE l.square_feet IS NULL)  AS no_area,
+       count(*) FILTER (WHERE l.square_feet = 0)      AS zero,
+       count(*) FILTER (WHERE l.square_feet = 1)      AS placeholder_one,
+       count(*) FILTER (WHERE l.square_feet > 1)      AS usable,
+       min(l.square_feet) FILTER (WHERE l.square_feet > 1) AS smallest_real
+FROM bill_management_v2.locations l
+WHERE l.id IN (SELECT DISTINCT location_id FROM bill_management_v2.analytics_monthly_feed
+               WHERE customer_id = <id>);
+```
+
+## Saving Detail cannot be built
+
+Checked against the schema on 2026-08-17. **UBM holds no savings data of any kind.**
+Not an unmapped column — nothing. No relation and no column anywhere in the schema
+contains `saving`, `avoided`, `recovered`, `waived`, `benefit` or `opportunity`:
+
+```
+cut -d'|' -f1 docs/ubm-columns.txt | grep -iE "saving|avoid|recover|waiv|benefit"   → nothing
+grep -ioE "[a-z_]*(saving|recovered|waived|avoided)[a-z_]*" docs/ubm-columns.txt    → nothing
+```
+
+Their tab makes plain why. Savings Category is `Recovered` / `Preventative`, Savings Type
+is `Late Fee Waived` / `Fee Waived` / `Regulated Rate Change`, and Amount is what ENGIE
+Impact saved the client by doing something. Engie's own description says as much —
+"the savings gained through services provided by ENGIE Impact". It is a record of their
+service, not of the bills, and UBM holds the bills.
+
+Six of its eleven columns — location name, number and country, vendor name, account
+number, service type — are mapped elsewhere in the app, but there are no savings rows to
+hang them on. Five have no source at all: Savings Period, Savings Category, Savings Type,
+Service Category, Amount.
+
+This one is not a gap to close. If the client needs it, the data has to come from Engie.
+
+## Account Exceptions – Days to Complete cannot be built either
+
+This was the one of the seven that might have been a row lister and buildable today. It
+is a row lister — its Visible Fields are Exception ID, Account Exception Status, Number
+of Days, Account #, Location Name, Start Date and End Date, one row per exception — but
+the object it lists does not exist in UBM.
+
+**There are no account exceptions in the schema.** One relation carries the word:
+`customers_exceptions`, a view whose columns are `items_count, customer_id,
+service_address, account_code, pretty_name, vendor_code, service_zip,
+virtual_account_id, meter_serial, search, client_account, commodity, bill_type,
+provider_vendor_ids, provider_vendors`. That is an account list with a count on it. No
+exception id, no type, no status, no start or end date, no approver, no notes — none of
+the seven columns the report shows except Account #.
+
+**`bill_errors` is the nearest object and it is a different thing.** It carries
+`category, severity, message, validation_check_id, bill_record_id, resolved, created_at`
+— a validation error raised against one bill, with a boolean for whether it was dealt
+with. Resolution is recorded separately in `resolved_errors`, keyed on `bill_meta_id`
+and `validation_check_id` rather than on the error's own id. So it is bill grain where
+the report is account grain, it has no exception type to filter on, no status beyond
+resolved/not, no approver and no completion date. Days to Complete could be forced out
+of `resolved_errors.created_at − bill_errors.created_at`, but it would be days to
+resolve a bill validation error, which is not what the column means.
+
+**The client's own report does not run either.** Their tab says so in the first cell:
+"There are no sample reports for these, the reports would not run without an Account
+Exception Type filter selection, but there were no options to select in the filter."
+So Engie's system holds no exception types for this customer, and there is nothing to
+reconcile against even if UBM did hold the data.
+
+Two things worth confirming with a query before this is reported as closed — whether
+`customers_exceptions` returns anything for this customer, and whether `bill_errors`
+does. Both are below.
+
+## Queries for the summary reports
+
+Five, all for this customer. The first three decide whether the built reports read
+correctly; the last two close out Account Exceptions.
+
+**1. Does a site and service type ever carry more than one unit of measure?** If it does,
+the summary reports split those rows by unit — correct, but it will look like duplication
+to anyone reading it, and it is worth being able to say how often it happens.
+
+```sql
+WITH per_group AS (
+  SELECT amf.location_id, amf.utility_type,
+         count(DISTINCT amf.total_consumption_uom) AS units,
+         string_agg(DISTINCT amf.total_consumption_uom, ' / ' ORDER BY amf.total_consumption_uom) AS list
+  FROM bill_management_v2.analytics_monthly_feed amf
+  WHERE amf.customer_id = <id> AND amf.total_consumption_uom IS NOT NULL
+  GROUP BY amf.location_id, amf.utility_type
+)
+SELECT count(*) AS site_service_pairs,
+       count(*) FILTER (WHERE units > 1) AS with_several_units,
+       string_agg(DISTINCT list, ', ') FILTER (WHERE units > 1) AS which
+FROM per_group;
+```
+
+**2. How many sites have a floor area?** Both Index reports divide by it, and a site with
+no area reports blank on every row. Their own tab has an area for every site shown.
+
+```sql
+SELECT count(*) AS sites,
+       count(*) FILTER (WHERE l.square_feet IS NOT NULL AND l.square_feet > 0) AS with_area,
+       min(l.square_feet) AS smallest, max(l.square_feet) AS largest
+FROM bill_management_v2.locations l
+WHERE l.id IN (SELECT DISTINCT location_id FROM bill_management_v2.analytics_monthly_feed
+               WHERE customer_id = <id>);
+```
+
+**3. Is there anything that identifies a one-time charge?** This is the blocking question
+above. If a line-item category or code separates them, the totals can be made to match
+Engie's; if not, the difference has to be explained to the client instead.
+
+```sql
+SELECT string_agg(x, chr(10) ORDER BY x) AS line_item_shape FROM (
+  SELECT li.category || ' | ' || li.type || ' | ' || li.code
+      || ' | lines=' || count(*)
+      || ' | charge=' || round(sum(li.charge), 2) AS x
+  FROM bill_management_v2.analytics_billing_line_items li
+  WHERE li.customer_id = <id>
+  GROUP BY li.category, li.type, li.code
+  HAVING count(*) > 50
+) s;
+```
+
+**4 and 5. Account exceptions — confirm there is nothing there.** Expect zero from the
+first; whatever the second returns is bill validation errors, not account exceptions.
+
+```sql
+SELECT count(*) AS exception_rows, sum(items_count) AS items
+FROM bill_management_v2.customers_exceptions
+WHERE customer_id = <id>;
+```
+
+```sql
+SELECT count(*) AS bill_errors,
+       count(*) FILTER (WHERE be.resolved) AS resolved,
+       count(DISTINCT be.category) AS categories,
+       string_agg(DISTINCT be.category, ', ') AS which
+FROM bill_management_v2.bill_errors be
+JOIN bill_management_v2.bill_records br ON br.id = be.bill_record_id
+WHERE br.customer_id = <id>;
+```
+
 ## Also found
 
 `location_detail` carries `location_division`, `location_top_group`,

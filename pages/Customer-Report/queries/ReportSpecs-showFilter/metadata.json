@@ -8,7 +8,7 @@
       "encodeParamsToggle": true,
       "jsArguments": [
         {
-          "name": "v"
+          "name": "name"
         }
       ],
       "paginationType": "NONE",

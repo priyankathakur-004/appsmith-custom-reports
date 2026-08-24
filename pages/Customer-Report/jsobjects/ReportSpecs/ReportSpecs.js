@@ -8,6 +8,16 @@ export default {
 		{ group: "Period", value: "endDate", label: "Service End", description: "Date associated with service end date.", sql: "TO_CHAR(amf.end_date, 'YYYY-MM-DD') AS \"endDate\"" },
 		{ group: "Period", value: "daysOfService", label: "Days of Service", description: "Number of days associated with days of service.", sql: "amf.days_of_service AS \"daysOfService\"" },
 
+		{ group: "Period", dimension: true, value: "monthOfYear", label: "Calendar Month", description: "The month on its own, without the year, so the same month can be compared across years. Numbered as 03 March rather than March alone, for the reason Month reports 2025-12 rather than December, 2025: a name sorts April before December.", sql: "(TO_CHAR(amf.time_period, \'MM\') || \' \' || TO_CHAR(amf.time_period, \'FMMonth\')) AS \"monthOfYear\"" },
+		{ group: "Year over year", measure: true, yoy: "charges", round: 2, value: "yoyCost", label: "Cost", description: "Cost for each year picked in the Years filter, each shown against the year before it, with the change between them. Picking 2025 and 2026 gives 2024, 2025, variance, then 2025, 2026, variance - six columns, matching the client's own report." },
+		{ group: "Year over year", measure: true, yoy: "usage", round: 3, value: "yoyUsage", label: "Usage", description: "Metered consumption for each year picked, each against the year before it, with the change between them." },
+		{ group: "Year over year", measure: true, yoy: "rate", round: 4, value: "yoyCostPerUnit", label: "Cost per Unit", description: "The blended rate for each year picked, each against the year before it. Cost for that year divided by usage for that year, not an average of the two." },
+		{ group: "Year over year", measure: true, yoy: "costSqft", round: 4, value: "yoyCostPerSqft", label: "Cost per SqFt", description: "Cost per square foot for each year picked, each against the year before it. Blank where the site's area is missing or the placeholder 1." },
+		{ group: "Year over year", measure: true, yoy: "usageSqft", round: 4, value: "yoyUsagePerSqft", label: "Usage per SqFt", description: "Usage per square foot for each year picked, each against the year before it." },
+		{ group: "Year over year", measure: true, yoy: "costDay", round: 4, value: "yoyCostPerDay", label: "Cost per Day", description: "Cost per day of service for each year picked, each against the year before it." },
+		{ group: "Year over year", measure: true, yoy: "usageDay", round: 4, value: "yoyUsagePerDay", label: "Usage per Day", description: "Usage per day of service for each year picked, each against the year before it." },
+		{ group: "Year over year", measure: true, yoy: "kbtu", round: 3, value: "yoyKbtu", label: "KBTUs", description: "Consumption converted to thousand BTU for each year picked, each against the year before it. Same factors as the KBTUs column on the trendline reports." },
+		{ group: "Year over year", measure: true, yoy: "kbtuSqft", round: 4, value: "yoyKbtuPerSqft", label: "KBTUs per SqFt", description: "Energy use intensity for each year picked, each against the year before it. Same BTU factors and area source as the trendline reports." },
 		{ group: "Customer", value: "customerName", label: "Customer Name", description: "Name of the customer the report is being run for", sql: "(SELECT cs.name FROM bill_management_v2.customers_search cs WHERE cs.id = amf.customer_id) AS \"customerName\"" },
 
 		{ group: "Location", value: "location", label: "Location", description: "Location name", sql: "l.name AS \"location\"" },
@@ -88,7 +98,7 @@ export default {
 
 		{ group: "Vendor / Account", value: "utilityType", label: "Service / Utility Type", description: "Commodity the account is billed for, spelled out the way the client's reports write it — UBM stores NATURALGAS, this reports Natural Gas. Note their reports also use this column for charge categories (Tax, Late Charges, Misc Charges), which UBM does not model as service types at all.", sql: "CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 'Electric' WHEN 'WATER' THEN 'Water' WHEN 'SEWER' THEN 'Sewer' WHEN 'NATURALGAS' THEN 'Natural Gas' WHEN 'FIREPROTECTION' THEN 'Fire Protection' WHEN 'STORMWATER' THEN 'Storm Water' WHEN 'IRRIGATION' THEN 'Irrigation' WHEN 'LIGHTING' THEN 'Lighting' WHEN 'REFUSE' THEN 'Refuse' WHEN 'SOLARPV' THEN 'Solar PV' WHEN 'CHILLEDWATER' THEN 'Chilled Water' WHEN 'PROPANE' THEN 'Propane' ELSE amf.utility_type END AS \"utilityType\"" },
 
-		{ group: "Usage", value: "uom", label: "Unit of Measure", description: "Unit of measure for consumption (e.g. CCF, KWH)", sql: "amf.total_consumption_uom AS \"uom\"" },
+		{ group: "Usage", dimension: true, value: "uom", label: "Unit of Measure", description: "Unit of measure for consumption (e.g. CCF, KWH)", sql: "amf.total_consumption_uom AS \"uom\"" },
 		{ group: "Usage", value: "totalConsumption", label: "Total Consumption", description: "Total metered consumption", sql: "amf.total_consumption AS \"totalConsumption\"" },
 		{ group: "Usage", value: "usagePerDay", label: "Usage per Day", description: "Total consumption divided by days of service, for this row's slice of the bill. Derived — UBM stores no per-day usage. Blank where days of service is zero.", sql: "(amf.total_consumption / NULLIF(amf.days_of_service, 0)) AS \"usagePerDay\"" },
 		{ group: "Usage", value: "totalGenConsumption", label: "Generation Consumption", description: "On-site generation consumption", sql: "amf.total_gen_consumption AS \"totalGenConsumption\"" },
@@ -116,6 +126,16 @@ export default {
 		{ group: "Charges", value: "totalChargesCommodity", label: "Commodity Charges", description: "Monetary value for commodity charges.", sql: "amf.total_charges_commodity AS \"totalChargesCommodity\"" },
 		{ group: "Charges", value: "totalChargesBilledUse", label: "Billed Use Charges", description: "Monetary value for billed usage subcharges.", sql: "amf.total_charges_billeduse AS \"totalChargesBilledUse\"" },
 
+		{ group: "Totals", measure: true, value: "sumCharges", label: "Cost", description: "Total charges added up across every bill in the group. Tax is included, matching the client's own Tax = Include setting. One-time charges are not excluded: the feed carries no one-time-charge flag, and the client runs these reports with One Time Charges = Exclude, so this total reads higher than theirs by whatever those charges come to.", sql: "ROUND(SUM(amf.total_charges), 2) AS \"sumCharges\"", sqlExcl: "ROUND((SUM(amf.total_charges) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)), 0)), 2) AS \"sumCharges\"" },
+		{ group: "Totals", measure: true, value: "sumConsumption", label: "Usage", description: "Metered consumption added up across every bill in the group, to three decimal places. Only meaningful where the group is one unit of measure — adding kWh to Therms is not a quantity — which is why the summary reports group by Unit of Measure. **Water and Sewer are not additive.** Sewer is billed off the water meter, so on about half this customer's sites the two carry the identical reading; totalling usage across service types counts the same water twice. The client's own reports blank sewer usage for this reason. Some sites also carry a reading whose scale is wrong at source — 684,016 CCF at one mall is 511 million gallons — so a figure orders of magnitude away from its neighbours is UBM's, not this report's.", sql: "ROUND(SUM(amf.total_consumption), 3) AS \"sumConsumption\"" },
+		{ group: "Totals", measure: true, value: "costPerUnit", label: "Cost per Unit", description: "The group's total cost divided by its total usage — SUM(charges) / SUM(usage), the blended rate, to four decimal places. Not the average of the individual bills' rates, which would weight a small bill the same as a large one. Blank where the group consumed nothing, which is why fee-only services such as Fire Protection and Storm Water show no rate. Read it with the usage beside it: where UBM holds a charge but little or no reading the rate runs away — a Missouri site billed 18 therms across two autumn months reports 17 per therm against a 1.51 annual average — and where the reading's scale is wrong at source the rate collapses towards zero. Both are faithful arithmetic on the figures UBM holds.", sql: "ROUND(SUM(amf.total_charges) / NULLIF(SUM(amf.total_consumption), 0), 4) AS \"costPerUnit\"", sqlExcl: "ROUND((SUM(amf.total_charges) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)), 0)) / NULLIF(SUM(amf.total_consumption), 0), 4) AS \"costPerUnit\"" },
+		{ group: "Totals", measure: true, value: "costPerSqft", label: "Cost per SqFt", description: "The group's total cost divided by the site's floor area. Source: locations.square_feet, read as a maximum so the figure is right whether or not Square Feet is shown as a column of its own. Blank where UBM holds no usable area — which means zero, missing, or the placeholder 1 that a third of this customer's sites carry. Dividing by a 1 would return the cost itself and read as a cost per square foot of hundreds of thousands, so the ratio is withheld instead. The Square Feet column still shows what UBM holds, so the reason is visible beside the blank.", sql: "ROUND(SUM(amf.total_charges) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS \"costPerSqft\"", sqlExcl: "ROUND((SUM(amf.total_charges) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)), 0)) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS \"costPerSqft\"" },
+		{ group: "Totals", measure: true, value: "totalCostPerDay", label: "Cost per Day", description: "The group's total cost divided by its total days of service — the blended daily rate, the same shape as Cost per Unit. Days are summed across the accounts in the group, so on a site with several meters this is cost per account-day rather than cost per calendar day. Blank where no days of service are recorded.", sql: "ROUND(SUM(amf.total_charges) / NULLIF(SUM(amf.days_of_service), 0), 4) AS \"totalCostPerDay\"", sqlExcl: "ROUND((SUM(amf.total_charges) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)), 0)) / NULLIF(SUM(amf.days_of_service), 0), 4) AS \"totalCostPerDay\"" },
+		{ group: "Totals", measure: true, value: "totalUsagePerDay", label: "Usage per Day", description: "The group's total usage divided by its total days of service, in whatever unit the group is measured in. Days are summed across the accounts in the group, as Cost per Day does.", sql: "ROUND(SUM(amf.total_consumption) / NULLIF(SUM(amf.days_of_service), 0), 4) AS \"totalUsagePerDay\"" },
+		{ group: "Totals", measure: true, value: "kbtu", label: "KBTUs", description: "Consumption converted to thousand BTU and added up, so commodities in different units can be compared or totalled as energy. UBM stores no BTU column; the factors are the main UBM app's, reconciled against Power BI — electricity 3,412 BTU per kWh, gas 100,000 per therm, propane 91,452 per gallon, heating oil 138,500, steam 1,000. Gas deliberately uses 100,000 rather than the heating value 102,800, which inflated gas-heavy months by about 2.8%. Water, sewer, irrigation, fire protection and storm water carry no energy and contribute zero.", sql: "ROUND(SUM(amf.total_consumption * CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 3412 WHEN 'LIGHTING' THEN 3412 WHEN 'SOLARPV' THEN 3412 WHEN 'NATURALGAS' THEN 100000 WHEN 'UTILITYGAS' THEN 100000 WHEN 'PROPANE' THEN 91452 WHEN 'OIL2' THEN 138500 WHEN 'DIESEL' THEN 137381 WHEN 'GASOLINE' THEN 120214 WHEN 'STEAM' THEN 1000 ELSE 0 END) / 1000, 3) AS \"kbtu\"" },
+		{ group: "Totals", measure: true, value: "kbtuPerSqft", label: "KBTUs per SqFt", description: "KBTUs divided by the site's floor area — energy use intensity. Same factors and same area source as Cost per SqFt. Blank where UBM holds no area for the site.", sql: "ROUND(SUM(amf.total_consumption * CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 3412 WHEN 'LIGHTING' THEN 3412 WHEN 'SOLARPV' THEN 3412 WHEN 'NATURALGAS' THEN 100000 WHEN 'UTILITYGAS' THEN 100000 WHEN 'PROPANE' THEN 91452 WHEN 'OIL2' THEN 138500 WHEN 'DIESEL' THEN 137381 WHEN 'GASOLINE' THEN 120214 WHEN 'STEAM' THEN 1000 ELSE 0 END) / 1000 / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS \"kbtuPerSqft\"" },
+		{ group: "Totals", measure: true, value: "usagePerSqft", label: "Usage per SqFt", description: "The group's total usage divided by the site's floor area, in whatever unit the group is measured in. Same area source and same treatment of a missing or placeholder area as Cost per SqFt.", sql: "ROUND(SUM(amf.total_consumption) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS \"usagePerSqft\"" },
+
 		{ group: "Charges (time of use)", value: "chargesConsumptionOnpeak", label: "Consumption Charges (On-Peak)", description: "Monetary value for onpeak consumption charges.", sql: "amf.total_charges_consumption_onpeak AS \"chargesConsumptionOnpeak\"" },
 		{ group: "Charges (time of use)", value: "chargesConsumptionMidpeak", label: "Consumption Charges (Mid-Peak)", description: "Monetary value for midpeak consumption charges.", sql: "amf.total_charges_consumption_midpeak AS \"chargesConsumptionMidpeak\"" },
 		{ group: "Charges (time of use)", value: "chargesConsumptionOffpeak", label: "Consumption Charges (Off-Peak)", description: "Monetary value for offpeak consumption charges.", sql: "amf.total_charges_consumption_offpeak AS \"chargesConsumptionOffpeak\"" },
@@ -141,7 +161,7 @@ export default {
 		"AccountNumberSelect", "AccountStatusSelect",
 		"VendorSelect", "ServiceTypesSelect",
 		"LocationAttributesSelect", "AccountAttributesSelect",
-		"AccountAttributeValuesSelect"
+		"AccountAttributeValuesSelect", "ExcludeOneTimeCharges", "YearSelect"
 	],
 
 	reportPresets: () => {
@@ -151,6 +171,26 @@ export default {
 			{ attr: "^gl\\s*code", label: "Customer GL Number" },
 			"locationAddress", "billServiceCost", "billBeginDate", "billEndDate", "billQuantity"
 		];
+		const summaryDimensions = [
+			"locationAddress", "locationCity", "locationState", "locationZip",
+			"locationCountry", "locationStatus", "squareFeet",
+			"vendor", "vendorCode", "vendorAddress1", "vendorAddress2", "vendorCity",
+			"vendorState", "vendorZip", "vendorCountry",
+			"accountNumber", "summaryAccount", "cleanAccountNumber", "meterSerial",
+			"glCode", "glAllocation"
+		];
+
+		const summaryExtra = [
+			"locationAddress", "locationCity", "locationState", "locationZip",
+			"locationCountry", "locationStatus", "squareFeet",
+			"vendor", "vendorCode", "vendorAddress1", "vendorAddress2", "vendorCity",
+			"vendorState", "vendorZip", "vendorCountry",
+			"accountNumber", "summaryAccount", "cleanAccountNumber", "meterSerial",
+			"glCode", "glAllocation",
+			"costPerSqft", "usagePerSqft",
+			"totalCostPerDay", "totalUsagePerDay", "kbtu", "kbtuPerSqft"
+		];
+
 		const dup = (value, label, service) => ({
 			value: value,
 			label: label,
@@ -320,6 +360,82 @@ export default {
 				filters: {}
 			},
 
+			{
+				value: "annualUseCost",
+				label: "Annual Use-Cost",
+				groupBy: true,
+				columns: [
+					"location", "locationNumber", "utilityType", "uom",
+					"sumConsumption", "sumCharges", "costPerUnit"
+				],
+				filters: {}
+			},
+
+			{
+				value: "useCostTrendline",
+				label: "Use Cost Analysis - Trendline",
+				groupBy: true,
+				columns: [
+					"location", "locationNumber", "month", "sumCharges",
+					"utilityType", "uom", "sumConsumption", "costPerUnit"
+				],
+
+				availableExtra: summaryExtra,
+				filters: {}
+			},
+
+			{
+				value: "indexTrendline",
+				label: "Index Report - Trendline",
+				groupBy: true,
+				columns: [
+					"location", "locationNumber", "squareFeet", "month",
+					"utilityType", "costPerSqft", "usagePerSqft"
+				],
+
+				availableExtra: [
+					"locationAddress", "locationCity", "locationState", "locationZip",
+					"locationCountry",
+					"uom", "sumCharges", "sumConsumption", "costPerUnit",
+					"totalCostPerDay", "totalUsagePerDay", "kbtu", "kbtuPerSqft"
+				],
+				filters: {}
+			},
+
+			{
+				value: "useCostYoy",
+				label: "Use Cost Analysis - Year over Year",
+				groupBy: true,
+				yoy: true,
+				columns: [
+					"location", "locationNumber", "monthOfYear", "utilityType", "uom",
+					"yoyCost", "yoyUsage", "yoyCostPerUnit"
+				],
+
+				availableExtra: summaryDimensions.concat(["yoyCostPerSqft", "yoyUsagePerSqft",
+					"yoyCostPerDay", "yoyUsagePerDay", "yoyKbtu", "yoyKbtuPerSqft"]),
+				filters: {}
+			},
+
+			{
+				value: "indexYoy",
+				label: "Index Report - Year over Year",
+				groupBy: true,
+				yoy: true,
+				columns: [
+					"location", "locationNumber", "squareFeet", "monthOfYear", "utilityType",
+					"yoyCostPerSqft", "yoyUsagePerSqft"
+				],
+
+				availableExtra: [
+					"locationAddress", "locationCity", "locationState", "locationZip",
+					"locationCountry", "uom",
+					"yoyCost", "yoyUsage", "yoyCostPerUnit",
+					"yoyCostPerDay", "yoyUsagePerDay", "yoyKbtu", "yoyKbtuPerSqft"
+				],
+				filters: {}
+			},
+
 			dup("water", "Water", "^\\s*(water|sewer)\\s*$"),
 			dup("gas", "Gas", "^\\s*(natural\\s*gas|gas)\\s*$"),
 			dup("electric", "Electric", "^\\s*electric(ity)?\\s*$")
@@ -332,6 +448,107 @@ export default {
 		const presets = ReportSpecs.reportPresets();
 		const v = (typeof ReportSelect !== "undefined" && ReportSelect.selectedOptionValue) || "custom";
 		return presets.find(p => p.value === v) || presets[0];
+	},
+
+	aggregates: () => !!(ReportSpecs.activePreset() || {}).groupBy,
+
+	measureFields: () => ReportSpecs.visibleFieldOptions.filter(f => f.measure).map(f => f.value),
+
+	excludeOtc: () =>
+		typeof ExcludeOneTimeCharges !== "undefined" && ExcludeOneTimeCharges.isChecked === true,
+
+	_otcVariant: (o) =>
+		(o && o.sqlExcl && ReportSpecs.excludeOtc()) ? Object.assign({}, o, { sql: o.sqlExcl }) : o,
+
+	_yearOf: (d) => {
+		const m = String(d == null ? "" : d).match(/(\d{4})/);
+		return m ? Number(m[1]) : null;
+	},
+
+	isYoy: () => !!(ReportSpecs.activePreset() || {}).yoy,
+
+	// One picked year becomes three columns: the year before it, the year itself, and
+	// the change. Generated rather than declared, because how many there are depends on
+	// the Years filter - the same reason account attributes are generated.
+	YOY_BTU: "CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 3412 WHEN 'LIGHTING' THEN 3412 WHEN 'SOLARPV' THEN 3412 WHEN 'NATURALGAS' THEN 100000 WHEN 'UTILITYGAS' THEN 100000 WHEN 'PROPANE' THEN 91452 WHEN 'OIL2' THEN 138500 WHEN 'DIESEL' THEN 137381 WHEN 'GASOLINE' THEN 120214 WHEN 'STEAM' THEN 1000 ELSE 0 END",
+
+	YOY_SQFT: "CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END",
+
+	_yoyRaw: (kind, year, excl) => {
+		const f = ` FILTER (WHERE EXTRACT(YEAR FROM amf.time_period) = ${year})`;
+		const cost = excl
+			? `(SUM(amf.total_charges)${f} - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0))${f}, 0))`
+			: `SUM(amf.total_charges)${f}`;
+		const use = `SUM(amf.total_consumption)${f}`;
+		const days = `SUM(amf.days_of_service)${f}`;
+		if (kind === "charges") return cost;
+		if (kind === "usage") return use;
+		if (kind === "rate") return `${cost} / NULLIF(${use}, 0)`;
+		if (kind === "costSqft") return `${cost} / ${ReportSpecs.YOY_SQFT}`;
+		if (kind === "usageSqft") return `${use} / ${ReportSpecs.YOY_SQFT}`;
+		if (kind === "costDay") return `${cost} / NULLIF(${days}, 0)`;
+		if (kind === "usageDay") return `${use} / NULLIF(${days}, 0)`;
+		if (kind === "kbtu") return `SUM(amf.total_consumption * ${ReportSpecs.YOY_BTU})${f} / 1000`;
+		if (kind === "kbtuSqft") return `SUM(amf.total_consumption * ${ReportSpecs.YOY_BTU})${f} / 1000 / ${ReportSpecs.YOY_SQFT}`;
+		return cost;
+	},
+
+	_yoyFields: (spec) => {
+		const years = ReportSpecs.yoyDisplayYears();
+		const out = [];
+		const raw = (yr, excl) => ReportSpecs._yoyRaw(spec.yoy, yr, excl);
+		const costy = ["charges", "rate", "costSqft", "costDay"].indexOf(spec.yoy) >= 0;
+		const col = (value, label, expr, exprExcl, round) => {
+			const o = {
+				group: "Year over year", measure: true, partOf: spec.value,
+				value: value, label: label, description: spec.description,
+				sql: `ROUND(${expr}, ${round}) AS "${value}"`
+			};
+			if (exprExcl) o.sqlExcl = `ROUND(${exprExcl}, ${round}) AS "${value}"`;
+			return o;
+		};
+		years.forEach((y, i) => {
+			out.push(col(`${spec.value}_${y}`, `${spec.label} ${y}`,
+				raw(y, false), costy ? raw(y, true) : null, spec.round));
+			if (i === 0) return;
+			const p = years[i - 1];
+			const pct = (excl) => `(${raw(y, excl)} - ${raw(p, excl)}) / NULLIF(${raw(p, excl)}, 0) * 100`;
+			out.push(col(`${spec.value}_${p}_${y}_var`, `${spec.label} % Variance ${p}-${y}`,
+				pct(false), costy ? pct(true) : null, 2));
+		});
+		return out;
+	},
+
+	yoyAllFields: () =>
+		ReportSpecs.visibleFieldOptions.filter(f => f.yoy)
+			.reduce((a, s) => a.concat(ReportSpecs._yoyFields(s)), []),
+
+	yoyPicked: () =>
+		((typeof YearSelect !== "undefined" && YearSelect && YearSelect.selectedOptionValues) || [])
+			.map(ReportSpecs._yearOf).filter(y => y).sort((a, b) => a - b),
+
+	// Two years are picked and the report compares them. Pick one and it compares with
+	// the year after, which is what the client's From Year on its own means. Pick more
+	// than two and the earliest and latest are used, which status() says out loud.
+	yoyDisplayYears: () => {
+		const picked = ReportSpecs.yoyPicked();
+		if (picked.length) return picked;
+		return [new Date().getFullYear()];
+	},
+
+
+	isPerBillFigure: (f) =>
+		!f.measure && !f.dimension && /^(Usage|Charges|Weather)/.test(String(f.group || "")),
+
+	groupByClause: () => {
+		if (!ReportSpecs.aggregates()) return "";
+		const keys = [];
+		ReportSpecs.selectedColumns().forEach((o, i) => {
+			if (!o.measure) keys.push(i + 1);
+		});
+		const having = ReportSpecs._gridClauses(null, true);
+		return (keys.length ? `GROUP BY ${keys.join(", ")}` : "")
+			+ (having.length ? ` HAVING ${having.join(" AND ")}` : "");
 	},
 
 	_attrNames: () => {
@@ -415,6 +632,9 @@ export default {
 	},
 
 	showFilter: (name) => {
+		if (name === "year") return ReportSpecs.isYoy();
+		if (name === "dateRange") return !ReportSpecs.isYoy();
+		if (name === "oneTimeCharges") return ReportSpecs.aggregates();
 		if (name !== "accountAttributes") return true;
 		const avail = ReportSpecs.presetAvailable();
 		if (!avail) return true;
@@ -474,6 +694,8 @@ export default {
 	feedKeys: () => {
 		const shown = ReportSpecs.selectedColumns();
 		const gp = ReportSpecs.activePreset();
+
+		if (ReportSpecs.aggregates()) return null;
 		if (gp && gp.grain === "bill") return ["bill_id", "virtual_account_id"];
 		if (ReportSpecs.usesBillLevel()) {
 			return ["bill_id", "virtual_account_id", "utility_type"];
@@ -548,6 +770,10 @@ export default {
 		if (ReportSpecs.usesBillRecord()) {
 			sql += "\n\t\tLEFT JOIN bill_management_v2.bill_records br ON br.id = amf.bill_record_id";
 		}
+		if (ReportSpecs.excludeOtc()) {
+			sql += "\n\t\tLEFT JOIN otc_bill ob ON ob.bill_id = amf.bill_id AND ob.commodity = upper(btrim(amf.utility_type))"
+				+ "\n\t\tLEFT JOIN otc_rows obn ON obn.bill_id = amf.bill_id AND obn.commodity = upper(btrim(amf.utility_type))";
+		}
 		if (ReportSpecs.usesLateFee()) {
 			sql += "\n\t\tLEFT JOIN lf_seq lf ON lf.virtual_account_id = amf.virtual_account_id AND lf.bill_id = amf.bill_id"
 				+ "\n\t\tLEFT JOIN bill_management_v2.bill_records pbr ON pbr.id = lf.prev_bill_record_id"
@@ -584,7 +810,9 @@ export default {
 		const picked = (Array.isArray(model) ? model : []).filter(s => s && known.indexOf(s.colId) >= 0);
 		const terms = picked.map(s => `"${s.colId}" ${s.sort === "desc" ? "DESC" : "ASC"}`);
 		const cols = ReportSpecs.selectedColumns();
-		const varies = cols.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")));
+
+		const varies = !ReportSpecs.aggregates()
+			&& cols.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")));
 		if (varies) {
 			return terms.length > 0
 				? `${terms.join(", ")}, ${ReportSpecs.orderByClause}`
@@ -592,7 +820,9 @@ export default {
 		}
 		const seen = {};
 		picked.forEach(s => { seen[s.colId] = true; });
+
 		cols.forEach(o => {
+			if (o.measure) return;
 			if (!seen[o.value]) { seen[o.value] = true; terms.push(`"${o.value}"`); }
 		});
 		return terms.length > 0 ? terms.join(", ") : "1";
@@ -657,6 +887,11 @@ export default {
 		return `(SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '${code}' AND active IS NOT FALSE LIMIT 1)`;
 	},
 
+	ONE_TIME_CODES: ["OTH_FEE", "OTH_PENALTY", "OTH_DEPOSIT", "OTH_DEPOSITINT",
+		"OTH_CORR_CHARGE", "OTH_ADJUSTMENT"],
+
+	oneTimeCodesSql: () => ReportSpecs.ONE_TIME_CODES.map(c => ReportSpecs._quote(c)).join(","),
+
 	ATTR_PREFIX: "attr:",
 
 	isAttrPick: (v) => String(v).indexOf(ReportSpecs.ATTR_PREFIX) === 0,
@@ -669,8 +904,13 @@ export default {
 		const order = [];
 		const byGroup = {};
 		const activeSource = (ReportSpecs.activePreset() || {}).source || null;
+		const agg = ReportSpecs.aggregates();
 		ReportSpecs.visibleFieldOptions.forEach(f => {
 			if (f.source && f.source !== activeSource) return;
+
+			if (f.measure && !agg) return;
+			if (agg && ReportSpecs.isPerBillFigure(f)) return;
+			if (f.partOf) return;
 			if (!inScope(f.value)) return;
 			const g = f.group || "Other";
 			if (!byGroup[g]) { byGroup[g] = []; order.push(g); }
@@ -728,21 +968,32 @@ export default {
 		const fields = (Array.isArray(picked) && picked.length > 0) ? picked : fallback;
 		const used = {};
 		const out = [];
+		const expanded = [];
+		const yoyGen = {};
 		fields.forEach(f => {
-			const o = ReportSpecs.isAttrPick(f)
+			const g = ReportSpecs.visibleFieldOptions.find(x => x.value === f && x.yoy);
+			if (g) { ReportSpecs._yoyFields(g).forEach(o => { yoyGen[o.value] = o; expanded.push(o.value); }); return; }
+			expanded.push(f);
+		});
+		expanded.forEach(f => {
+			const o = yoyGen[f] || (ReportSpecs.isAttrPick(f)
 				? ReportSpecs.accountAttrColumn(f)
-				: ReportSpecs.visibleFieldOptions.find(x => x.value === f);
+				: ReportSpecs.visibleFieldOptions.find(x => x.value === f));
 			if (!o) return;
 
-			if (used[o.value]) { used[o.value]++; out.push(Object.assign({}, o, { value: o.value + "_" + used[o.value] })); }
-			else { used[o.value] = 1; out.push(o); }
+			const v = ReportSpecs._otcVariant(o);
+			if (used[v.value]) { used[v.value]++; out.push(Object.assign({}, v, { value: v.value + "_" + used[v.value] })); }
+			else { used[v.value] = 1; out.push(v); }
 		});
 		return out;
 	},
 
 	accountAttrColumns: () => ReportSpecs.selectedColumns().filter(o => String(o.value).indexOf("attr_") === 0),
 
-	allFieldOptions: () => ReportSpecs.visibleFieldOptions.concat(ReportSpecs.accountAttrColumns()),
+	allFieldOptions: () =>
+		ReportSpecs.visibleFieldOptions.map(ReportSpecs._otcVariant)
+			.concat(ReportSpecs.yoyAllFields().map(ReportSpecs._otcVariant))
+			.concat(ReportSpecs.accountAttrColumns()),
 
 	gridColumns: () => ReportSpecs.selectedColumns().map(o => o.value),
 
@@ -751,6 +1002,8 @@ export default {
 		const varies = cols.some(o => /^(Period|Usage|Charges|Weather)/.test(String(o.group || "")));
 		const exprs = cols.map(o => o.sql);
 		const sql = exprs.length > 0 ? exprs.join(", ") : "1 AS placeholder";
+
+		if (ReportSpecs.aggregates()) return sql;
 		return varies ? sql : `DISTINCT ${sql}`;
 	},
 
@@ -782,13 +1035,17 @@ export default {
 		if (preset && preset.where) parts.push(`AND ${preset.where}`);
 
 		const dateCol = ReportSpecs.dateFilterColumn();
-		if (StartDate && StartDate.selectedDate) {
-			const d = moment(StartDate.selectedDate).startOf("month").format("YYYY-MM-DD");
-			parts.push(`AND ${dateCol} >= '${d}'`);
-		}
-		if (EndDate && EndDate.selectedDate) {
-			const d = moment(EndDate.selectedDate).endOf("month").format("YYYY-MM-DD");
-			parts.push(`AND ${dateCol} <= '${d}'`);
+		if (ReportSpecs.isYoy()) {
+			parts.push(`AND EXTRACT(YEAR FROM ${dateCol}) IN (${ReportSpecs.yoyDisplayYears().join(", ")})`);
+		} else {
+			if (StartDate && StartDate.selectedDate) {
+				const d = moment(StartDate.selectedDate).startOf("month").format("YYYY-MM-DD");
+				parts.push(`AND ${dateCol} >= '${d}'`);
+			}
+			if (EndDate && EndDate.selectedDate) {
+				const d = moment(EndDate.selectedDate).endOf("month").format("YYYY-MM-DD");
+				parts.push(`AND ${dateCol} <= '${d}'`);
+			}
 		}
 
 		const states = (typeof StateProvinceSelect !== "undefined" && StateProvinceSelect.selectedOptionValues) || [];
@@ -882,8 +1139,15 @@ export default {
 		}
 
 		if (!includeGrid) return parts.join(" ");
+		ReportSpecs._gridClauses(excludeField, false).forEach(c => parts.push("AND " + c));
+
+		return parts.join(" ");
+	},
+
+	_gridClauses: (excludeField, wantMeasures) => {
 		let gridModel = {};
 		try { gridModel = JSON.parse(appsmith.store.reportsFilterModel || "{}"); } catch (e) { gridModel = {}; }
+		const isMeasure = (field) => ReportSpecs.measureFields().indexOf(field) >= 0;
 		const rawExpr = (fieldValue) => {
 			const o = ReportSpecs.allFieldOptions().find(x => x.value === fieldValue);
 			if (!o) return null;
@@ -947,15 +1211,16 @@ export default {
 			}
 			return oneCond(expr, f);
 		};
+		const out = [];
 		Object.keys(gridModel || {}).forEach(field => {
 			if (field === excludeField) return;
+			if (isMeasure(field) !== !!wantMeasures) return;
 			const expr = rawExpr(field);
 			if (!expr) return;
 			const clause = buildCond(expr, gridModel[field]);
-			if (clause) parts.push("AND " + clause);
+			if (clause) out.push(clause);
 		});
-
-		return parts.join(" ");
+		return out;
 	},
 
 	fetchPage: async () => {
@@ -1119,6 +1384,15 @@ export default {
 		const missing = ReportSpecs.presetMissing();
 		const warn = missing.length ? ` · ⚠️ this customer has no ${missing.join(" / ")} attribute` : "";
 
+		const bounds = [];
+		if (!ReportSpecs.isYoy()) {
+			if (typeof StartDate !== "undefined" && StartDate && StartDate.selectedDate) bounds.push("From");
+			if (typeof EndDate !== "undefined" && EndDate && EndDate.selectedDate) bounds.push("To");
+		}
+		const halfOpen = bounds.length === 1
+			? ` · ⚠️ only ${bounds[0]} Month is set, so this is every month ${bounds[0] === "From" ? "after" : "before"} it, not a period`
+			: "";
+
 		const total = ReportSpecs.totalRows();
 		if (total == null) {
 			const chosen = String((CustomerSelect && CustomerSelect.selectedOptionValue) || "").trim();
@@ -1126,7 +1400,7 @@ export default {
 				? `${name}Pick a customer, then click Run${warn}`
 				: `${name}No data loaded — click Run to fetch${warn}`;
 		}
-		if (total > 0) return `${name}${total.toLocaleString()} total rows${warn}`;
+		if (total > 0) return `${name}${total.toLocaleString()} total rows${halfOpen}${warn}`;
 
 		const code = String((CustomerSelect && CustomerSelect.selectedOptionValue) || "").trim();
 		if (code === "") {
