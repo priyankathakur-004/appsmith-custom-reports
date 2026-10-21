@@ -43,7 +43,7 @@
   "labelWidth": 5,
   "minWidth": 240,
   "serverSideFiltering": false,
-  "defaultOptionValue": "",
+  "defaultOptionValue": "r01",
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 4,
   "sourceData": "[{\"label\":\"Account and Service List\",\"value\":\"r01\"},{\"label\":\"Annual Use Cost\",\"value\":\"r02\"},{\"label\":\"Index Report - Trendline\",\"value\":\"r03\"},{\"label\":\"Index Report - Year Over Year\",\"value\":\"r04\"},{\"label\":\"Invoice by Date\",\"value\":\"r05\"},{\"label\":\"Invoice Detail\",\"value\":\"r06\"},{\"label\":\"Late Fees\",\"value\":\"r07\"},{\"label\":\"Location Detail\",\"value\":\"r08\"},{\"label\":\"Use Cost Analysis - Trendline\",\"value\":\"r09\"},{\"label\":\"Use Cost Analysis - Year Over Year (Water)\",\"value\":\"r10\"}]",

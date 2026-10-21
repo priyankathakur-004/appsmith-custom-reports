@@ -28,6 +28,9 @@
     },
     {
       "key": "borderRadius"
+    },
+    {
+      "key": "defaultOptionValue"
     }
   ],
   "dynamicTriggerPathList": [],
@@ -46,7 +49,7 @@
   "labelWidth": 5,
   "minWidth": 240,
   "serverSideFiltering": false,
-  "defaultOptionValue": "",
+  "defaultOptionValue": "{{ (() => { const q = String((appsmith.URL.queryParams || {}).customer || '').toLowerCase().trim(); if (!q) return ''; const m = (getCustomers.data || []).find(r => String(r.id) === q || String(r.fdg_code || '').toLowerCase() === q); return m ? m.fdg_code : ''; })() }}",
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 4,
   "sourceData": "{{ getCustomers.data }}",

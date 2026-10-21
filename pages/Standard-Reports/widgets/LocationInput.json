@@ -25,6 +25,9 @@
   "dynamicBindingPathList": [
     {
       "key": "borderRadius"
+    },
+    {
+      "key": "defaultText"
     }
   ],
   "dynamicTriggerPathList": [],
@@ -36,7 +39,7 @@
   "labelTextColor": "#0F2A47",
   "labelTextSize": "0.875rem",
   "labelWidth": 5,
-  "defaultText": "",
+  "defaultText": "{{ String((appsmith.URL.queryParams || {}).location || '') }}",
   "placeholderText": "All locations",
   "isRequired": false,
   "resetOnSubmit": true,
