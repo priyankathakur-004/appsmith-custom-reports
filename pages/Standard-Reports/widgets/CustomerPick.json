@@ -1,0 +1,61 @@
+{
+  "animateLoading": true,
+  "isLoading": false,
+  "isVisible": true,
+  "isDisabled": false,
+  "key": "5eca6705f7",
+  "widgetId": "316c850d63",
+  "widgetName": "CustomerPick",
+  "type": "SELECT_WIDGET",
+  "version": 1,
+  "parentId": "0",
+  "parentColumnSpace": 16,
+  "parentRowSpace": 10,
+  "renderMode": "CANVAS",
+  "responsiveBehavior": "fill",
+  "topRow": 6,
+  "bottomRow": 13,
+  "leftColumn": 24,
+  "rightColumn": 46,
+  "mobileTopRow": 6,
+  "mobileBottomRow": 13,
+  "mobileLeftColumn": 24,
+  "mobileRightColumn": 46,
+  "needsErrorInfo": false,
+  "dynamicBindingPathList": [
+    {
+      "key": "sourceData"
+    },
+    {
+      "key": "borderRadius"
+    }
+  ],
+  "dynamicTriggerPathList": [],
+  "accentColor": "#0F2A47",
+  "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
+  "boxShadow": "none",
+  "dynamicHeight": "FIXED",
+  "isFilterable": true,
+  "isRequired": false,
+  "labelAlignment": "left",
+  "labelPosition": "Top",
+  "labelStyle": "BOLD",
+  "labelText": "Customer",
+  "labelTextColor": "#0F2A47",
+  "labelTextSize": "0.875rem",
+  "labelWidth": 5,
+  "minWidth": 240,
+  "serverSideFiltering": false,
+  "defaultOptionValue": "",
+  "maxDynamicHeight": 9000,
+  "minDynamicHeight": 4,
+  "sourceData": "{{ getCustomers.data }}",
+  "optionLabel": "name",
+  "optionValue": "fdg_code",
+  "placeholderText": "Select customer",
+  "dynamicPropertyPathList": [
+    {
+      "key": "sourceData"
+    }
+  ]
+}

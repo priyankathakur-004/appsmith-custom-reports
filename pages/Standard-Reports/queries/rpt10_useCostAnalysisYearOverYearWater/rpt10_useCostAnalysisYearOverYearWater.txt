@@ -1,0 +1,166 @@
+WITH loc_canon AS (
+  SELECT ld.location_id,
+         COALESCE((SELECT p.location_id FROM bill_management_v2.location_detail p
+                   WHERE p.customer_id = ld.customer_id AND p.location_number = ld.location_number
+                     AND lower(btrim(p.location_status)) IN ('operational', 'active', 'open')
+                   ORDER BY p.location_id LIMIT 1), ld.location_id) AS canon_id
+  FROM bill_management_v2.location_detail ld
+  WHERE ld.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1) AND ld.location_number IS NOT NULL
+),
+cpv_one AS (
+  SELECT customer_id, code,
+         MIN(name) AS name,
+         MIN(remittance_name) AS remittance_name,
+         MIN(main_phone) AS main_phone,
+         (ARRAY_AGG(remittance_address))[1] AS remittance_address
+  FROM bill_management_v2.customers_providers_vendors
+  WHERE customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  GROUP BY customer_id, code
+),
+pv_one AS (
+  SELECT code,
+         CASE WHEN COUNT(DISTINCT btrim(name)) = 1 THEN MIN(name) END AS name,
+         CASE WHEN COUNT(DISTINCT btrim(remittance_name)) = 1 THEN MIN(remittance_name) END AS remittance_name,
+         CASE WHEN COUNT(DISTINCT btrim(main_phone)) = 1 THEN MIN(main_phone) END AS main_phone,
+         CASE WHEN COUNT(*) = 1 THEN (ARRAY_AGG(remittance_address))[1] END AS remittance_address
+  FROM bill_management_v2.providers_vendors
+  WHERE code IN (SELECT vendor_code FROM bill_management_v2.analytics_monthly_feed
+                 WHERE customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1))
+  GROUP BY code
+),
+vas_one AS (
+  SELECT DISTINCT ON (s.virtual_account_id)
+         s.virtual_account_id, s.account_status, s.account_opened, s.account_closed
+  FROM bill_management_v2.virtual_accounts_status s
+  JOIN bill_management_v2.virtual_accounts sva ON sva.id = s.virtual_account_id
+  WHERE sva.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  ORDER BY s.virtual_account_id, s.account_closed DESC NULLS LAST
+),
+rv_one AS (
+  SELECT customer_id, vendor_code,
+         NULLIF(btrim(MIN(providers_vendors_attributes::jsonb ->> 'Vendor Code')), '') AS fiq_vendor_id
+  FROM bill_management_v2.reports_vendors
+  WHERE customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  GROUP BY customer_id, vendor_code
+),
+attr_vals AS (
+  SELECT vam.virtual_account_id,
+         vmeta.attribute_name,
+         string_agg(DISTINCT vam.attribute_value, ' | ' ORDER BY vam.attribute_value) AS val
+  FROM bill_management_v2.virtual_accounts_attributes_mapping vam
+  JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta
+    ON vmeta.id = vam.virtual_accounts_attributes_metadata_id
+  WHERE vmeta.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+    AND vmeta.deleted_at IS NULL
+  GROUP BY vam.virtual_account_id, vmeta.attribute_name
+),
+feed_scoped AS (
+  SELECT * FROM bill_management_v2.analytics_monthly_feed WHERE customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+),
+amf_first AS (
+  SELECT va2.account_code, f.location_id, f.vendor_code,
+         MIN(f.time_period) AS first_period,
+         MAX(f.statement_date) AS last_bill_date
+  FROM bill_management_v2.analytics_monthly_feed f
+  JOIN bill_management_v2.virtual_accounts va2 ON va2.id = f.virtual_account_id
+  WHERE f.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  GROUP BY va2.account_code, f.location_id, f.vendor_code
+),
+bill_history AS (
+  SELECT ah.bill_id,
+         ah.virtual_account_id,
+         upper(btrim(ah.commodity)) AS commodity,
+         MIN(ah.start_date)  AS start_date,
+         MAX(ah.end_date)    AS end_date,
+         SUM(ah.subcharges)  AS subcharges,
+         SUM(ah.consumption) AS consumption
+  FROM bill_management_v2.account_history ah
+  JOIN bill_management_v2.virtual_accounts bva ON bva.id = ah.virtual_account_id
+  WHERE bva.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  GROUP BY ah.bill_id, ah.virtual_account_id, upper(btrim(ah.commodity))
+),
+gl_rows AS (
+  SELECT vam.virtual_account_id,
+         (substring(vmeta.attribute_name from '([0-9]+)'))::int AS gl_slot,
+         MAX(NULLIF(btrim(vam.attribute_value), '')) FILTER (WHERE vmeta.attribute_name ~* '^gl\s*code')  AS gl_code,
+         MAX(NULLIF(btrim(vam.attribute_value), '')) FILTER (WHERE vmeta.attribute_name ~* '^gl\s*alloc') AS gl_allocation
+  FROM bill_management_v2.virtual_accounts_attributes_mapping vam
+  JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta
+    ON vmeta.id = vam.virtual_accounts_attributes_metadata_id
+  WHERE vmeta.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+    AND vmeta.deleted_at IS NULL
+    AND vmeta.attribute_name ~* '^gl\s*(code|alloc)'
+  GROUP BY 1, 2
+),
+otc_bill AS (
+  SELECT li.bill_id, upper(btrim(li.commodity)) AS commodity, SUM(li.charge) AS otc
+  FROM bill_management_v2.analytics_billing_line_items li
+  WHERE li.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+    AND li.code IN ('OTH_FEE','OTH_PENALTY','OTH_DEPOSIT','OTH_DEPOSITINT','OTH_CORR_CHARGE','OTH_ADJUSTMENT')
+  GROUP BY li.bill_id, upper(btrim(li.commodity))
+),
+otc_rows AS (
+  SELECT f.bill_id, upper(btrim(f.utility_type)) AS commodity, COUNT(*) AS feed_rows
+  FROM bill_management_v2.analytics_monthly_feed f
+  WHERE f.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  GROUP BY f.bill_id, upper(btrim(f.utility_type))
+),
+lf_bills AS (
+  SELECT f.virtual_account_id, f.bill_id,
+         MIN(f.bill_record_id)       AS bill_record_id,
+         MIN(f.statement_date)::date AS bill_date,
+         SUM(f.total_charges)        AS bill_amount
+  FROM bill_management_v2.analytics_monthly_feed f
+  WHERE f.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  GROUP BY f.virtual_account_id, f.bill_id
+),
+lf_fee AS (
+  SELECT li.virtual_account_id, li.bill_id,
+         SUM(CASE WHEN li.charge > 0 THEN li.charge ELSE 0 END) AS late_fee_charged,
+         SUM(CASE WHEN li.charge < 0 THEN li.charge ELSE 0 END) AS late_fee_recouped,
+         SUM(li.charge)                                         AS late_fee
+  FROM bill_management_v2.analytics_billing_line_items li
+  WHERE li.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+    AND li.code = 'LATEFEE'
+  GROUP BY li.virtual_account_id, li.bill_id
+),
+lf_seq AS (
+  SELECT b.virtual_account_id, b.bill_id, b.bill_date, b.bill_amount,
+         fee.late_fee, fee.late_fee_charged, fee.late_fee_recouped,
+         LAG(b.bill_date)      OVER w AS prev_bill_date,
+         LAG(b.bill_amount)    OVER w AS prev_bill_amount,
+         LAG(b.bill_record_id) OVER w AS prev_bill_record_id
+  FROM lf_bills b
+  LEFT JOIN lf_fee fee ON fee.virtual_account_id = b.virtual_account_id AND fee.bill_id = b.bill_id
+  WINDOW w AS (PARTITION BY b.virtual_account_id ORDER BY b.bill_date, b.bill_id)
+),
+bill_start AS (
+  SELECT f.bill_id, f.virtual_account_id, date_trunc('month', MIN(f.start_date))::date AS period_n
+  FROM bill_management_v2.analytics_monthly_feed f
+  WHERE f.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+    AND f.location_id IN (SELECT ldb.location_id FROM bill_management_v2.location_detail ldb
+                          WHERE ldb.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1) AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ldb.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
+    AND f.time_period >= DATE '2025-01-01' - INTERVAL '4 months'
+    AND f.time_period < DATE '2026-12-01' + INTERVAL '4 months'
+  GROUP BY f.bill_id, f.virtual_account_id
+)
+SELECT l.name AS "location", lt.location_number AS "locationNumber", l.address AS "locationAddress", l.city AS "locationCity", CASE WHEN l.state ~ '^[A-Za-z]{2}-' THEN substring(l.state from 4) ELSE l.state END AS "locationState", l.postcode AS "locationZip", CASE upper(btrim(l.country)) WHEN 'US' THEN 'United States' WHEN 'USA' THEN 'United States' WHEN 'CA' THEN 'Canada' WHEN 'CAN' THEN 'Canada' WHEN 'MX' THEN 'Mexico' WHEN 'GB' THEN 'United Kingdom' WHEN 'UK' THEN 'United Kingdom' ELSE l.country END AS "locationCountry", CASE WHEN lower(btrim(lt.location_status)) IN ('operational','active','open') THEN 'Active' WHEN lower(btrim(lt.location_status)) IN ('closed','inactive','terminated','cancelled','canceled') THEN 'Inactive' ELSE lt.location_status END AS "locationStatus", l.square_feet AS "squareFeet", COALESCE(NULLIF(btrim(cvpn.pretty_name), ''), CASE WHEN lower(regexp_replace(btrim(v.pretty_name), '[^A-Za-z0-9]', '', 'g')) <> lower(regexp_replace(amf.vendor_code, '[^A-Za-z0-9]', '', 'g')) THEN NULLIF(btrim(v.pretty_name), '') END, NULLIF(btrim(cpv.name), ''), NULLIF(btrim(pv.name), ''), amf.vendor_code) AS "vendor", COALESCE(NULLIF(btrim((cpv.remittance_address).line_1), ''), NULLIF(btrim((pv.remittance_address).line_1), '')) AS "vendorAddress1", COALESCE(NULLIF(btrim((cpv.remittance_address).line_2), ''), NULLIF(btrim((pv.remittance_address).line_2), '')) AS "vendorAddress2", COALESCE(NULLIF(btrim((cpv.remittance_address).city), ''), NULLIF(btrim((pv.remittance_address).city), '')) AS "vendorCity", COALESCE(NULLIF(btrim((cpv.remittance_address).state), ''), NULLIF(btrim((pv.remittance_address).state), '')) AS "vendorState", COALESCE(NULLIF(btrim((cpv.remittance_address).post_code), ''), NULLIF(btrim((pv.remittance_address).post_code), '')) AS "vendorZip", COALESCE(NULLIF(btrim((cpv.remittance_address).country), ''), NULLIF(btrim((pv.remittance_address).country), '')) AS "vendorCountry", va.account_code AS "accountNumber", NULLIF(va.client_account, va.account_code) AS "summaryAccount", regexp_replace(va.account_code, '[^A-Za-z0-9]', '', 'g') AS "cleanAccountNumber", glr.gl_code AS "glCode", CASE WHEN btrim(glr.gl_allocation) ~ '^-?[0-9]+(\.[0-9]+)?$' THEN btrim(glr.gl_allocation)::numeric END AS "glAllocation", va.meter_serial AS "meterSerial", (TO_CHAR(bs.period_n, 'MM') || ' ' || TO_CHAR(bs.period_n, 'FMMonth')) AS "monthOfYear", CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 'Electric' WHEN 'WATER' THEN 'Water' WHEN 'SEWER' THEN 'Sewer' WHEN 'NATURALGAS' THEN 'Natural Gas' WHEN 'FIREPROTECTION' THEN 'Fire Protection' WHEN 'STORMWATER' THEN 'Storm Water' WHEN 'IRRIGATION' THEN 'Irrigation' WHEN 'LIGHTING' THEN 'Lighting' WHEN 'REFUSE' THEN 'Refuse' WHEN 'SOLARPV' THEN 'Solar PV' WHEN 'CHILLEDWATER' THEN 'Chilled Water' WHEN 'PROPANE' THEN 'Propane' ELSE amf.utility_type END AS "utilityType", (CASE upper(btrim(amf.total_consumption_uom)) WHEN 'KWH' THEN 'kWh' WHEN 'CCF' THEN 'kGal' WHEN 'HCF' THEN 'kGal' ELSE amf.total_consumption_uom END) AS "uom", ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0)), 2) AS "yoyCost_2025", ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026), 0)), 2) AS "yoyCost_2026", ROUND(((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026), 0)) - (SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0))) / NULLIF((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0)), 0) * 100, 2) AS "yoyCost_2025_2026_var", ROUND(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 3) AS "yoyUsage_2025", ROUND(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026), 3) AS "yoyUsage_2026", ROUND((SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) - SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025)) / NULLIF(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0) * 100, 2) AS "yoyUsage_2025_2026_var", ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0)) / NULLIF(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0), 4) AS "yoyCostPerUnit_2025", ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026), 0)) / NULLIF(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026), 0), 4) AS "yoyCostPerUnit_2026", ROUND(((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026), 0)) / NULLIF(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026), 0) - (SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0)) / NULLIF(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0)) / NULLIF((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0)) / NULLIF(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0), 0) * 100, 2) AS "yoyCostPerUnit_2025_2026_var", ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0)) / NULLIF((MAX(amf.end_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - MIN(amf.start_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) + 1), 0), 4) AS "yoyCostPerDay_2025", ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026), 0)) / NULLIF((MAX(amf.end_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) - MIN(amf.start_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) + 1), 0), 4) AS "yoyCostPerDay_2026", ROUND(((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026), 0)) / NULLIF((MAX(amf.end_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) - MIN(amf.start_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) + 1), 0) - (SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0)) / NULLIF((MAX(amf.end_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - MIN(amf.start_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) + 1), 0)) / NULLIF((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0)) / NULLIF((MAX(amf.end_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - MIN(amf.start_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) + 1), 0), 0) * 100, 2) AS "yoyCostPerDay_2025_2026_var", ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0)) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS "yoyCostPerSqft_2025", ROUND((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026), 0)) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS "yoyCostPerSqft_2026", ROUND(((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026), 0)) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END - (SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0)) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END) / NULLIF((SUM(amf.total_charges) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - COALESCE(SUM(ob.otc / NULLIF(obn.feed_rows, 0)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025), 0)) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 0) * 100, 2) AS "yoyCostPerSqft_2025_2026_var", ROUND(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) / NULLIF((MAX(amf.end_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - MIN(amf.start_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) + 1), 0), 4) AS "yoyUsagePerDay_2025", ROUND(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) / NULLIF((MAX(amf.end_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) - MIN(amf.start_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) + 1), 0), 4) AS "yoyUsagePerDay_2026", ROUND((SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) / NULLIF((MAX(amf.end_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) - MIN(amf.start_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) + 1), 0) - SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) / NULLIF((MAX(amf.end_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - MIN(amf.start_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) + 1), 0)) / NULLIF(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) / NULLIF((MAX(amf.end_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) - MIN(amf.start_date) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) + 1), 0), 0) * 100, 2) AS "yoyUsagePerDay_2025_2026_var", ROUND(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS "yoyUsagePerSqft_2025", ROUND(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS "yoyUsagePerSqft_2026", ROUND((SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END - SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END) / NULLIF(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END)) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 0) * 100, 2) AS "yoyUsagePerSqft_2025_2026_var", ROUND(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END) * CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 3412 WHEN 'LIGHTING' THEN 3412 WHEN 'SOLARPV' THEN 3412 WHEN 'NATURALGAS' THEN 100000 WHEN 'UTILITYGAS' THEN 100000 WHEN 'PROPANE' THEN 91452 WHEN 'OIL2' THEN 138500 WHEN 'DIESEL' THEN 137381 WHEN 'GASOLINE' THEN 120214 WHEN 'STEAM' THEN 1000 ELSE 0 END) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) / 1000, 3) AS "yoyKbtu_2025", ROUND(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END) * CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 3412 WHEN 'LIGHTING' THEN 3412 WHEN 'SOLARPV' THEN 3412 WHEN 'NATURALGAS' THEN 100000 WHEN 'UTILITYGAS' THEN 100000 WHEN 'PROPANE' THEN 91452 WHEN 'OIL2' THEN 138500 WHEN 'DIESEL' THEN 137381 WHEN 'GASOLINE' THEN 120214 WHEN 'STEAM' THEN 1000 ELSE 0 END) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) / 1000, 3) AS "yoyKbtu_2026", ROUND((SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END) * CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 3412 WHEN 'LIGHTING' THEN 3412 WHEN 'SOLARPV' THEN 3412 WHEN 'NATURALGAS' THEN 100000 WHEN 'UTILITYGAS' THEN 100000 WHEN 'PROPANE' THEN 91452 WHEN 'OIL2' THEN 138500 WHEN 'DIESEL' THEN 137381 WHEN 'GASOLINE' THEN 120214 WHEN 'STEAM' THEN 1000 ELSE 0 END) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) / 1000 - SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END) * CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 3412 WHEN 'LIGHTING' THEN 3412 WHEN 'SOLARPV' THEN 3412 WHEN 'NATURALGAS' THEN 100000 WHEN 'UTILITYGAS' THEN 100000 WHEN 'PROPANE' THEN 91452 WHEN 'OIL2' THEN 138500 WHEN 'DIESEL' THEN 137381 WHEN 'GASOLINE' THEN 120214 WHEN 'STEAM' THEN 1000 ELSE 0 END) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) / 1000) / NULLIF(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END) * CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 3412 WHEN 'LIGHTING' THEN 3412 WHEN 'SOLARPV' THEN 3412 WHEN 'NATURALGAS' THEN 100000 WHEN 'UTILITYGAS' THEN 100000 WHEN 'PROPANE' THEN 91452 WHEN 'OIL2' THEN 138500 WHEN 'DIESEL' THEN 137381 WHEN 'GASOLINE' THEN 120214 WHEN 'STEAM' THEN 1000 ELSE 0 END) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) / 1000, 0) * 100, 2) AS "yoyKbtu_2025_2026_var", ROUND(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END) * CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 3412 WHEN 'LIGHTING' THEN 3412 WHEN 'SOLARPV' THEN 3412 WHEN 'NATURALGAS' THEN 100000 WHEN 'UTILITYGAS' THEN 100000 WHEN 'PROPANE' THEN 91452 WHEN 'OIL2' THEN 138500 WHEN 'DIESEL' THEN 137381 WHEN 'GASOLINE' THEN 120214 WHEN 'STEAM' THEN 1000 ELSE 0 END) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) / 1000 / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS "yoyKbtuPerSqft_2025", ROUND(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END) * CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 3412 WHEN 'LIGHTING' THEN 3412 WHEN 'SOLARPV' THEN 3412 WHEN 'NATURALGAS' THEN 100000 WHEN 'UTILITYGAS' THEN 100000 WHEN 'PROPANE' THEN 91452 WHEN 'OIL2' THEN 138500 WHEN 'DIESEL' THEN 137381 WHEN 'GASOLINE' THEN 120214 WHEN 'STEAM' THEN 1000 ELSE 0 END) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) / 1000 / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 4) AS "yoyKbtuPerSqft_2026", ROUND((SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END) * CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 3412 WHEN 'LIGHTING' THEN 3412 WHEN 'SOLARPV' THEN 3412 WHEN 'NATURALGAS' THEN 100000 WHEN 'UTILITYGAS' THEN 100000 WHEN 'PROPANE' THEN 91452 WHEN 'OIL2' THEN 138500 WHEN 'DIESEL' THEN 137381 WHEN 'GASOLINE' THEN 120214 WHEN 'STEAM' THEN 1000 ELSE 0 END) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2026) / 1000 / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END - SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END) * CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 3412 WHEN 'LIGHTING' THEN 3412 WHEN 'SOLARPV' THEN 3412 WHEN 'NATURALGAS' THEN 100000 WHEN 'UTILITYGAS' THEN 100000 WHEN 'PROPANE' THEN 91452 WHEN 'OIL2' THEN 138500 WHEN 'DIESEL' THEN 137381 WHEN 'GASOLINE' THEN 120214 WHEN 'STEAM' THEN 1000 ELSE 0 END) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) / 1000 / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END) / NULLIF(SUM((amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END) * CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 3412 WHEN 'LIGHTING' THEN 3412 WHEN 'SOLARPV' THEN 3412 WHEN 'NATURALGAS' THEN 100000 WHEN 'UTILITYGAS' THEN 100000 WHEN 'PROPANE' THEN 91452 WHEN 'OIL2' THEN 138500 WHEN 'DIESEL' THEN 137381 WHEN 'GASOLINE' THEN 120214 WHEN 'STEAM' THEN 1000 ELSE 0 END) FILTER (WHERE EXTRACT(YEAR FROM bs.period_n) = 2025) / 1000 / CASE WHEN MAX(l.square_feet) > 1 THEN MAX(l.square_feet) END, 0) * 100, 2) AS "yoyKbtuPerSqft_2025_2026_var"
+FROM feed_scoped amf
+		LEFT JOIN bill_start bs ON bs.bill_id = amf.bill_id AND bs.virtual_account_id = amf.virtual_account_id
+		LEFT JOIN loc_canon lc ON lc.location_id = amf.location_id
+		LEFT JOIN bill_management_v2.locations l ON l.id = COALESCE(lc.canon_id, amf.location_id)
+		LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id
+		LEFT JOIN bill_management_v2.virtual_accounts va ON va.id = amf.virtual_account_id
+		LEFT JOIN bill_management_v2.vendors v ON v.code = amf.vendor_code
+		LEFT JOIN bill_management_v2.customers_vendors_pretty_name cvpn ON cvpn.vendor_id = v.id AND cvpn.customer_id = amf.customer_id
+		LEFT JOIN cpv_one cpv ON cpv.code = amf.vendor_code AND cpv.customer_id = amf.customer_id
+		LEFT JOIN pv_one pv ON pv.code = amf.vendor_code
+		LEFT JOIN vas_one vas ON vas.virtual_account_id = amf.virtual_account_id
+		LEFT JOIN rv_one rv ON rv.vendor_code = amf.vendor_code AND rv.customer_id = amf.customer_id
+		LEFT JOIN amf_first af ON COALESCE(af.account_code, '') = COALESCE(va.account_code, '') AND COALESCE(af.location_id, -1) = COALESCE(amf.location_id, -1) AND COALESCE(af.vendor_code, '') = COALESCE(amf.vendor_code, '')
+		LEFT JOIN gl_rows glr ON glr.virtual_account_id = amf.virtual_account_id AND glr.gl_code IS NOT NULL
+		LEFT JOIN otc_bill ob ON ob.bill_id = amf.bill_id AND ob.commodity = upper(btrim(amf.utility_type))
+		LEFT JOIN otc_rows obn ON obn.bill_id = amf.bill_id AND obn.commodity = upper(btrim(amf.utility_type))
+WHERE 1=1 AND amf.location_id IN (SELECT ldf.location_id FROM bill_management_v2.location_detail ldf WHERE ldf.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1) AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ldf.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')) AND amf.time_period >= '2025-01-01' AND amf.time_period < DATE '2026-12-01' + INTERVAL '4 months' AND upper(btrim(amf.utility_type)) = 'WATER' AND amf.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1) AND EXTRACT(YEAR FROM bs.period_n) IN (2025, 2026) AND lt.location_status IN ('Operational') AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR lt.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')
+GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25
+ORDER BY "location", "locationNumber", "locationAddress", "locationCity", "locationState", "locationZip", "locationCountry", "locationStatus", "squareFeet", "vendor", "vendorAddress1", "vendorAddress2", "vendorCity", "vendorState", "vendorZip", "vendorCountry", "accountNumber", "summaryAccount", "cleanAccountNumber", "glCode", "glAllocation", "meterSerial", "monthOfYear", "utilityType", "uom";

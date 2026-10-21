@@ -1,0 +1,45 @@
+{
+  "animateLoading": true,
+  "isLoading": false,
+  "isVisible": true,
+  "isDisabled": false,
+  "key": "530d115c53",
+  "widgetId": "76f10aedd2",
+  "widgetName": "Title",
+  "type": "TEXT_WIDGET",
+  "version": 1,
+  "parentId": "0",
+  "parentColumnSpace": 16,
+  "parentRowSpace": 10,
+  "renderMode": "CANVAS",
+  "responsiveBehavior": "fill",
+  "topRow": 0,
+  "bottomRow": 5,
+  "leftColumn": 0,
+  "rightColumn": 64,
+  "mobileTopRow": 0,
+  "mobileBottomRow": 5,
+  "mobileLeftColumn": 0,
+  "mobileRightColumn": 64,
+  "needsErrorInfo": false,
+  "dynamicBindingPathList": [
+    {
+      "key": "fontFamily"
+    },
+    {
+      "key": "borderRadius"
+    }
+  ],
+  "dynamicTriggerPathList": [],
+  "text": "Standard Reports",
+  "fontSize": "1.25rem",
+  "fontStyle": "BOLD",
+  "textAlign": "LEFT",
+  "textColor": "#0F2A47",
+  "overflow": "NONE",
+  "shouldTruncate": false,
+  "dynamicHeight": "FIXED",
+  "minWidth": 200,
+  "fontFamily": "{{appsmith.theme.fontFamily.appFont}}",
+  "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}"
+}

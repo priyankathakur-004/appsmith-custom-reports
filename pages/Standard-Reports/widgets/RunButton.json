@@ -1,0 +1,49 @@
+{
+  "animateLoading": true,
+  "isLoading": false,
+  "isVisible": true,
+  "isDisabled": "{{ !ReportPick.selectedOptionValue || !CustomerPick.selectedOptionValue }}",
+  "key": "af6796789e",
+  "widgetId": "1201613e5a",
+  "widgetName": "RunButton",
+  "type": "BUTTON_WIDGET",
+  "version": 1,
+  "parentId": "0",
+  "parentColumnSpace": 16,
+  "parentRowSpace": 10,
+  "renderMode": "CANVAS",
+  "responsiveBehavior": "fill",
+  "topRow": 9,
+  "bottomRow": 13,
+  "leftColumn": 56,
+  "rightColumn": 64,
+  "mobileTopRow": 9,
+  "mobileBottomRow": 13,
+  "mobileLeftColumn": 56,
+  "mobileRightColumn": 64,
+  "needsErrorInfo": false,
+  "dynamicBindingPathList": [
+    {
+      "key": "isDisabled"
+    },
+    {
+      "key": "borderRadius"
+    }
+  ],
+  "dynamicTriggerPathList": [
+    {
+      "key": "onClick"
+    }
+  ],
+  "text": "Run",
+  "buttonColor": "#0F2A47",
+  "buttonVariant": "PRIMARY",
+  "placement": "CENTER",
+  "recaptchaType": "V3",
+  "disabledWhenInvalid": false,
+  "resetFormOnClick": false,
+  "minWidth": 120,
+  "onClick": "{{ ({ r01: rpt01_accountAndServiceList, r02: rpt02_annualUseCost, r03: rpt03_indexTrendline, r04: rpt04_indexYearOverYear, r05: rpt05_invoiceByDate, r06: rpt06_invoiceDetail, r07: rpt07_lateFees, r08: rpt08_locationDetail, r09: rpt09_useCostAnalysisTrendline, r10: rpt10_useCostAnalysisYearOverYearWater })[ReportPick.selectedOptionValue].run() }}",
+  "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
+  "boxShadow": "none"
+}
