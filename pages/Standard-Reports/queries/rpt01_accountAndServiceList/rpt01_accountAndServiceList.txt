@@ -5,18 +5,18 @@ WITH loc_canon AS (
                      AND lower(btrim(p.location_status)) IN ('operational', 'active', 'open')
                    ORDER BY p.location_id LIMIT 1), ld.location_id) AS canon_id
   FROM bill_management_v2.location_detail ld
-  WHERE ld.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1) AND ld.location_number IS NOT NULL
+  WHERE ld.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ld.location_number IS NOT NULL
 ),
 acct_meter AS (
   SELECT va.account_code,
-         regexp_replace(upper(btrim(va.meter_serial)), '^1([0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]?)$', 'I\1') AS meter_key,
+         regexp_replace(upper(btrim(va.meter_serial)), '^1([0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]?)\Z', 'I\1') AS meter_key,
          MIN(f.statement_date) AS first_bill,
          MAX(f.statement_date) AS last_bill,
          BOOL_OR(s.account_status IS NULL OR lower(btrim(s.account_status)) <> 'closed') AS is_open
   FROM bill_management_v2.virtual_accounts va
   JOIN bill_management_v2.analytics_monthly_feed f ON f.virtual_account_id = va.id
   LEFT JOIN bill_management_v2.virtual_accounts_status s ON s.virtual_account_id = va.id
-  WHERE va.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1) AND va.meter_serial ~ '[0-9]'
+  WHERE va.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND va.meter_serial ~ '[0-9]'
   GROUP BY 1, 2
 ),
 superseded AS (
@@ -32,7 +32,7 @@ cpv_one AS (
          MIN(main_phone) AS main_phone,
          (ARRAY_AGG(remittance_address))[1] AS remittance_address
   FROM bill_management_v2.customers_providers_vendors
-  WHERE customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  WHERE customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
   GROUP BY customer_id, code
 ),
 pv_one AS (
@@ -43,7 +43,7 @@ pv_one AS (
          CASE WHEN COUNT(*) = 1 THEN (ARRAY_AGG(remittance_address))[1] END AS remittance_address
   FROM bill_management_v2.providers_vendors
   WHERE code IN (SELECT vendor_code FROM bill_management_v2.analytics_monthly_feed
-                 WHERE customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1))
+                 WHERE customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }})
   GROUP BY code
 ),
 vas_one AS (
@@ -51,14 +51,14 @@ vas_one AS (
          s.virtual_account_id, s.account_status, s.account_opened, s.account_closed
   FROM bill_management_v2.virtual_accounts_status s
   JOIN bill_management_v2.virtual_accounts sva ON sva.id = s.virtual_account_id
-  WHERE sva.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  WHERE sva.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
   ORDER BY s.virtual_account_id, s.account_closed DESC NULLS LAST
 ),
 rv_one AS (
   SELECT customer_id, vendor_code,
          NULLIF(btrim(MIN(providers_vendors_attributes::jsonb ->> 'Vendor Code')), '') AS fiq_vendor_id
   FROM bill_management_v2.reports_vendors
-  WHERE customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  WHERE customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
   GROUP BY customer_id, vendor_code
 ),
 attr_vals AS (
@@ -68,12 +68,12 @@ attr_vals AS (
   FROM bill_management_v2.virtual_accounts_attributes_mapping vam
   JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta
     ON vmeta.id = vam.virtual_accounts_attributes_metadata_id
-  WHERE vmeta.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  WHERE vmeta.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
     AND vmeta.deleted_at IS NULL
   GROUP BY vam.virtual_account_id, vmeta.attribute_name
 ),
 feed_scoped AS (
-  SELECT DISTINCT ON (virtual_account_id, location_id, utility_type) * FROM bill_management_v2.analytics_monthly_feed WHERE customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1) ORDER BY virtual_account_id, location_id, utility_type, time_period DESC NULLS LAST
+  SELECT DISTINCT ON (virtual_account_id, location_id, utility_type) * FROM bill_management_v2.analytics_monthly_feed WHERE customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} ORDER BY virtual_account_id, location_id, utility_type, time_period DESC NULLS LAST
 ),
 amf_first AS (
   SELECT va2.account_code, f.location_id, f.vendor_code,
@@ -81,7 +81,7 @@ amf_first AS (
          MAX(f.statement_date) AS last_bill_date
   FROM bill_management_v2.analytics_monthly_feed f
   JOIN bill_management_v2.virtual_accounts va2 ON va2.id = f.virtual_account_id
-  WHERE f.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  WHERE f.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
   GROUP BY va2.account_code, f.location_id, f.vendor_code
 ),
 bill_history AS (
@@ -94,7 +94,7 @@ bill_history AS (
          SUM(ah.consumption) AS consumption
   FROM bill_management_v2.account_history ah
   JOIN bill_management_v2.virtual_accounts bva ON bva.id = ah.virtual_account_id
-  WHERE bva.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  WHERE bva.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
   GROUP BY ah.bill_id, ah.virtual_account_id, upper(btrim(ah.commodity))
 ),
 gl_rows AS (
@@ -105,7 +105,7 @@ gl_rows AS (
   FROM bill_management_v2.virtual_accounts_attributes_mapping vam
   JOIN bill_management_v2.virtual_accounts_attributes_metadata vmeta
     ON vmeta.id = vam.virtual_accounts_attributes_metadata_id
-  WHERE vmeta.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  WHERE vmeta.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
     AND vmeta.deleted_at IS NULL
     AND vmeta.attribute_name ~* '^gl\s*(code|alloc)'
   GROUP BY 1, 2
@@ -113,14 +113,14 @@ gl_rows AS (
 otc_bill AS (
   SELECT li.bill_id, upper(btrim(li.commodity)) AS commodity, SUM(li.charge) AS otc
   FROM bill_management_v2.analytics_billing_line_items li
-  WHERE li.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  WHERE li.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
     AND li.code IN ('OTH_FEE','OTH_PENALTY','OTH_DEPOSIT','OTH_DEPOSITINT','OTH_CORR_CHARGE','OTH_ADJUSTMENT')
   GROUP BY li.bill_id, upper(btrim(li.commodity))
 ),
 otc_rows AS (
   SELECT f.bill_id, upper(btrim(f.utility_type)) AS commodity, COUNT(*) AS feed_rows
   FROM bill_management_v2.analytics_monthly_feed f
-  WHERE f.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  WHERE f.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
   GROUP BY f.bill_id, upper(btrim(f.utility_type))
 ),
 lf_bills AS (
@@ -129,7 +129,7 @@ lf_bills AS (
          MIN(f.statement_date)::date AS bill_date,
          SUM(f.total_charges)        AS bill_amount
   FROM bill_management_v2.analytics_monthly_feed f
-  WHERE f.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  WHERE f.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
   GROUP BY f.virtual_account_id, f.bill_id
 ),
 lf_fee AS (
@@ -138,7 +138,7 @@ lf_fee AS (
          SUM(CASE WHEN li.charge < 0 THEN li.charge ELSE 0 END) AS late_fee_recouped,
          SUM(li.charge)                                         AS late_fee
   FROM bill_management_v2.analytics_billing_line_items li
-  WHERE li.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1)
+  WHERE li.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
     AND li.code = 'LATEFEE'
   GROUP BY li.virtual_account_id, li.bill_id
 ),
@@ -165,6 +165,6 @@ FROM feed_scoped amf
 		LEFT JOIN vas_one vas ON vas.virtual_account_id = amf.virtual_account_id
 		LEFT JOIN rv_one rv ON rv.vendor_code = amf.vendor_code AND rv.customer_id = amf.customer_id
 		LEFT JOIN amf_first af ON COALESCE(af.account_code, '') = COALESCE(va.account_code, '') AND COALESCE(af.location_id, -1) = COALESCE(amf.location_id, -1) AND COALESCE(af.vendor_code, '') = COALESCE(amf.vendor_code, '')
-WHERE 1=1 AND amf.location_id IN (SELECT ldf.location_id FROM bill_management_v2.location_detail ldf WHERE ldf.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1) AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ldf.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')) AND (vas.account_status IS NULL OR lower(btrim(vas.account_status)) <> 'closed') AND va.account_code NOT IN (SELECT account_code FROM superseded) AND amf.customer_id = (SELECT id FROM bill_management_v2.customers_search WHERE LOWER(fdg_code) = '{{ String(CustomerPick.selectedOptionValue || '').toLowerCase().replace(/'/g, "''") }}' AND active IS NOT FALSE LIMIT 1) AND lt.location_status IN ('Operational') AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR lt.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')
+WHERE 1=1 AND amf.location_id IN (SELECT ldf.location_id FROM bill_management_v2.location_detail ldf WHERE ldf.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ldf.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')) AND (vas.account_status IS NULL OR lower(btrim(vas.account_status)) <> 'closed') AND va.account_code NOT IN (SELECT account_code FROM superseded) AND amf.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND lt.location_status IN ('Operational') AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR lt.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')
 
 ORDER BY "location", "locationNumber", "locationAddress", "locationCity", "locationState", "locationZip", "locationCountry", "locationPhone", "locationStatus", "squareFeet", "vendor", "vendorAddress1", "vendorAddress2", "vendorCity", "vendorState", "vendorZip", "vendorCountry", "vendorPhone", "accountNumber", "cleanAccountNumber", "accountStatus", "accountActivityDate", "accountCreatedDate", "summaryAccount", "utilityType", "meterSerial", "lastBillDate";

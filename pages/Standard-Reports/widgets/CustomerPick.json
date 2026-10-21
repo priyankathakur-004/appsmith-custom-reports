@@ -4,7 +4,7 @@
   "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
   "bottomRow": 13,
   "boxShadow": "none",
-  "defaultOptionValue": "simonproperties_p",
+  "defaultOptionValue": "94512",
   "dynamicBindingPathList": [
     {
       "key": "sourceData"
@@ -43,7 +43,7 @@
   "mobileTopRow": 6,
   "needsErrorInfo": false,
   "optionLabel": "name",
-  "optionValue": "fdg_code",
+  "optionValue": "id",
   "parentColumnSpace": 16,
   "parentId": "0",
   "parentRowSpace": 10,
