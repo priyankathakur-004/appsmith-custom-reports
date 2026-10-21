@@ -29,7 +29,7 @@
     ],
     "name": "rpt06_invoiceDetail",
     "pageId": "Standard-Reports",
-    "runBehaviour": "MANUAL",
+    "runBehaviour": "AUTOMATIC",
     "userSetOnLoad": false
   }
 }

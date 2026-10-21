@@ -1,45 +1,31 @@
 {
+  "accentColor": "#0F2A47",
   "animateLoading": true,
-  "isLoading": false,
-  "isVisible": true,
-  "isDisabled": false,
-  "key": "5eca6705f7",
-  "widgetId": "316c850d63",
-  "widgetName": "CustomerPick",
-  "type": "SELECT_WIDGET",
-  "version": 1,
-  "parentId": "0",
-  "parentColumnSpace": 16,
-  "parentRowSpace": 10,
-  "renderMode": "CANVAS",
-  "responsiveBehavior": "fill",
-  "topRow": 6,
+  "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
   "bottomRow": 13,
-  "leftColumn": 24,
-  "rightColumn": 46,
-  "mobileTopRow": 6,
-  "mobileBottomRow": 13,
-  "mobileLeftColumn": 24,
-  "mobileRightColumn": 46,
-  "needsErrorInfo": false,
+  "boxShadow": "none",
+  "defaultOptionValue": "simonproperties_p",
   "dynamicBindingPathList": [
     {
       "key": "sourceData"
     },
     {
       "key": "borderRadius"
-    },
+    }
+  ],
+  "dynamicHeight": "FIXED",
+  "dynamicPropertyPathList": [
     {
-      "key": "defaultOptionValue"
+      "key": "sourceData"
     }
   ],
   "dynamicTriggerPathList": [],
-  "accentColor": "#0F2A47",
-  "borderRadius": "{{appsmith.theme.borderRadius.appBorderRadius}}",
-  "boxShadow": "none",
-  "dynamicHeight": "FIXED",
+  "isDisabled": false,
   "isFilterable": true,
+  "isLoading": false,
   "isRequired": false,
+  "isVisible": true,
+  "key": "5eca6705f7",
   "labelAlignment": "left",
   "labelPosition": "Top",
   "labelStyle": "BOLD",
@@ -47,18 +33,29 @@
   "labelTextColor": "#0F2A47",
   "labelTextSize": "0.875rem",
   "labelWidth": 5,
-  "minWidth": 240,
-  "serverSideFiltering": false,
-  "defaultOptionValue": "{{ (() => { const q = String((appsmith.URL.queryParams || {}).customer || '').toLowerCase().trim(); if (!q) return ''; const m = (getCustomers.data || []).find(r => String(r.id) === q || String(r.fdg_code || '').toLowerCase() === q); return m ? m.fdg_code : ''; })() }}",
+  "leftColumn": 24,
   "maxDynamicHeight": 9000,
   "minDynamicHeight": 4,
-  "sourceData": "{{ getCustomers.data }}",
+  "minWidth": 240,
+  "mobileBottomRow": 13,
+  "mobileLeftColumn": 24,
+  "mobileRightColumn": 46,
+  "mobileTopRow": 6,
+  "needsErrorInfo": false,
   "optionLabel": "name",
   "optionValue": "fdg_code",
+  "parentColumnSpace": 16,
+  "parentId": "0",
+  "parentRowSpace": 10,
   "placeholderText": "Select customer",
-  "dynamicPropertyPathList": [
-    {
-      "key": "sourceData"
-    }
-  ]
+  "renderMode": "CANVAS",
+  "responsiveBehavior": "fill",
+  "rightColumn": 46,
+  "serverSideFiltering": false,
+  "sourceData": "{{ getCustomers.data }}",
+  "topRow": 6,
+  "type": "SELECT_WIDGET",
+  "version": 1,
+  "widgetId": "316c850d63",
+  "widgetName": "CustomerPick"
 }

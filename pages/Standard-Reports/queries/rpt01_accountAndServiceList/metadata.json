@@ -29,7 +29,7 @@
     ],
     "name": "rpt01_accountAndServiceList",
     "pageId": "Standard-Reports",
-    "runBehaviour": "MANUAL",
+    "runBehaviour": "AUTOMATIC",
     "userSetOnLoad": false
   }
 }
