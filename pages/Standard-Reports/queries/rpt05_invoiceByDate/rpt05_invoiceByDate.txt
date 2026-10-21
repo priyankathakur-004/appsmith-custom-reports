@@ -1,11 +1,12 @@
 WITH loc_canon AS (
-  SELECT ld.location_id,
-         COALESCE((SELECT p.location_id FROM bill_management_v2.location_detail p
-                   WHERE p.customer_id = ld.customer_id AND p.location_number = ld.location_number
-                     AND lower(btrim(p.location_status)) IN ('operational', 'active', 'open')
-                   ORDER BY p.location_id LIMIT 1), ld.location_id) AS canon_id
-  FROM bill_management_v2.location_detail ld
-  WHERE ld.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ld.location_number IS NOT NULL
+  SELECT l0.id AS location_id, COALESCE(c.canon_id, l0.id) AS canon_id
+  FROM bill_management_v2.locations l0
+  LEFT JOIN (SELECT payload->>'site_number' AS site_number, MIN(id) AS canon_id
+             FROM bill_management_v2.locations
+             WHERE customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND deleted_at IS NULL
+               AND lower(btrim(payload->>'site_status')) IN ('operational', 'active', 'open')
+             GROUP BY 1) c ON c.site_number = l0.payload->>'site_number'
+  WHERE l0.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
 ),
 cpv_one AS (
   SELECT customer_id, code,
@@ -64,6 +65,7 @@ amf_first AS (
   FROM bill_management_v2.analytics_monthly_feed f
   JOIN bill_management_v2.virtual_accounts va2 ON va2.id = f.virtual_account_id
   WHERE f.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
+    AND f.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
   GROUP BY va2.account_code, f.location_id, f.vendor_code
 ),
 bill_history AS (
@@ -97,12 +99,14 @@ otc_bill AS (
   FROM bill_management_v2.analytics_billing_line_items li
   WHERE li.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
     AND li.code IN ('OTH_FEE','OTH_PENALTY','OTH_DEPOSIT','OTH_DEPOSITINT','OTH_CORR_CHARGE','OTH_ADJUSTMENT')
+    AND li.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
   GROUP BY li.bill_id, upper(btrim(li.commodity))
 ),
 otc_rows AS (
   SELECT f.bill_id, upper(btrim(f.utility_type)) AS commodity, COUNT(*) AS feed_rows
   FROM bill_management_v2.analytics_monthly_feed f
   WHERE f.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
+    AND f.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
   GROUP BY f.bill_id, upper(btrim(f.utility_type))
 ),
 lf_bills AS (
@@ -112,6 +116,7 @@ lf_bills AS (
          SUM(f.total_charges)        AS bill_amount
   FROM bill_management_v2.analytics_monthly_feed f
   WHERE f.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
+    AND f.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
   GROUP BY f.virtual_account_id, f.bill_id
 ),
 lf_fee AS (
@@ -122,6 +127,7 @@ lf_fee AS (
   FROM bill_management_v2.analytics_billing_line_items li
   WHERE li.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
     AND li.code = 'LATEFEE'
+    AND li.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
   GROUP BY li.virtual_account_id, li.bill_id
 ),
 lf_seq AS (
@@ -147,6 +153,6 @@ FROM feed_scoped amf
 		LEFT JOIN vas_one vas ON vas.virtual_account_id = amf.virtual_account_id
 		LEFT JOIN rv_one rv ON rv.vendor_code = amf.vendor_code AND rv.customer_id = amf.customer_id
 		LEFT JOIN amf_first af ON COALESCE(af.account_code, '') = COALESCE(va.account_code, '') AND COALESCE(af.location_id, -1) = COALESCE(amf.location_id, -1) AND COALESCE(af.vendor_code, '') = COALESCE(amf.vendor_code, '')
-WHERE 1=1 AND amf.location_id IN (SELECT ldf.location_id FROM bill_management_v2.location_detail ldf WHERE ldf.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ldf.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')) AND amf.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND amf.statement_date >= '2026-08-01' AND amf.statement_date <= '2026-10-31' AND lt.location_status IN ('Operational') AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR lt.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')
+WHERE 1=1 AND amf.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')) AND amf.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND amf.statement_date >= '2026-08-01' AND amf.statement_date <= '2026-10-31' AND lt.location_status IN ('Operational') AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR lt.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')
 
 ORDER BY l.id, amf.time_period;

@@ -1,11 +1,12 @@
 WITH loc_canon AS (
-  SELECT ld.location_id,
-         COALESCE((SELECT p.location_id FROM bill_management_v2.location_detail p
-                   WHERE p.customer_id = ld.customer_id AND p.location_number = ld.location_number
-                     AND lower(btrim(p.location_status)) IN ('operational', 'active', 'open')
-                   ORDER BY p.location_id LIMIT 1), ld.location_id) AS canon_id
-  FROM bill_management_v2.location_detail ld
-  WHERE ld.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ld.location_number IS NOT NULL
+  SELECT l0.id AS location_id, COALESCE(c.canon_id, l0.id) AS canon_id
+  FROM bill_management_v2.locations l0
+  LEFT JOIN (SELECT payload->>'site_number' AS site_number, MIN(id) AS canon_id
+             FROM bill_management_v2.locations
+             WHERE customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND deleted_at IS NULL
+               AND lower(btrim(payload->>'site_status')) IN ('operational', 'active', 'open')
+             GROUP BY 1) c ON c.site_number = l0.payload->>'site_number'
+  WHERE l0.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
 ),
 cpv_one AS (
   SELECT customer_id, code,
@@ -64,6 +65,7 @@ amf_first AS (
   FROM bill_management_v2.analytics_monthly_feed f
   JOIN bill_management_v2.virtual_accounts va2 ON va2.id = f.virtual_account_id
   WHERE f.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
+    AND f.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
   GROUP BY va2.account_code, f.location_id, f.vendor_code
 ),
 bill_history AS (
@@ -97,12 +99,14 @@ otc_bill AS (
   FROM bill_management_v2.analytics_billing_line_items li
   WHERE li.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
     AND li.code IN ('OTH_FEE','OTH_PENALTY','OTH_DEPOSIT','OTH_DEPOSITINT','OTH_CORR_CHARGE','OTH_ADJUSTMENT')
+    AND li.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
   GROUP BY li.bill_id, upper(btrim(li.commodity))
 ),
 otc_rows AS (
   SELECT f.bill_id, upper(btrim(f.utility_type)) AS commodity, COUNT(*) AS feed_rows
   FROM bill_management_v2.analytics_monthly_feed f
   WHERE f.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
+    AND f.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
   GROUP BY f.bill_id, upper(btrim(f.utility_type))
 ),
 lf_bills AS (
@@ -112,6 +116,7 @@ lf_bills AS (
          SUM(f.total_charges)        AS bill_amount
   FROM bill_management_v2.analytics_monthly_feed f
   WHERE f.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
+    AND f.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
   GROUP BY f.virtual_account_id, f.bill_id
 ),
 lf_fee AS (
@@ -122,6 +127,7 @@ lf_fee AS (
   FROM bill_management_v2.analytics_billing_line_items li
   WHERE li.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
     AND li.code = 'LATEFEE'
+    AND li.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
   GROUP BY li.virtual_account_id, li.bill_id
 ),
 lf_seq AS (
@@ -134,12 +140,11 @@ lf_seq AS (
   LEFT JOIN lf_fee fee ON fee.virtual_account_id = b.virtual_account_id AND fee.bill_id = b.bill_id
   WINDOW w AS (PARTITION BY b.virtual_account_id ORDER BY b.bill_date, b.bill_id)
 ),
-bill_start AS (
+bill_start AS MATERIALIZED (
   SELECT f.bill_id, f.virtual_account_id, date_trunc('month', MIN(f.start_date))::date AS period_n
   FROM bill_management_v2.analytics_monthly_feed f
   WHERE f.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
-    AND f.location_id IN (SELECT ldb.location_id FROM bill_management_v2.location_detail ldb
-                          WHERE ldb.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ldb.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
+    AND f.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
     AND f.time_period >= DATE '2025-01-01' - INTERVAL '4 months'
     AND f.time_period < DATE '2026-12-01' + INTERVAL '4 months'
   GROUP BY f.bill_id, f.virtual_account_id
@@ -161,6 +166,6 @@ FROM feed_scoped amf
 		LEFT JOIN gl_rows glr ON glr.virtual_account_id = amf.virtual_account_id AND glr.gl_code IS NOT NULL
 		LEFT JOIN otc_bill ob ON ob.bill_id = amf.bill_id AND ob.commodity = upper(btrim(amf.utility_type))
 		LEFT JOIN otc_rows obn ON obn.bill_id = amf.bill_id AND obn.commodity = upper(btrim(amf.utility_type))
-WHERE 1=1 AND amf.location_id IN (SELECT ldf.location_id FROM bill_management_v2.location_detail ldf WHERE ldf.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ldf.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')) AND amf.time_period >= '2025-01-01' AND amf.time_period < DATE '2026-12-01' + INTERVAL '4 months' AND upper(btrim(amf.utility_type)) = 'WATER' AND amf.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND EXTRACT(YEAR FROM bs.period_n) IN (2025, 2026) AND lt.location_status IN ('Operational') AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR lt.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')
+WHERE 1=1 AND amf.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')) AND amf.time_period >= '2025-01-01' AND amf.time_period < DATE '2026-12-01' + INTERVAL '4 months' AND upper(btrim(amf.utility_type)) = 'WATER' AND amf.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND EXTRACT(YEAR FROM bs.period_n) IN (2025, 2026) AND lt.location_status IN ('Operational') AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR lt.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')
 GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25
 ORDER BY "location", "locationNumber", "locationAddress", "locationCity", "locationState", "locationZip", "locationCountry", "locationStatus", "squareFeet", "vendor", "vendorAddress1", "vendorAddress2", "vendorCity", "vendorState", "vendorZip", "vendorCountry", "accountNumber", "summaryAccount", "cleanAccountNumber", "glCode", "glAllocation", "meterSerial", "monthOfYear", "utilityType", "uom";
