@@ -1,4 +1,8 @@
-WITH loc_canon AS (
+WITH lt_site AS MATERIALIZED (
+  SELECT ltd.* FROM bill_management_v2.location_detail ltd
+  WHERE ltd.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ltd.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')
+),
+loc_canon AS (
   SELECT l0.id AS location_id, COALESCE(c.canon_id, l0.id) AS canon_id
   FROM bill_management_v2.locations l0
   LEFT JOIN (SELECT payload->>'site_number' AS site_number, MIN(id) AS canon_id
@@ -18,7 +22,7 @@ cpv_one AS (
   WHERE customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
   GROUP BY customer_id, code
 ),
-pv_one AS (
+pv_one AS MATERIALIZED (
   SELECT code,
          CASE WHEN COUNT(DISTINCT btrim(name)) = 1 THEN MIN(name) END AS name,
          CASE WHEN COUNT(DISTINCT btrim(remittance_name)) = 1 THEN MIN(remittance_name) END AS remittance_name,
@@ -29,7 +33,7 @@ pv_one AS (
                  WHERE customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }})
   GROUP BY code
 ),
-vas_one AS (
+vas_one AS MATERIALIZED (
   SELECT DISTINCT ON (s.virtual_account_id)
          s.virtual_account_id, s.account_status, s.account_opened, s.account_closed
   FROM bill_management_v2.virtual_accounts_status s
@@ -37,7 +41,7 @@ vas_one AS (
   WHERE sva.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
   ORDER BY s.virtual_account_id, s.account_closed DESC NULLS LAST
 ),
-rv_one AS (
+rv_one AS MATERIALIZED (
   SELECT customer_id, vendor_code,
          NULLIF(btrim(MIN(providers_vendors_attributes::jsonb ->> 'Vendor Code')), '') AS fiq_vendor_id
   FROM bill_management_v2.reports_vendors
@@ -56,9 +60,9 @@ attr_vals AS (
   GROUP BY vam.virtual_account_id, vmeta.attribute_name
 ),
 feed_scoped AS (
-  SELECT * FROM bill_management_v2.analytics_monthly_feed WHERE customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
+  SELECT * FROM bill_management_v2.analytics_monthly_feed WHERE customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
 ),
-amf_first AS (
+amf_first AS MATERIALIZED (
   SELECT va2.account_code, f.location_id, f.vendor_code,
          MIN(f.time_period) AS first_period,
          MAX(f.statement_date) AS last_bill_date
@@ -68,7 +72,7 @@ amf_first AS (
     AND f.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
   GROUP BY va2.account_code, f.location_id, f.vendor_code
 ),
-bill_history AS (
+bill_history AS MATERIALIZED (
   SELECT ah.bill_id,
          ah.virtual_account_id,
          upper(btrim(ah.commodity)) AS commodity,
@@ -79,9 +83,10 @@ bill_history AS (
   FROM bill_management_v2.account_history ah
   JOIN bill_management_v2.virtual_accounts bva ON bva.id = ah.virtual_account_id
   WHERE bva.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
+    AND ah.virtual_account_id IN (SELECT DISTINCT sf.virtual_account_id FROM bill_management_v2.analytics_monthly_feed sf WHERE sf.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND sf.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')))
   GROUP BY ah.bill_id, ah.virtual_account_id, upper(btrim(ah.commodity))
 ),
-gl_rows AS (
+gl_rows AS MATERIALIZED (
   SELECT vam.virtual_account_id,
          (substring(vmeta.attribute_name from '([0-9]+)'))::int AS gl_slot,
          MAX(NULLIF(btrim(vam.attribute_value), '')) FILTER (WHERE vmeta.attribute_name ~* '^gl\s*code')  AS gl_code,
@@ -92,9 +97,10 @@ gl_rows AS (
   WHERE vmeta.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
     AND vmeta.deleted_at IS NULL
     AND vmeta.attribute_name ~* '^gl\s*(code|alloc)'
+    AND vam.virtual_account_id IN (SELECT DISTINCT sf.virtual_account_id FROM bill_management_v2.analytics_monthly_feed sf WHERE sf.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND sf.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')))
   GROUP BY 1, 2
 ),
-otc_bill AS (
+otc_bill AS MATERIALIZED (
   SELECT li.bill_id, upper(btrim(li.commodity)) AS commodity, SUM(li.charge) AS otc
   FROM bill_management_v2.analytics_billing_line_items li
   WHERE li.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
@@ -102,7 +108,7 @@ otc_bill AS (
     AND li.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
   GROUP BY li.bill_id, upper(btrim(li.commodity))
 ),
-otc_rows AS (
+otc_rows AS MATERIALIZED (
   SELECT f.bill_id, upper(btrim(f.utility_type)) AS commodity, COUNT(*) AS feed_rows
   FROM bill_management_v2.analytics_monthly_feed f
   WHERE f.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }}
@@ -130,7 +136,7 @@ lf_fee AS (
     AND li.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}'))
   GROUP BY li.virtual_account_id, li.bill_id
 ),
-lf_seq AS (
+lf_seq AS MATERIALIZED (
   SELECT b.virtual_account_id, b.bill_id, b.bill_date, b.bill_amount,
          fee.late_fee, fee.late_fee_charged, fee.late_fee_recouped,
          LAG(b.bill_date)      OVER w AS prev_bill_date,
@@ -139,12 +145,13 @@ lf_seq AS (
   FROM lf_bills b
   LEFT JOIN lf_fee fee ON fee.virtual_account_id = b.virtual_account_id AND fee.bill_id = b.bill_id
   WINDOW w AS (PARTITION BY b.virtual_account_id ORDER BY b.bill_date, b.bill_id)
-)
-SELECT l.name AS "location", lt.location_number AS "locationNumber", COALESCE(NULLIF(btrim(cvpn.pretty_name), ''), CASE WHEN lower(regexp_replace(btrim(v.pretty_name), '[^A-Za-z0-9]', '', 'g')) <> lower(regexp_replace(amf.vendor_code, '[^A-Za-z0-9]', '', 'g')) THEN NULLIF(btrim(v.pretty_name), '') END, NULLIF(btrim(cpv.name), ''), NULLIF(btrim(pv.name), ''), amf.vendor_code) AS "vendor", va.account_code AS "accountNumber", TO_CHAR(amf.time_period, 'YYYY-MM') AS "month", TO_CHAR(amf.statement_date, 'YYYY-MM-DD') AS "statementDate", TO_CHAR(amf.start_date, 'YYYY-MM-DD') AS "startDate", TO_CHAR(amf.end_date, 'YYYY-MM-DD') AS "endDate", amf.total_charges AS "totalCharges", CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 'Electric' WHEN 'WATER' THEN 'Water' WHEN 'SEWER' THEN 'Sewer' WHEN 'NATURALGAS' THEN 'Natural Gas' WHEN 'FIREPROTECTION' THEN 'Fire Protection' WHEN 'STORMWATER' THEN 'Storm Water' WHEN 'IRRIGATION' THEN 'Irrigation' WHEN 'LIGHTING' THEN 'Lighting' WHEN 'REFUSE' THEN 'Refuse' WHEN 'SOLARPV' THEN 'Solar PV' WHEN 'CHILLEDWATER' THEN 'Chilled Water' WHEN 'PROPANE' THEN 'Propane' ELSE amf.utility_type END AS "utilityType", (CASE upper(btrim(amf.total_consumption_uom)) WHEN 'KWH' THEN 'kWh' WHEN 'CCF' THEN 'kGal' WHEN 'HCF' THEN 'kGal' ELSE amf.total_consumption_uom END) AS "uom", (amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END) AS "totalConsumption"
+),
+seg AS (
+SELECT l.name AS "location", lt.location_number AS "locationNumber", COALESCE(NULLIF(btrim(cvpn.pretty_name), ''), CASE WHEN lower(regexp_replace(btrim(v.pretty_name), '[^A-Za-z0-9]', '', 'g')) <> lower(regexp_replace(amf.vendor_code, '[^A-Za-z0-9]', '', 'g')) THEN NULLIF(btrim(v.pretty_name), '') END, NULLIF(btrim(cpv.name), ''), NULLIF(btrim(pv.name), ''), amf.vendor_code) AS "vendor", va.account_code AS "accountNumber", TO_CHAR(amf.time_period, 'YYYY-MM') AS "month", TO_CHAR(amf.statement_date, 'YYYY-MM-DD') AS "statementDate", TO_CHAR(amf.start_date, 'YYYY-MM-DD') AS "startDate", TO_CHAR(amf.end_date, 'YYYY-MM-DD') AS "endDate", amf.total_charges AS "totalCharges", CASE upper(btrim(amf.utility_type)) WHEN 'ELECTRIC' THEN 'Electric' WHEN 'WATER' THEN 'Water' WHEN 'SEWER' THEN 'Sewer' WHEN 'NATURALGAS' THEN 'Natural Gas' WHEN 'FIREPROTECTION' THEN 'Fire Protection' WHEN 'STORMWATER' THEN 'Storm Water' WHEN 'IRRIGATION' THEN 'Irrigation' WHEN 'LIGHTING' THEN 'Lighting' WHEN 'REFUSE' THEN 'Refuse' WHEN 'SOLARPV' THEN 'Solar PV' WHEN 'CHILLEDWATER' THEN 'Chilled Water' WHEN 'PROPANE' THEN 'Propane' ELSE amf.utility_type END AS "utilityType", (CASE upper(btrim(amf.total_consumption_uom)) WHEN 'KWH' THEN 'kWh' WHEN 'CCF' THEN 'kGal' WHEN 'HCF' THEN 'kGal' ELSE amf.total_consumption_uom END) AS "uom", (amf.total_consumption * CASE WHEN upper(btrim(amf.total_consumption_uom)) IN ('CCF', 'HCF') THEN 0.748 ELSE 1 END) AS "totalConsumption", amf.bill_id AS "billId", amf.total_charges_taxes AS "totalChargesTaxes", amf.days_of_service AS "daysOfService"
 FROM feed_scoped amf
 		LEFT JOIN loc_canon lc ON lc.location_id = amf.location_id
 		LEFT JOIN bill_management_v2.locations l ON l.id = COALESCE(lc.canon_id, amf.location_id)
-		LEFT JOIN bill_management_v2.location_detail lt ON lt.location_id = l.id
+		LEFT JOIN lt_site lt ON lt.location_id = l.id
 		LEFT JOIN bill_management_v2.virtual_accounts va ON va.id = amf.virtual_account_id
 		LEFT JOIN bill_management_v2.vendors v ON v.code = amf.vendor_code
 		LEFT JOIN bill_management_v2.customers_vendors_pretty_name cvpn ON cvpn.vendor_id = v.id AND cvpn.customer_id = amf.customer_id
@@ -155,4 +162,22 @@ FROM feed_scoped amf
 		LEFT JOIN amf_first af ON COALESCE(af.account_code, '') = COALESCE(va.account_code, '') AND COALESCE(af.location_id, -1) = COALESCE(amf.location_id, -1) AND COALESCE(af.vendor_code, '') = COALESCE(amf.vendor_code, '')
 WHERE 1=1 AND amf.location_id IN (SELECT ls.id FROM bill_management_v2.locations ls WHERE ls.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR ls.payload->>'site_number' = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')) AND amf.customer_id = {{ Number(CustomerPick.selectedOptionValue) || 0 }} AND amf.statement_date >= '2026-08-01' AND amf.statement_date <= '2026-10-31' AND lt.location_status IN ('Operational') AND ('{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}' = '' OR lt.location_number = '{{ String(LocationInput.text || '').trim().replace(/'/g, "''") }}')
 
-ORDER BY l.id, amf.time_period;
+),
+bills AS (
+  SELECT "location", "locationNumber", "vendor", "accountNumber", "utilityType", "billId",
+         (ARRAY_AGG("month" ORDER BY "daysOfService" DESC, "month"))[1] AS "month",
+         MIN("statementDate") AS "statementDate", MIN("startDate") AS "startDate", MAX("endDate") AS "endDate",
+         MAX("uom") AS "uom", SUM("totalConsumption") AS usage, SUM("totalCharges") AS cost,
+         SUM(COALESCE("totalChargesTaxes", 0)) AS tax
+  FROM seg
+  GROUP BY "location", "locationNumber", "vendor", "accountNumber", "utilityType", "billId"
+)
+SELECT "location", "locationNumber", "vendor", "accountNumber", "month", "statementDate", "startDate", "endDate",
+       ROUND(cost - tax, 2) AS "totalCharges", "utilityType", "uom", ROUND(usage, 3) AS "totalConsumption"
+FROM bills
+UNION ALL
+SELECT "location", "locationNumber", "vendor", "accountNumber", "month", "statementDate", "startDate", "endDate",
+       ROUND(tax, 2) AS "totalCharges", 'Tax' AS "utilityType", NULL AS "uom", 0 AS "totalConsumption"
+FROM bills
+WHERE tax <> 0
+ORDER BY "location", "accountNumber", "statementDate", "utilityType";
