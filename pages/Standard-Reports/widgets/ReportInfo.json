@@ -37,7 +37,7 @@
   "responsiveBehavior": "fill",
   "rightColumn": 64,
   "shouldTruncate": false,
-  "text": "{{ (({ r01: \"Active locations; accounts not Closed; replaced supplier accounts left out\", r02: \"Actual; bill months 11/2025 - 10/2026; one-time charges excluded\", r03: \"Calendar; 05/2026 - 07/2026; one-time charges excluded\", r04: \"Calendar; 2025 vs 2026; one-time charges excluded\", r05: \"Bill date 08/01/2026 - 10/31/2026\", r06: \"Bill date 10/01/2026 - 10/31/2026\", r07: \"Bill date 07/01/2026 - 10/31/2026\", r08: \"Active locations\", r09: \"Actual; 07/2026 - 10/2026; one-time charges excluded\", r10: \"Actual; 2025 vs 2026; water only; one-time charges excluded\" })[ReportPick.selectedOptionValue]) || 'Pick a report and a customer, then Run.' }}",
+  "text": "{{ (({ r01: \"Active locations; accounts not Closed; replaced supplier accounts left out\", r02: \"Actual; bill months 11/2025 - 10/2026; one-time charges excluded\", r03: \"Calendar; 05/2026 - 07/2026; one-time charges excluded\", r04: \"Calendar; 2025 vs 2026; one-time charges excluded\", r05: \"Bill date 08/01/2026 - 10/31/2026\", r06: \"Bill date 10/01/2026 - 10/31/2026\", r07: \"Bill date 07/01/2026 - 10/31/2026\", r08: \"Active locations\", r09: \"Actual; 07/2026 - 10/2026; one-time charges excluded\", r10: \"Actual; 2025 vs 2026; water only; one-time charges excluded\", r11: \"Actual; 07/2026 - 10/2026, one column per month; one-time charges excluded\" })[ReportPick.selectedOptionValue]) || 'Pick a report and a customer, then Run.' }}",
   "textAlign": "LEFT",
   "textColor": "#6B7280",
   "topRow": 14,

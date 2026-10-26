@@ -57,7 +57,7 @@
   "rightColumn": 64,
   "serverSidePaginationEnabled": false,
   "showInlineEditingOptionDropdown": true,
-  "tableData": "{{ (({ r01: rpt01_accountAndServiceList.data, r02: rpt02_annualUseCost.data, r03: rpt03_indexTrendline.data, r04: rpt04_indexYearOverYear.data, r05: rpt05_invoiceByDate.data, r06: rpt06_invoiceDetail.data, r07: rpt07_lateFees.data, r08: rpt08_locationDetail.data, r09: rpt09_useCostAnalysisTrendline.data, r10: rpt10_useCostAnalysisYearOverYearWater.data })[ReportPick.selectedOptionValue]) || [] }}",
+  "tableData": "{{ (({ r01: rpt01_accountAndServiceList.data, r02: rpt02_annualUseCost.data, r03: rpt03_indexTrendline.data, r04: rpt04_indexYearOverYear.data, r05: rpt05_invoiceByDate.data, r06: rpt06_invoiceDetail.data, r07: rpt07_lateFees.data, r08: rpt08_locationDetail.data, r09: rpt09_useCostAnalysisTrendline.data, r10: rpt10_useCostAnalysisYearOverYearWater.data, r11: rpt11_useCostAnalysisPivot.data })[ReportPick.selectedOptionValue]) || [] }}",
   "textSize": "0.875rem",
   "topRow": 19,
   "totalRecordsCount": 0,

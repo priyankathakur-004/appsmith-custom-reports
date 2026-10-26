@@ -30,7 +30,7 @@
   "mobileRightColumn": 64,
   "mobileTopRow": 9,
   "needsErrorInfo": false,
-  "onClick": "{{ ({ r01: rpt01_accountAndServiceList, r02: rpt02_annualUseCost, r03: rpt03_indexTrendline, r04: rpt04_indexYearOverYear, r05: rpt05_invoiceByDate, r06: rpt06_invoiceDetail, r07: rpt07_lateFees, r08: rpt08_locationDetail, r09: rpt09_useCostAnalysisTrendline, r10: rpt10_useCostAnalysisYearOverYearWater })[ReportPick.selectedOptionValue].run() }}",
+  "onClick": "{{ ({ r01: rpt01_accountAndServiceList, r02: rpt02_annualUseCost, r03: rpt03_indexTrendline, r04: rpt04_indexYearOverYear, r05: rpt05_invoiceByDate, r06: rpt06_invoiceDetail, r07: rpt07_lateFees, r08: rpt08_locationDetail, r09: rpt09_useCostAnalysisTrendline, r10: rpt10_useCostAnalysisYearOverYearWater, r11: rpt11_useCostAnalysisPivot })[ReportPick.selectedOptionValue].run() }}",
   "parentColumnSpace": 16,
   "parentId": "0",
   "parentRowSpace": 10,
